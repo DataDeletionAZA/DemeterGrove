@@ -3,11 +3,13 @@ import SwiftUI
 struct HomeScene: View {
     @ObservedObject var store: GardenStore
     var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
-                Spacer()
-                WalletView(coins: store.data.garden.coins)
+        VStack(spacing:SceneSizing.sectionGap) {
+            SceneHeader {
+                HStack {
+                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
+                    Spacer()
+                    WalletView(coins: store.data.garden.coins)
+                }
             }
             SceneCanvas { size in
                 let w = size.width, h = size.height
@@ -19,7 +21,6 @@ struct HomeScene: View {
                     SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store) })
                     SceneTarget(object: .signpost, sceneSize: size, label: "去远方", action: { SceneNavigation.open("地图",store:store) })
                     SceneParticles()
-                    SceneArrows(store:store,scene:"首页")
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
             }
             HStack(spacing: 18) {
@@ -59,18 +60,27 @@ struct SceneTarget: View {
 struct StudyScene: View {
     @ObservedObject var store: GardenStore
     var body: some View {
-        SceneCanvas(reservedHeight:80) { size in
-            let w = size.width, h = size.height
-            ZStack {
-                RoomBackdrop(name: "Study").frame(width: w, height: h).clipped()
-                SceneTarget(object: .taskMemo, sceneSize: size, label: "任务", action: {SceneNavigation.open("任务",store:store)})
-                SceneTarget(object: .calendar, sceneSize: size, label: "日程", action: {SceneNavigation.open("日程",store:store)})
-                SceneTarget(object: .diary, sceneSize: size, label: "日记", action: {SceneNavigation.open("日记",store:store)})
-                SceneTarget(object: .hourglass, sceneSize: size, label: "专注", action: {SceneNavigation.open("专注",store:store)})
-                SceneTarget(object: .habitBook, sceneSize: size, label: "习惯", action: {SceneNavigation.open("习惯",store:store)})
-                SceneParticles()
-                SceneArrows(store:store,scene:"书房")
-            }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
+        VStack(spacing:SceneSizing.sectionGap) {
+            SceneHeader {
+                HStack {
+                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
+                    Spacer()
+                    WalletView(coins:store.data.garden.coins)
+                }
+            }
+            SceneCanvas { size in
+                let w = size.width, h = size.height
+                ZStack {
+                    RoomBackdrop(name: "Study").frame(width: w, height: h).clipped()
+                    SceneTarget(object: .taskMemo, sceneSize: size, label: "任务", action: {SceneNavigation.open("任务",store:store)})
+                    SceneTarget(object: .calendar, sceneSize: size, label: "日程", action: {SceneNavigation.open("日程",store:store)})
+                    SceneTarget(object: .diary, sceneSize: size, label: "日记", action: {SceneNavigation.open("日记",store:store)})
+                    SceneTarget(object: .hourglass, sceneSize: size, label: "专注", action: {SceneNavigation.open("专注",store:store)})
+                    SceneTarget(object: .habitBook, sceneSize: size, label: "习惯", action: {SceneNavigation.open("习惯",store:store)})
+                    SceneParticles()
+                    SceneArrows(store:store,scene:"书房")
+                }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
+            }
         }
     }
 }

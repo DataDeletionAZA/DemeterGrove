@@ -1,6 +1,11 @@
 import Foundation
 
 enum CalendarDates {
+    static var defaultCalendar: Calendar {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        return calendar
+    }
     static func key(_ date: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
@@ -14,13 +19,13 @@ enum CalendarDates {
     static func monthStart(_ date: Date, calendar: Calendar = .current) -> Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
     }
-    static func weekStart(_ date: Date, calendar: Calendar = .current) -> Date {
-        let offset = (calendar.component(.weekday, from: date) + 5) % 7
+    static func weekStart(_ date: Date, calendar: Calendar = defaultCalendar) -> Date {
+        let offset = (calendar.component(.weekday, from: date) - calendar.firstWeekday + 7) % 7
         return calendar.date(byAdding: .day, value: -offset, to: calendar.startOfDay(for: date))!
     }
-    static func days(in date: Date, week: Bool, calendar: Calendar = .current) -> [Date?] {
+    static func days(in date: Date, week: Bool, calendar: Calendar = defaultCalendar) -> [Date?] {
         let start = week ? weekStart(date, calendar: calendar) : monthStart(date, calendar: calendar)
-        let offset = week ? 0 : (calendar.component(.weekday, from: start) + 5) % 7
+        let offset = week ? 0 : (calendar.component(.weekday, from: start) - calendar.firstWeekday + 7) % 7
         let count = week ? 7 : calendar.range(of: .day, in: .month, for: date)!.count
         let slots = ((offset + count + 6) / 7) * 7
         return (0..<slots).map { index in

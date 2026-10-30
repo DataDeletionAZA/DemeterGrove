@@ -1,6 +1,7 @@
 import Foundation
 
 var calendar = Calendar(identifier: .gregorian)
+calendar.firstWeekday = 2
 calendar.timeZone = TimeZone(identifier: "America/New_York")!
 func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 12, _ minute: Int = 0) -> Date {
     calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
@@ -24,3 +25,11 @@ assert(!CalendarDates.allowed(date(2026, 5, 13), minimum: date(2026, 5, 10), max
 assert(CalendarDates.allowed(date(2026, 5, 12, 23), minimum: nil, maximum: date(2026, 5, 12, 0), calendar: calendar))
 assert(!CalendarDates.allowed(date(2026, 5, 13), minimum: nil, maximum: date(2026, 5, 12), calendar: calendar))
 print("PASS: leap months, aligned weeks across years, day replacement across DST, preserved clock time, inclusive day bounds")
+
+var sundayCalendar = calendar
+sundayCalendar.firstWeekday = 1
+let sundayWeek = CalendarDates.days(in:date(2026, 1, 1),week:true,calendar:sundayCalendar).compactMap { $0 }
+assert(sundayCalendar.isDate(sundayWeek[0],inSameDayAs:date(2025, 12, 28)))
+assert(sundayCalendar.isDate(sundayWeek[6],inSameDayAs:date(2026, 1, 3)))
+assert(CalendarDates.days(in:date(2026, 2, 1),week:false,calendar:sundayCalendar)[0] != nil)
+print("PASS: Monday and Sunday week boundaries and month grid alignment")

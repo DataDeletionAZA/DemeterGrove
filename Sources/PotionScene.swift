@@ -13,7 +13,7 @@ struct PotionScene:View {
     private var label:String {ready ? "领取魔药":brewing ? "查看熬制":"选择配方"}
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            SceneCanvas(reservedHeight:180,hasSidebar:true) {size in
+            SceneCanvas(hasSidebar:true) {size in
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name:"Laboratory").frame(width:w,height:h)

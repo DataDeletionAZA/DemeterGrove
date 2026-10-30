@@ -293,7 +293,7 @@ struct MagicHeader: View {
     var body: some View {
         HStack(spacing: 10) {
             if let back {
-                Button(action: back) { Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)) }
+                Button(action: back) { Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)).frame(width:44,height:40).contentShape(Rectangle()) }
                     .buttonStyle(.plain).foregroundStyle(Palette.goldLight).help("返回上一级").accessibilityLabel("返回上一级")
             }
             HStack(spacing: 10) {
@@ -301,7 +301,7 @@ struct MagicHeader: View {
                 Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.goldLight)
                 Spacer()
             }.contentShape(Rectangle()).overlay { if draggable { WindowDragArea() } }
-            Button(action: close) { PixelIcon(name: "close", size: 16) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
+            Button(action: close) { PixelIcon(name: "close", size: 16).frame(width:40,height:40).contentShape(Rectangle()) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
         }.padding(.horizontal, 16).frame(height: 48)
             .background(Palette.paper).overlay(alignment: .bottom) { Rectangle().fill(Palette.gold.opacity(0.6)).frame(height: 1).padding(.horizontal, 10) }
     }

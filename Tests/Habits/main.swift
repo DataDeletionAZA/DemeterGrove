@@ -68,7 +68,7 @@ let yield = data.harvestYield
 assert(data.harvest(plot) && data.garden.ingredients["胡萝卜"] == beforeHarvest + yield * 2)
 assert(!data.buySeeds(.starlightCarrot) && !data.exchangeSeed(.starlightCarrot))
 assert(Garden.distributeSeeds(1000)[Crop.starlightCarrot.rawValue] == nil)
-_ = try data.validated()
+data = try data.validated()
 let originalZone = NSTimeZone.default
 NSTimeZone.default = TimeZone(secondsFromGMT: 14 * 3600)!
 _ = try data.validated()

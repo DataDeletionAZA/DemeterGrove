@@ -53,7 +53,7 @@ extension Habit {
     var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (reminderMinutes.map { (0..<1440).contains($0) } ?? true) &&
-        (encouragement?.count ?? 0) <= 300 && days.allSatisfy(validDayKey) &&
+        (encouragement?.count ?? 0) <= 300 && Recurrence.valid(scheduleRevisions) && (messageLibrary?.isValid ?? true) && days.allSatisfy(validDayKey) &&
         (checkIns ?? [:]).allSatisfy { key, entry in
             validDayKey(key) && entry.isValid &&
             (entry.status != .approved || days.contains(key))

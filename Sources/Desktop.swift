@@ -102,6 +102,7 @@ final class PetController {
     private var toolHistory: [String] = []
     private var toolViews: [String: NSHostingView<ToolPanelView>] = [:]
     private var positioning = false
+    private var resizingTool = false
     var managerIsOpen: Bool { manager?.isVisible == true || manager?.isMiniaturized == true }
     init(store: GardenStore) {
         self.store = store
@@ -197,7 +198,7 @@ final class PetController {
         if clamped.origin != panel.frame.origin { panel.setFrameOrigin(clamped.origin) }
         store.petFacingRight = PetPlacement.facingRight(pet: panel.frame, screen: area, previous: store.petFacingRight)
         if menuPanel.isVisible { positionMenu() }
-        if toolPanel?.isVisible == true { positionTool() }
+        if toolPanel?.isVisible == true, !resizingTool { positionTool() }
         toast.position()
     }
     private func positionMenu() {
@@ -207,6 +208,8 @@ final class PetController {
         menuSide = placement.1
         menuPanel.setFrameOrigin(placement.0)
     }
+    func beginToolResize() { resizingTool = true }
+    func finishToolResize() { resizingTool = false; positionChanged() }
     private func positionTool() {
         guard let toolPanel else { return }
         let area = screenArea
@@ -265,6 +268,7 @@ final class PetController {
         store.activeTool = name
         let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "湖畔钓鱼", "林间冒险", "熬制魔药", "衣柜"].contains(name)
         let wide = name == "任务" || game
+        let preserveSize = toolPanel?.isVisible == true
         if toolPanel == nil {
             let panel = MagicPanel(contentRect: .zero, styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
             panel.isOpaque = false
@@ -285,7 +289,9 @@ final class PetController {
         toolPanel.title = name
         let area = screenArea
         toolPanel.minSize = NSSize(width: min(game ? 640 : 460, area.width-16), height: min(420,area.height-16))
-        toolPanel.setContentSize(NSSize(width: min(game ? 760 : wide ? 720 : 490, area.width-16), height: min(game ? 820 : name == "计时器" ? 500 : 650, area.height-16)))
+        if !preserveSize {
+            toolPanel.setContentSize(NSSize(width:min(game ? 760:wide ? 720:490,area.width-16),height:min(game ? 820:name == "计时器" ? 500:650,area.height-16)))
+        }
         positionTool()
         if toolPanel.parent !== panel { panel.addChildWindow(toolPanel, ordered: .above) }
         NSApp.activate(ignoringOtherApps: true)
@@ -515,7 +521,9 @@ struct ToolPanelView: View {
         }
         }
         }.magicSurface(Palette.card, strong: true).foregroundStyle(Palette.ink).magicControls()
+            .overlay { WindowResizeBorder(began:{store.pet?.beginToolResize()},ended:{store.pet?.finishToolResize()}) }
             .environment(\.locale, Locale(identifier: "zh_CN"))
+            .environment(\.calendar,store.calendar)
     }
 }
 
@@ -530,9 +538,9 @@ struct QuickTasks: View {
                 Button("添加", action: add).disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             Toggle("显示已完成", isOn: $completed).font(.caption)
-            let tasks = store.data.tasks.filter { completed || $0.completedAt == nil }.sorted { $0.quadrant < $1.quadrant }
+            let tasks = store.allTaskOccurrences.filter { completed || $0.completedAt == nil }.sorted { $0.task.quadrant < $1.task.quadrant }
             if tasks.isEmpty { EmptyNote(text: "暂无待办") }
-            ForEach(tasks) { task in TaskRow(store: store, task: task); Divider() }
+            ForEach(tasks) { occurrence in TaskRow(store: store, occurrence: occurrence); Divider() }
         }
     }
     private func add() {

@@ -9,6 +9,7 @@ final class GardenStore: ObservableObject {
     @Published var now = Date()
     @Published var message = ""
     @Published var error = ""
+    @Published private(set) var saveStatus = "已保存"
     @Published var storageLocked = false
     @Published var selectedPage = "首页"
     @Published var journalDate = Date()
@@ -29,6 +30,11 @@ final class GardenStore: ObservableObject {
     private var clock: AnyCancellable?
     private var observers: [NSObjectProtocol] = []
     private var lastCheckpoint = Date()
+    private var lastReminderRefresh = Date.distantPast
+    private var reminderGeneration = 0
+    private var reminderRefreshActive = false
+    private var reminderRefreshNeeded = false
+    @Published private(set) var reminderScheduledThrough: Date? = nil
     private var tapReset: DispatchWorkItem?
     var counter: KeyCounter?
     var pet: PetController?
@@ -72,6 +78,7 @@ final class GardenStore: ObservableObject {
             self.error = "无法打开存档文件夹：\(error.localizedDescription)"
             storageLocked = true
         }
+        data.migrateRecurrences(at: now, calendar: calendar)
         focusDraftMinutes = data.preferences.focusMinutes
         clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] date in self?.tick(date) }
         let workspace = NSWorkspace.shared.notificationCenter
@@ -82,10 +89,23 @@ final class GardenStore: ObservableObject {
                 self.message = "屏幕休眠或会话离开，计时已暂停。回来后可以继续。"
             })
         }
+        for name in [Notification.Name.NSSystemTimeZoneDidChange, Notification.Name.NSCalendarDayChanged] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                self.now = Date()
+                if self.data.preferences.notifications { self.refreshReminders() }
+            })
+        }
+        observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.now = Date()
+            if self.data.preferences.notifications { self.refreshReminders() }
+        })
     }
 
     func scheduleSave() {
         guard !storageLocked else { return }
+        saveStatus = "保存中"
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.save() }
         saveWork = work
@@ -94,15 +114,17 @@ final class GardenStore: ObservableObject {
 
     @discardableResult
     func save() -> Bool {
-        guard !storageLocked else { return false }
+        guard !storageLocked else { saveStatus = "保存失败"; return false }
         saveWork?.cancel()
         var snapshot = data
         snapshot.savedAt = Date()
         do {
             try SaveFile.write(snapshot, to: file)
+            saveStatus = "已保存"
             if error.hasPrefix("保存失败") { error = "" }
             return true
         } catch {
+            saveStatus = "保存失败"
             self.error = "保存失败，当前内容仍保留在窗口中。\(error.localizedDescription)"
             return false
         }
@@ -114,6 +136,7 @@ final class GardenStore: ObservableObject {
         if let run = data.timer, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
             finishTimer()
         }
+        if !preview, data.preferences.notifications, date.timeIntervalSince(lastReminderRefresh) >= 6*3600 { refreshReminders() }
         if date.timeIntervalSince(lastCheckpoint) >= 20 {
             lastCheckpoint = date
             if data.timer != nil || counter != nil { save() }
@@ -121,6 +144,12 @@ final class GardenStore: ObservableObject {
                 setTyping(true, requestPermission: false)
             }
         }
+    }
+
+    var calendar: Calendar {
+        var value = Calendar.current
+        value.firstWeekday = data.preferences.weekStartsOn ?? 2
+        return value
     }
 
     var todaySessions: [FocusSession] { data.sessions.filter { Calendar.current.isDate($0.date, inSameDayAs: now) } }
@@ -143,11 +172,31 @@ final class GardenStore: ObservableObject {
         return timer.resumedAt == nil || timer.kind == .rest ? 31:30
     }
     var petPhase:Int { tapPhase != 0 && tapPhase != 31 ? tapPhase : petBasePhase }
-    var todayTasks: [GardenTask] {
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))!
-        return data.tasks.filter { task in
-            task.completedAt == nil && (task.due.map { $0 < tomorrow } ?? true)
-        }.sorted { $0.quadrant < $1.quadrant }
+    var todayTaskOccurrences: [TaskOccurrence] {
+        taskOccurrences(from: now, through: now).filter { occurrence in
+            occurrence.completedAt == nil && (occurrence.scheduledDay != nil || (occurrence.task.due.map { calendar.startOfDay(for: $0) <= calendar.startOfDay(for: now) } ?? true))
+        }
+    }
+    var todayTasks: [GardenTask] { todayTaskOccurrences.map(\.task) }
+    var taskCompletionRecords: [TaskCompletionRecord] { data.taskCompletionRecords }
+    func taskOccurrences(from start: Date, through end: Date) -> [TaskOccurrence] {
+        data.taskOccurrences(from: start, through: end, calendar: calendar).sorted {
+            if $0.task.quadrant != $1.task.quadrant { return $0.task.quadrant < $1.task.quadrant }
+            return ($0.scheduledDay ?? "") > ($1.scheduledDay ?? "")
+        }
+    }
+    var allTaskOccurrences: [TaskOccurrence] {
+        let first = data.tasks.compactMap { $0.scheduleRevisions?.map(\.effectiveFrom).min() }.min().flatMap { Recurrence.date($0, calendar: calendar) } ?? now
+        return taskOccurrences(from: min(first, now), through: now)
+    }
+    var reminderCoverageText: String {
+        reminderScheduledThrough.map { "预排至 " + $0.formatted(.dateTime.year().month().day()) + "；应用运行时自动续排，退出后仅保留已排提醒。" } ?? "应用运行时滚动预排未来 30 天提醒；系统实际排入结果会单独核对。"
+    }
+    private func scheduleChangeIsValid(old: [ScheduleRevision]?, new: [ScheduleRevision]?) -> Bool {
+        guard Recurrence.valid(new) else { return false }
+        let today = CalendarDates.key(now, calendar: calendar)
+        let past = (old ?? []).filter { $0.effectiveFrom <= today }
+        return past.allSatisfy { new?.contains($0) == true } && (new ?? []).allSatisfy { $0.effectiveFrom >= today || past.contains($0) }
     }
 
     @discardableResult
@@ -155,16 +204,54 @@ final class GardenStore: ObservableObject {
         var task = task
         task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
         task.category = task.categoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !storageLocked, !task.title.isEmpty, !task.categoryName.isEmpty, task.categoryName.count <= 40 else { return false }
+        var library = task.messageLibrary ?? ReminderTextLibrary(); library.normalize(); task.messageLibrary = library
+        let old = data.tasks.first { $0.id == task.id }
+        if let current = old?.messageLibrary {
+            library.used = current.used.intersection(Set(library.phrases.map(\.id)))
+            library.lastID = current.lastID.flatMap { id in library.phrases.contains { $0.id == id } ? id : nil }
+            task.messageLibrary = library
+        }
+        guard !storageLocked, !task.title.isEmpty, !task.categoryName.isEmpty, task.categoryName.count <= 40,
+              scheduleChangeIsValid(old: old?.scheduleRevisions, new: task.scheduleRevisions),
+              task.reminderMinutes.map({ (0..<1440).contains($0) }) ?? true else { return false }
         let previous = data
         if let i = data.tasks.firstIndex(where: { $0.id == task.id }) { data.tasks[i] = task }
         else { data.tasks.append(task) }
-        guard save() else { data = previous; saveWork?.cancel(); return false }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        refreshReminders()
         return true
     }
-    func toggleTask(_ id: UUID) {
-        guard let i = data.tasks.firstIndex(where: { $0.id == id }) else { return }
-        data.tasks[i].completedAt = data.tasks[i].completedAt == nil ? Date() : nil
+    @discardableResult
+    func toggleTask(_ id: UUID) -> Bool {
+        guard let occurrence = taskOccurrences(from: now, through: now).first(where: { $0.task.id == id }) else { return false }
+        return toggleTaskOccurrence(occurrence)
+    }
+    @discardableResult
+    func toggleTaskOccurrence(_ occurrence: TaskOccurrence) -> Bool {
+        guard !storageLocked, let i = data.tasks.firstIndex(where: { $0.id == occurrence.task.id }) else { return false }
+        let previous = data
+        if let day = occurrence.scheduledDay {
+            guard day <= CalendarDates.key(now, calendar: calendar), let date = Recurrence.date(day, calendar: calendar),
+                  data.taskOccurrences(from: date, through: date, calendar: calendar).contains(where: { $0.id == occurrence.id }) else { return false }
+            if data.recurringTaskCompletions == nil { data.recurringTaskCompletions = [] }
+            if data.recurringTaskCompletions!.contains(where: { $0.id == occurrence.id }) { data.recurringTaskCompletions!.removeAll { $0.id == occurrence.id } }
+            else { data.recurringTaskCompletions!.append(TaskCompletionRecord(id: occurrence.id, taskID: occurrence.task.id, title: data.tasks[i].title, scheduledDay: day, completedAt: now)) }
+        } else {
+            guard data.tasks[i].scheduleRevisions == nil else { return false }
+            data.tasks[i].completedAt = data.tasks[i].completedAt == nil ? now : nil
+        }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        refreshReminders()
+        return true
+    }
+    @discardableResult
+    func removeTask(_ id: UUID) -> Bool {
+        guard !storageLocked else { return false }
+        let previous = data
+        data.tasks.removeAll { $0.id == id }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        refreshReminders()
+        return true
     }
     @discardableResult
     func upsert(_ event: Appointment) -> Bool {
@@ -172,7 +259,7 @@ final class GardenStore: ObservableObject {
         let previous = data
         if let i = data.events.firstIndex(where: { $0.id == event.id }) { data.events[i] = event }
         else { data.events.append(event) }
-        guard save() else { data = previous; saveWork?.cancel(); return false }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
         refreshReminders()
         return true
     }
@@ -181,11 +268,22 @@ final class GardenStore: ObservableObject {
         var habit = habit
         habit.title = habit.title.trimmingCharacters(in: .whitespacesAndNewlines)
         habit.encouragement = habit.encouragement?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !storageLocked, habit.isValid else { return false }
+        var library = habit.messageLibrary ?? ReminderTextLibrary(texts: [habit.encouragement ?? ""]); library.normalize(); habit.messageLibrary = library
+        let old = data.habits.first { $0.id == habit.id }
+        if let current = old?.messageLibrary {
+            library.used = current.used.intersection(Set(library.phrases.map(\.id)))
+            library.lastID = current.lastID.flatMap { id in library.phrases.contains { $0.id == id } ? id : nil }
+            habit.messageLibrary = library
+        }
+        if habit.scheduleRevisions == nil {
+            let day = CalendarDates.key(now, calendar: calendar)
+            habit.scheduleRevisions = [ScheduleRevision(effectiveFrom: day, anchor: day, rule: RepeatRule(), firstWeekday: calendar.firstWeekday)]
+        }
+        guard !storageLocked, habit.isValid, scheduleChangeIsValid(old: old?.scheduleRevisions, new: habit.scheduleRevisions) else { return false }
         let previous = data
         if let i = data.habits.firstIndex(where: { $0.id == habit.id }) { data.habits[i] = habit }
         else { data.habits.append(habit) }
-        guard save() else { data = previous; saveWork?.cancel(); return false }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
         refreshReminders()
         return true
     }
@@ -194,36 +292,37 @@ final class GardenStore: ObservableObject {
         guard !storageLocked, data.habits.contains(where: { $0.id == id }) else { return false }
         let previous = data
         data.removeHabit(id)
-        guard save() else { data = previous; saveWork?.cancel(); return false }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
         refreshReminders()
         return true
     }
     func cancelHabitSubmission(_ id: UUID, date: Date) -> Bool {
         guard !storageLocked else { return false }
-        if message == "打卡材料已保存在本机，等待审核服务连接。" { message = "" }
+        if message == "已提交，待审核。" { message = "" }
         let previous = data
         guard data.cancelHabitSubmission(id, date: date) else { return false }
-        guard save() else { data = previous; saveWork?.cancel(); return false }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        refreshReminders()
         return true
     }
     func submitHabitEvidence(_ id: UUID, date: Date, text: String, image: Data?) -> Bool {
         guard !storageLocked else { return false }
-        if message == "打卡材料已保存在本机，等待审核服务连接。" { message = "" }
+        if message == "已提交，待审核。" { message = "" }
         let previous = data
         guard data.submitHabitEvidence(id, date: date, text: text, image: image) else { return false }
-        guard save() else { data = previous; saveWork?.cancel(); return false }
-        message = "打卡材料已保存在本机，等待审核服务连接。"
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        message = "已提交，待审核。"
         return true
     }
 
-    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil) {
+    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil) {
         guard data.timer == nil else { message = "先结束或继续当前计时，再开始下一段。"; return }
         guard kind != .rest || canStartBreak else { message = "完成一段番茄钟后，可以开始休息。"; return }
         let date = Date()
         data.pomodoroBreakReady = false
         data.timer = TimerRun(kind: kind, target: Double(max(1, minutes)) * 60,
                               taskID: task?.id, taskTitle: kind == .rest ? "休息" : (task?.title ?? title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? "自由专注"),
-                              startedAt: date, resumedAt: date)
+                              startedAt: date, resumedAt: date, occurrenceID: occurrenceID)
         now = date
         save()
         refreshTimerReminder()
@@ -369,55 +468,78 @@ final class GardenStore: ObservableObject {
             if let error { DispatchQueue.main.async { self?.error = "计时提醒未设置成功：\(error.localizedDescription)" } }
         }
     }
-    func reminderRequests(at date: Date = Date()) -> [UNNotificationRequest] {
-        var requests: [UNNotificationRequest] = []
-        for habit in data.habits {
-            guard let minutes = habit.reminderMinutes else { continue }
+    private func requests(for assignments: [ReminderAssignment], at date: Date) -> [UNNotificationRequest] {
+        var requests = assignments.map { item -> UNNotificationRequest in
             let content = UNMutableNotificationContent()
-            content.title = "习惯提醒：\(habit.title)"
-            content.body = habit.encouragement?.isEmpty == false ? habit.encouragement! : "留一点时间，完成今天的小习惯。"
+            content.title = item.title; content.body = item.text
             if data.preferences.sound { content.sound = .default }
-            let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: minutes / 60, minute: minutes % 60), repeats: true)
-            requests.append(UNNotificationRequest(identifier: "habit-\(habit.id.uuidString)", content: content, trigger: trigger))
+            var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: item.fireAt)
+            components.calendar = calendar; components.timeZone = calendar.timeZone
+            return UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false))
         }
         for event in data.events.filter({ $0.remind && $0.start > date }).sorted(by: { $0.start < $1.start }) {
             let content = UNMutableNotificationContent()
             content.title = "日程开始：\(event.title)"
             content.body = event.notes.isEmpty ? "打开暮色小院查看今天的安排。" : event.notes
             if data.preferences.sound { content.sound = .default }
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, event.start.timeIntervalSince(date)), repeats: false)
-            requests.append(UNNotificationRequest(identifier: event.id.uuidString, content: content, trigger: trigger))
+            requests.append(UNNotificationRequest(identifier: event.id.uuidString, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, event.start.timeIntervalSince(date)), repeats: false)))
         }
         return requests
     }
+    func reminderRequests(at date: Date = Date()) -> [UNNotificationRequest] {
+        var snapshot = data
+        return requests(for: snapshot.planReminders(at: date, calendar: calendar), at: date)
+    }
     func refreshReminders() {
-        guard !preview else { return }
+        guard !preview, !storageLocked else { return }
+        if reminderRefreshActive { reminderRefreshNeeded = true; return }
+        reminderRefreshActive = true
+        lastReminderRefresh = now
+        reminderGeneration += 1
+        let generation = reminderGeneration
         let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
-        guard data.preferences.notifications else { return }
-        refreshTimerReminder()
-        let requests = reminderRequests()
-        let expected = Set(requests.map(\.identifier))
-        let group = DispatchGroup()
-        for request in requests {
-            group.enter()
-            center.add(request) { [weak self] error in
-                if let error { DispatchQueue.main.async { self?.error = "提醒未设置成功：\(error.localizedDescription)" } }
-                group.leave()
-            }
+        guard data.preferences.notifications else {
+            center.removeAllPendingNotificationRequests(); reminderScheduledThrough = nil; finishReminderRefresh(); return
         }
-        group.notify(queue: .main) { [weak self] in
-            center.getPendingNotificationRequests { pending in
-                let missing = expected.subtracting(pending.map(\.identifier))
-                DispatchQueue.main.async {
-                    guard let self else { return }
-                    self.notificationStatus = missing.isEmpty ? "已开启" : "部分提醒未能排入系统"
-                    if !missing.isEmpty {
-                        self.error = "有 \(missing.count) 条提醒未能排入系统。请减少同时启用的提醒，或检查系统通知设置。"
+        let previous = data
+        let assignments = data.planReminders(at: now, calendar: calendar)
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; finishReminderRefresh(); return }
+        let requests = requests(for: assignments, at: now)
+        let expected = Set(requests.map(\.identifier))
+        reminderScheduledThrough = calendar.date(byAdding: .day, value: 29, to: now)
+        refreshTimerReminder()
+        center.getPendingNotificationRequests { [weak self] pending in
+            DispatchQueue.main.async {
+                guard let self, generation == self.reminderGeneration else { return }
+                center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0 != "focus-timer" && !expected.contains($0) })
+                let group = DispatchGroup()
+                for request in requests {
+                    group.enter()
+                    center.add(request) { [weak self] error in
+                        if let error { DispatchQueue.main.async { if generation == self?.reminderGeneration { self?.error = "提醒未设置成功：\(error.localizedDescription)" } } }
+                        group.leave()
+                    }
+                }
+                group.notify(queue: .main) { [weak self] in
+                    center.getPendingNotificationRequests { pending in
+                        DispatchQueue.main.async {
+                            guard let self, generation == self.reminderGeneration else { return }
+                            let actual = Set(pending.map(\.identifier)), missing = expected.subtracting(actual)
+                            for i in self.data.reminderAssignments?.indices ?? 0..<0 { self.data.reminderAssignments?[i].registered = actual.contains(self.data.reminderAssignments![i].id) }
+                            let saved = self.save()
+                            self.notificationStatus = missing.isEmpty && saved ? "已开启" : "部分提醒未能排入系统"
+                            if !missing.isEmpty { self.error = "有 \(missing.count) 条提醒未能排入系统。实际排入 \(expected.count-missing.count) 条；应用运行时会继续核对和续排。" }
+                            self.finishReminderRefresh()
+                        }
                     }
                 }
             }
         }
+    }
+
+    private func finishReminderRefresh() {
+        reminderRefreshActive = false
+        if reminderRefreshNeeded { reminderRefreshNeeded = false; refreshReminders() }
     }
 
     func exportData() {

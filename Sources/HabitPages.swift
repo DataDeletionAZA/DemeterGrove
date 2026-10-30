@@ -42,7 +42,7 @@ struct HabitsPage: View {
                 }.padding(.vertical, 8)
             }
             Card(title: date.formatted(.dateTime.month().day().weekday(.wide)), icon: "checkmark.circle") {
-                if !Calendar.current.isDate(date, inSameDayAs: store.now) { Text("历史记录").font(.caption).foregroundStyle(Palette.muted) }
+                if !store.calendar.isDate(date, inSameDayAs: store.now) { Text("历史记录").font(.caption).foregroundStyle(Palette.muted) }
                 if store.data.habits.isEmpty { EmptyNote(text: "暂无习惯") }
                 ForEach(store.data.habits) { habit in
                     VStack(alignment: .leading, spacing: 8) {
@@ -54,7 +54,7 @@ struct HabitsPage: View {
                         HStack(spacing: 6) {
                             Text("近 14 天").font(.system(size: 10)).foregroundStyle(Palette.muted)
                             ForEach((0..<14).reversed(), id: \.self) { offset in
-                                let day = Calendar.current.date(byAdding: .day, value: -offset, to: date)!
+                                let day = store.calendar.date(byAdding: .day, value: -offset, to: date)!
                                 Rectangle().fill(habit.days.contains(dayKey(day)) ? Palette.sage : Palette.line.opacity(0.7)).frame(height: 10)
                                     .help("\(dayKey(day))：\(habit.days.contains(dayKey(day)) ? "已完成" : "未完成")")
                             }
@@ -64,6 +64,7 @@ struct HabitsPage: View {
                 }
             }
         }
+        .environment(\.calendar, store.calendar)
         .sheet(isPresented: $adding) { HabitEditor(store: store, habit: Habit(title: "")) }
         .sheet(item: $editing) { habit in HabitEditor(store: store, habit: habit) }
         .alert("删除这个习惯？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -77,7 +78,7 @@ struct HabitWeekBoard: View {
     @ObservedObject var store: GardenStore
     @Binding var selection: Date
     @Environment(\.sceneViewport) private var viewport
-    private var days: [Date] { CalendarDates.days(in: selection, week: true).compactMap { $0 } }
+    private var days: [Date] { CalendarDates.days(in: selection, week: true, calendar: store.calendar).compactMap { $0 } }
     private var cardWidth: CGFloat { max(158, (viewport.width - 108) / 7) }
     private var boardHeight: CGFloat { max(190, CGFloat(store.data.habits.count) * 48 + 112) }
     var body: some View {
@@ -86,15 +87,15 @@ struct HabitWeekBoard: View {
                 Text(days.first!.formatted(.dateTime.year().month().day()) + " — " + days.last!.formatted(.dateTime.month().day())).font(.callout).foregroundStyle(Palette.goldLight)
                 Spacer(minLength: 6)
                 Button { move(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一周")
-                Button("今天") { selection = store.now }.buttonStyle(PixelButtonStyle())
                 Button { move(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一周")
-                    .disabled(Calendar.current.date(byAdding: .day, value: 7, to: days.first!)! > Calendar.current.startOfDay(for: store.now))
+                    .disabled(store.calendar.date(byAdding: .day, value: 7, to: days.first!)! > store.calendar.startOfDay(for: store.now))
             }
+            HStack { Button("回到今天") { selection = store.now }.buttonStyle(PixelButtonStyle()).disabled(store.calendar.isDate(selection, inSameDayAs: store.now)); Spacer() }
             ScrollViewReader { reader in
                 PixelScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(days, id: \.self) { day in
-                            HabitDayCard(habits: store.data.habits, day: day, today: store.now, selected: Calendar.current.isDate(day, inSameDayAs: selection)) { selection = day }
+                            HabitDayCard(habits: store.data.habits, day: day, today: store.now, calendar: store.calendar, selected: store.calendar.isDate(day, inSameDayAs: selection)) { selection = day }
                                 .frame(width: cardWidth, height: boardHeight).id(dayKey(day))
                         }
                     }.padding(.bottom, 8)
@@ -104,34 +105,36 @@ struct HabitWeekBoard: View {
             }
         }
     }
-    private func move(_ amount: Int) { selection = Calendar.current.date(byAdding: .day, value: amount * 7, to: selection)! }
+    private func move(_ amount: Int) { selection = store.calendar.date(byAdding: .day, value: amount * 7, to: selection)! }
 }
 
 struct HabitDayCard: View {
     var habits: [Habit]
     var day: Date
     var today: Date
+    var calendar: Calendar = .current
     var selected: Bool
     var choose: () -> Void
-    private var completed: Int { habits.filter { HabitDayState.value(for: $0, on: day, today: today) == .completed }.count }
-    private var future: Bool { Calendar.current.startOfDay(for: day) > Calendar.current.startOfDay(for: today) }
+    private var completed: Int { habits.filter { HabitDayState.value(for: $0, on: day, today: today, calendar: calendar) == .completed }.count }
+    private var planned: Int { habits.filter { $0.isScheduled(on: day, calendar: calendar) }.count }
+    private var future: Bool { calendar.startOfDay(for: day) > calendar.startOfDay(for: today) }
     var body: some View {
         Button(action: choose) {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 3)
-                    if Calendar.current.isDate(day, inSameDayAs: today) { Text("今天").font(.system(size: 10)).foregroundStyle(Palette.goldLight) }
+                    if calendar.isDate(day, inSameDayAs: today) { Text("今天").font(.system(size: 10)).foregroundStyle(Palette.goldLight) }
                 }
                 HStack(alignment: .firstTextBaseline) {
                     Text(day.formatted(.dateTime.day())).font(.system(size: 25, weight: .medium))
                     Spacer(minLength: 3)
-                    Text("\(completed)/\(habits.count)").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                    Text("\(completed) 完成 · \(planned) 计划").font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
                 Rectangle().fill(Palette.line).frame(height: 1)
                 if habits.isEmpty { Text("暂无习惯").font(.caption).foregroundStyle(Palette.muted) }
                 ForEach(habits) { habit in
-                    let state = HabitDayState.value(for: habit, on: day, today: today)
+                    let state = HabitDayState.value(for: habit, on: day, today: today, calendar: calendar)
                     HStack(alignment: .top, spacing: 7) {
                         Image(systemName: symbol(state)).font(.system(size: 12)).foregroundStyle(color(state)).padding(.top, 2)
                         VStack(alignment: .leading, spacing: 3) {
@@ -143,13 +146,13 @@ struct HabitDayCard: View {
                 Spacer(minLength: 0)
             }.padding(5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }.buttonStyle(PixelButtonStyle(primary: selected)).disabled(future).opacity(future ? 0.55 : 1)
-            .accessibilityLabel(day.formatted(date: .complete, time: .omitted)).accessibilityValue((["已完成 \(completed) / \(habits.count) 项"] + habits.map { $0.title + "：" + HabitDayState.value(for: $0, on: day, today: today).rawValue }).joined(separator: "，"))
+            .accessibilityLabel(day.formatted(date: .complete, time: .omitted)).accessibilityValue((["已完成 \(completed) / \(habits.count) 项"] + habits.map { $0.title + "：" + HabitDayState.value(for: $0, on: day, today: today, calendar: calendar).rawValue }).joined(separator: "，"))
     }
     private func symbol(_ state: HabitDayState) -> String {
-        switch state { case .completed: return "checkmark.circle.fill"; case .pending: return "clock"; case .needsMore: return "exclamationmark.circle"; case .empty, .upcoming: return "circle" }
+        switch state { case .completed: return "checkmark.circle.fill"; case .pending: return "clock"; case .needsMore: return "exclamationmark.circle"; case .empty, .upcoming, .rest, .notStarted: return "circle" }
     }
     private func color(_ state: HabitDayState) -> Color {
-        switch state { case .completed: return Palette.sage; case .pending: return Palette.goldLight; case .needsMore: return Palette.clay; case .empty, .upcoming: return Palette.muted }
+        switch state { case .completed: return Palette.sage; case .pending: return Palette.goldLight; case .needsMore: return Palette.clay; case .empty, .upcoming, .rest, .notStarted: return Palette.muted }
     }
 }
 
@@ -161,18 +164,18 @@ struct HabitRow: View {
     private var key: String { dayKey(date) }
     private var completed: Bool { habit.days.contains(key) }
     private var entry: HabitCheckIn? { habit.checkIns?[key] }
-    private var today: Bool { Calendar.current.isDate(date, inSameDayAs: store.now) }
+    private var today: Bool { store.calendar.isDate(date, inSameDayAs: store.now) }
     var body: some View {
         HStack {
             Image(systemName: completed ? "checkmark.circle.fill" : "leaf").foregroundStyle(Palette.sage)
             VStack(alignment: .leading, spacing: 5) {
                 Text(habit.title).lineLimit(2)
-                if let encouragement = habit.encouragement, !encouragement.isEmpty { Text(encouragement).font(.caption).foregroundStyle(Palette.muted).lineLimit(2) }
+                if let rule = Recurrence.revision(habit.scheduleRevisions, on: date, calendar: store.calendar)?.rule { Text(rule.summary).font(.caption).foregroundStyle(Palette.muted) }
                 if let minutes = habit.reminderMinutes { Label(String(format: "%02d:%02d 提醒", minutes / 60, minutes % 60), systemImage: "bell").font(.system(size: 10)).foregroundStyle(Palette.muted) }
             }
             Spacer()
             Text("累计 \(habit.days.count) 天").font(.caption).foregroundStyle(Palette.muted)
-            Button(completed ? "已完成" : (entry?.status.title ?? (today ? "打卡" : "未打卡"))) { checkingIn = true }
+            Button(completed ? "已完成" : (entry?.status.title ?? (today ? (habit.isScheduled(on: date, calendar: store.calendar) ? "打卡" : "额外打卡") : HabitDayState.value(for: habit, on: date, today: store.now, calendar: store.calendar).rawValue))) { checkingIn = true }
                 .buttonStyle(PixelButtonStyle(primary: today && !completed)).accessibilityLabel("打卡：" + habit.title).accessibilityValue(completed ? "已完成" : (entry?.status.title ?? "未打卡")).disabled(!today && entry == nil)
         }.sheet(isPresented: $checkingIn) { HabitEvidenceEditor(store: store, habitID: habit.id, date: date) }
     }
@@ -185,6 +188,11 @@ struct HabitEditor: View {
     @State private var reminderHour: Int
     @State private var reminderMinute: Int
     @State private var error = ""
+    @State private var repeating = true
+    @State private var repeatRule: RepeatRule
+    @State private var anchor: Date
+    @State private var library: ReminderTextLibrary
+    private var effective: Date { store.data.habits.contains(where: { $0.id == habit.id }) ? store.calendar.date(byAdding: .day, value: 1, to: store.now)! : store.now }
     @Environment(\.dismiss) private var dismiss
     init(store: GardenStore, habit: Habit) {
         self.store = store
@@ -193,12 +201,18 @@ struct HabitEditor: View {
         let minutes = habit.reminderMinutes ?? 20 * 60
         _reminderHour = State(initialValue: minutes / 60)
         _reminderMinute = State(initialValue: minutes % 60)
+        let revision = habit.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
+        _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.now)]))
+        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.now)
+        _library = State(initialValue: habit.messageLibrary ?? ReminderTextLibrary(texts: [habit.encouragement ?? ""]))
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(store.data.habits.contains { $0.id == habit.id } ? "编辑习惯" : "添加习惯").font(.title2)
+            PixelScrollView { VStack(alignment: .leading, spacing: 16) {
             TextField("习惯名称", text: $habit.title).textFieldStyle(PixelTextFieldStyle())
-            Toggle("每天提醒", isOn: $reminding)
+            RepeatScheduleEditor(enabled: $repeating, rule: $repeatRule, anchor: $anchor, calendar: store.calendar, effective: effective, allowsOff: false)
+            Toggle("提醒", isOn: $reminding)
             if reminding {
                 HStack {
                     Text("提醒时间")
@@ -209,19 +223,28 @@ struct HabitEditor: View {
                     HStack { Text("系统通知未开启").font(.caption).foregroundStyle(Palette.muted); Spacer(); Button("开启通知") { store.requestNotifications() }.buttonStyle(PixelButtonStyle()) }
                 }
             }
-            TextField("给自己的激励语（可选）", text: Binding(get: { habit.encouragement ?? "" }, set: { habit.encouragement = $0 }), axis: .vertical).lineLimit(2...4).textFieldStyle(PixelTextFieldStyle())
+            ReminderMessagesEditor(library: $library)
+            AIEncouragementButton(store: store, feature: .habitEncouragement, subject: habit.title) { texts in
+                library.phrases.append(contentsOf: texts.map { ReminderPhrase(text: $0) }); library.normalize()
+            }.buttonStyle(PixelButtonStyle())
+            }.padding(.trailing, 20)}.frame(maxHeight: 580)
             if !error.isEmpty { Text(error).font(.caption).foregroundStyle(Palette.clay) }
             HStack {
                 Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("保存") {
                     habit.reminderMinutes = reminding ? reminderHour * 60 + reminderMinute : nil
+                    let old = habit.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
+                    if old?.rule != repeatRule || old?.anchor != CalendarDates.key(anchor, calendar: store.calendar) {
+                        habit.scheduleRevisions = Recurrence.revised(habit.scheduleRevisions, rule: repeatRule, anchor: anchor, effective: effective, calendar: store.calendar)
+                    }
+                    library.normalize(); habit.messageLibrary = library; habit.encouragement = nil
                     if store.upsert(habit) { dismiss() }
                     else { error = store.error.isEmpty ? "习惯未能保存，请检查填写内容后重试。" : store.error }
                 }.buttonStyle(PixelButtonStyle(primary: true)).keyboardShortcut(.defaultAction)
-                    .disabled(habit.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (habit.encouragement?.count ?? 0) > 300)
+                    .disabled(habit.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !repeatRule.isValid)
             }
-        }.padding(28).frame(width: 440).magicSurface(Palette.paper, strong: true).magicControls()
+        }.padding(28).frame(width: 500).magicSurface(Palette.paper, strong: true).magicControls()
     }
 }
 
@@ -235,7 +258,7 @@ struct HabitEvidenceEditor: View {
     @Environment(\.dismiss) private var dismiss
     private var habit: Habit? { store.data.habits.first { $0.id == habitID } }
     private var entry: HabitCheckIn? { habit?.checkIns?[dayKey(date)] }
-    private var editable: Bool { Calendar.current.isDate(date, inSameDayAs: store.now) && habit?.days.contains(dayKey(date)) != true }
+    private var editable: Bool { store.calendar.isDate(date, inSameDayAs: store.now) && habit?.days.contains(dayKey(date)) != true }
     var body: some View {
         VStack(alignment: .leading, spacing: 17) {
             Text(habit?.title ?? "习惯打卡").font(.title2)

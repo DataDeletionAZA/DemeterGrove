@@ -39,7 +39,7 @@ struct RootView: View {
                 Spacer(minLength: 24)
                 HStack {
                     RoundedRectangle(cornerRadius: 2).fill(Palette.sage).frame(width: 6, height: 6)
-                    Text(store.storageLocked ? "存档需要恢复" : "本机自动保存").font(.caption)
+                    Text(store.storageLocked ? "存档需要恢复" : store.saveStatus).font(.caption)
                 }.foregroundStyle(Palette.muted)
             }.padding(20).frame(width: 196).background(Palette.paper)
             Rectangle().fill(Palette.line).frame(width: 1)
@@ -91,8 +91,9 @@ struct RootView: View {
                 }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
-        }.frame(minWidth: 560, minHeight: 400).foregroundStyle(Palette.ink).tint(Palette.sage)
+        }.frame(minWidth: 560, minHeight: 400).environment(\.calendar,store.calendar).foregroundStyle(Palette.ink).tint(Palette.sage)
             .magicControls().environment(\.locale, Locale(identifier: "zh_CN"))
+            .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:560,height:400))}
     }
 }
 

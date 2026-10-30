@@ -1,11 +1,20 @@
 import SwiftUI
 
+struct SceneHeader<Content:View>:View {
+    @ViewBuilder var content:Content
+    var body:some View {
+        VStack(spacing:10) {content}
+            .frame(maxWidth:.infinity,alignment:.topLeading)
+            .frame(height:SceneSizing.headerHeight,alignment:.topLeading)
+    }
+}
+
 private struct SceneViewportLayout:Layout {
-    var maximum:CGFloat
-    var sidebar:Bool
+    var viewportWidth:CGFloat
+    var viewportHeight:CGFloat
     func sizeThatFits(proposal:ProposedViewSize,subviews:Subviews,cache:inout ())->CGSize {
-        let width=proposal.width ?? 600
-        return CGSize(width:width,height:SceneSizing.height(width:width,maximum:maximum,sidebar:sidebar))
+        let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth,availableWidth:proposal.width)
+        return CGSize(width:width,height:SceneSizing.height(width:width,viewportHeight:viewportHeight))
     }
     func placeSubviews(in bounds:CGRect,proposal:ProposedViewSize,subviews:Subviews,cache:inout ()) {
         subviews.first?.place(at:bounds.origin,proposal:ProposedViewSize(bounds.size))
@@ -14,29 +23,31 @@ private struct SceneViewportLayout:Layout {
 
 struct SceneCanvas<Stage:View,Sidebar:View>:View {
     @Environment(\.sceneViewport) private var viewport
-    var reservedHeight:CGFloat=150
     var hasSidebar=false
     @ViewBuilder var stage:(CGSize)->Stage
     @ViewBuilder var sidebar:()->Sidebar
     var body:some View {
-        SceneViewportLayout(maximum:viewport.height-reservedHeight,sidebar:hasSidebar) {
+        SceneViewportLayout(viewportWidth:viewport.width,viewportHeight:viewport.height) {
             GeometryReader {geo in
-                let side=SceneSizing.sidebar(width:geo.size.width,enabled:hasSidebar)
-                let area=CGSize(width:max(1,geo.size.width-side-(hasSidebar ? 12:0)),height:geo.size.height)
+                let side=SceneSizing.sidebar(width:geo.size.width)
+                let area=CGSize(width:max(1,geo.size.width-side-SceneSizing.gap),height:geo.size.height)
                 let size=SceneSizing.fitted(in:area)
-                HStack(spacing:hasSidebar ? 12:0) {
+                HStack(spacing:SceneSizing.gap) {
                     stage(size).frame(width:size.width,height:size.height)
                         .frame(width:area.width,height:area.height)
-                    if hasSidebar {sidebar().frame(width:side,height:geo.size.height)}
+                    Group {
+                        if hasSidebar {sidebar()}
+                        else {Color.clear.allowsHitTesting(false).accessibilityHidden(true)}
+                    }.frame(width:side,height:geo.size.height)
                 }
             }
-        }
+        }.frame(maxWidth:.infinity,alignment:.leading)
     }
 }
 
 extension SceneCanvas where Sidebar == EmptyView {
-    init(reservedHeight:CGFloat=150,@ViewBuilder stage:@escaping(CGSize)->Stage) {
-        self.reservedHeight=reservedHeight;self.stage=stage;self.sidebar={EmptyView()}
+    init(@ViewBuilder stage:@escaping(CGSize)->Stage) {
+        self.stage=stage;self.sidebar={EmptyView()}
     }
 }
 
@@ -50,12 +61,13 @@ struct SceneArrows:View {
     @ObservedObject var store:GardenStore
     var scene:String
     var body:some View {
-        let routes=SceneNavigation.neighbors(of:scene)
-        HStack {
-            arrow("◀",route:routes.0)
-            Spacer(minLength:0)
-            arrow("▶",route:routes.1)
-        }.padding(9)
+        if let routes=SceneNavigation.neighbors(of:scene) {
+            HStack {
+                arrow("◀",route:routes.0)
+                Spacer(minLength:0)
+                arrow("▶",route:routes.1)
+            }.padding(9)
+        }
     }
     private func arrow(_ glyph:String,route:String)->some View {
         Button {SceneNavigation.open(route,store:store)} label: {

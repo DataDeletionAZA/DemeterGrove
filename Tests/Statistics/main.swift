@@ -1,6 +1,7 @@
 import Foundation
 
 var calendar = Calendar(identifier: .gregorian)
+calendar.firstWeekday = 2
 calendar.timeZone = TimeZone(identifier: "America/New_York")!
 func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 12, _ minute: Int = 0) -> Date {
     calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
@@ -42,6 +43,13 @@ assert(summary.habitDays == 4 && summary.habitCompletions == 4)
 assert(summary.days.first!.seconds == 180 && summary.days.last!.seconds == 120)
 assert(summary.days.first { key($0.date) == "2030-02-05" }?.minutes == 0.5)
 assert(data.totalFocus == totalFocus && data.totalActions == totalActions)
+let recurringID = UUID(), revisionID = UUID()
+data.recurringTaskCompletions = [
+    TaskCompletionRecord(id:recurringID.uuidString + "/" + revisionID.uuidString + "/2030-01-31",taskID:recurringID,title:"阅读",scheduledDay:"2030-01-31",completedAt:date(2030,2,3)),
+    TaskCompletionRecord(id:recurringID.uuidString + "/" + revisionID.uuidString + "/2030-02-28",taskID:recurringID,title:"阅读",scheduledDay:"2030-02-28",completedAt:date(2030,3,1))
+]
+assert(StatsSummary(data:data,period:february).completedTasks == 3)
+assert(StatsSummary(data:data,period:StatsPeriod(date:date(2030,3,1),range:.month,calendar:calendar)).completedTasks == 2)
 let empty = StatsSummary(data:data, period:StatsPeriod(date:date(2035, 6, 15), range:.month, calendar:calendar))
 assert(empty.days.count == 30 && empty.seconds == 0 && empty.actions == 0 && empty.diaryDays == 0 && empty.completedTasks == 0 && empty.habitDays == 0)
 print("PASS: arbitrary future months/weeks, leap years, year boundaries, DST-length weeks, clamped month selection, half-open aggregation of focus/input/diaries/tasks/habits, empty future periods and preserved global totals")

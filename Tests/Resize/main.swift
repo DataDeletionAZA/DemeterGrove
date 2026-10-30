@@ -1,0 +1,26 @@
+import AppKit
+
+let bounds = NSRect(x:0,y:0,width:500,height:400)
+assert(ResizeEdges.hit(NSPoint(x:10,y:200),in:bounds) == .left)
+assert(ResizeEdges.hit(NSPoint(x:490,y:200),in:bounds) == .right)
+assert(ResizeEdges.hit(NSPoint(x:250,y:10),in:bounds) == .bottom)
+assert(ResizeEdges.hit(NSPoint(x:250,y:390),in:bounds) == .top)
+assert(ResizeEdges.hit(NSPoint(x:5,y:5),in:bounds) == [.left,.bottom])
+assert(ResizeEdges.hit(NSPoint(x:20,y:200),in:bounds).isEmpty)
+assert(ResizeEdges.hit(NSPoint(x:-1,y:200),in:bounds).isEmpty)
+let screen = NSRect(x:-1000,y:20,width:1400,height:900)
+let original = NSRect(x:-800,y:150,width:600,height:500)
+let minimum = NSSize(width:420,height:360)
+func resized(_ edges:ResizeEdges,_ x:CGFloat,_ y:CGFloat) -> NSRect {
+    edges.frame(from:original,delta:NSPoint(x:x,y:y),minimum:minimum,screen:screen)
+}
+assert(resized(.right,80,0) == NSRect(x:-800,y:150,width:680,height:500))
+assert(resized(.left,80,0) == NSRect(x:-720,y:150,width:520,height:500))
+assert(resized(.top,0,70) == NSRect(x:-800,y:150,width:600,height:570))
+assert(resized(.bottom,0,70) == NSRect(x:-800,y:220,width:600,height:430))
+assert(resized([.left,.bottom],1000,1000) == NSRect(x:-620,y:290,width:420,height:360))
+assert(resized([.right,.top],-1000,-1000) == NSRect(x:-800,y:150,width:420,height:360))
+assert(resized([.left,.bottom],-1000,-1000).origin == screen.origin)
+let expanded = resized([.right,.top],1000,1000)
+assert(expanded.maxX == screen.maxX && expanded.maxY == screen.maxY)
+print("PASS: 12-point edge and corner targets, center pass-through, opposite-edge stability, minimum sizes and display bounds")

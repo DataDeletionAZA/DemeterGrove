@@ -7,7 +7,7 @@ enum StatsRange: String, CaseIterable {
 struct StatsPeriod {
     var date: Date
     var range: StatsRange
-    var calendar: Calendar = .current
+    var calendar: Calendar = CalendarDates.defaultCalendar
     var start: Date { range == .week ? CalendarDates.weekStart(date, calendar: calendar) : CalendarDates.monthStart(date, calendar: calendar) }
     var end: Date { calendar.date(byAdding: range == .week ? .weekOfYear : .month, value: 1, to: start)! }
     var days: [Date] {
@@ -57,7 +57,7 @@ struct StatsSummary {
         sessions = entries.count
         diaryDays = diaries.count
         characters = diaries.values.reduce(0) { $0 + $1.characters }
-        completedTasks = data.tasks.filter { $0.completedAt.map(period.contains) ?? false }.count
+        completedTasks = data.taskCompletionRecords.filter { period.contains($0.completedAt) }.count
         habitDays = data.habitDays.intersection(keys).count
         habitCompletions = data.habits.reduce(0) { $0 + $1.days.intersection(keys).count }
     }

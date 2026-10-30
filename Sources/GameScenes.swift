@@ -55,23 +55,29 @@ struct GameRoomView: View {
         }
     }
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 18) {
-                resource(8, "种子", store.data.garden.seeds)
-                resource(9, "露水", store.data.garden.water)
-                WalletView(coins:store.data.garden.coins)
-                Spacer()
-                if room == "厨房" { Button("配方册") { book = true } }
-                if room == "商店" {Button("采买"){market=true}}
+        VStack(spacing:SceneSizing.sectionGap) {
+            SceneHeader {
+                HStack(spacing: 18) {
+                    resource(8, "种子", store.data.garden.seeds)
+                    resource(9, "露水", store.data.garden.water)
+                    WalletView(coins:store.data.garden.coins)
+                    Spacer()
+                    if room == "厨房" { Button("配方册") { book = true } }
+                    if room == "商店" {Button("采买"){market=true}}
 
-            }
-            HStack {
-                Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
-                if room == "农场", store.data.garden.plots.count>6 {
-                    PixelTabs(selection:$field,items:(0..<(store.data.garden.plots.count/6)).map{($0,"田地 \($0+1)")})
                 }
-                Spacer()
-                Button("成长与升级") { store.pet?.openTool("成长") }
+                HStack {
+                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
+                    if room == "农场", store.data.garden.plots.count>6 {
+                        PixelTabs(selection:$field,items:(0..<(store.data.garden.plots.count/6)).map{($0,"田地 \($0+1)")})
+                    }
+                    Spacer()
+                    Button("成长与升级") { store.pet?.openTool("成长") }
+                    if room == "商店" {
+                        Text("栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)")
+                            .font(.caption).foregroundStyle(Palette.goldLight)
+                    }
+                }
             }
             SceneCanvas(hasSidebar:room == "厨房") { size in
                 let w=size.width,h=size.height
@@ -116,7 +122,6 @@ struct GameRoomView: View {
                         else { PixelProgress(value:progress).frame(width:w*0.075).offset(y:h*0.052) }
                     } else {
                         SceneObjectArtwork(object: soil, sceneSize: CGSize(width: w, height: h)).brightness(selectedSeed == nil ? 0:0.18)
-                            .overlay { if selectedSeed != nil { PixelFrame().stroke(Palette.goldLight,lineWidth:2).padding(3) } }
                     }
                 }.frame(width:w*0.21,height:h*0.20)
             }.position(x:x,y:y)
@@ -311,8 +316,6 @@ struct GameRoomView: View {
                 .position(x:w*(progress>=1 ? 0.57:0.83-progress*0.18),y:h*(progress>=1 ? 0.73:0.46+progress*0.20))
         }
         let ready=orders.filter{$0.ready(store.data.totalFocus)}
-        Text("栏位 \(orders.count)/\(store.data.garden.capacity)").font(.system(size:12,weight:.medium))
-            .foregroundStyle(Palette.goldLight).padding(6).background(Palette.paper.opacity(0.9)).position(x:w*0.62,y:h*0.18)
         if !ready.isEmpty {
             let amount=ready.reduce(0){$0+$1.price}
             ObjectButton(label:"收取 \(Money.text(amount))",action:{

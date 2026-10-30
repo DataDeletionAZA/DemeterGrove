@@ -4,6 +4,7 @@ enum CalendarDisplay: String, CaseIterable { case month = "月", week = "周" }
 
 struct PixelCalendar: View {
     @Binding var selection: Date
+    @Environment(\.calendar) private var calendar
     var display: CalendarDisplay = .month
     var minimum: Date? = nil
     var maximum: Date? = nil
@@ -12,11 +13,11 @@ struct PixelCalendar: View {
     var onSelect: () -> Void = {}
     @State private var visible = Date()
     private var week: Bool { display == .week }
-    private var cells: [Date?] { CalendarDates.days(in: visible, week: week) }
+    private var cells: [Date?] { CalendarDates.days(in: visible, week: week, calendar:calendar) }
     private var title: String {
         if week {
-            let first = CalendarDates.weekStart(visible)
-            let last = Calendar.current.date(byAdding: .day, value: 6, to: first)!
+            let first = CalendarDates.weekStart(visible, calendar:calendar)
+            let last = calendar.date(byAdding: .day, value: 6, to: first)!
             return first.formatted(.dateTime.year().month().day()) + " — " + last.formatted(.dateTime.month().day())
         }
         return visible.formatted(.dateTime.year().month(.wide))
@@ -27,11 +28,15 @@ struct PixelCalendar: View {
                 Text(title).font(.system(size: compact ? 14 : 17, weight: .semibold)).foregroundStyle(Palette.goldLight)
                 Spacer(minLength: 4)
                 Button { move(-1) } label: { Image(systemName: "chevron.left") }.help(week ? "上一周" : "上个月").disabled(!canMove(-1))
-                Button("今天") { visible = Date(); choose(Date()) }.disabled(!allowed(Date()))
                 Button { move(1) } label: { Image(systemName: "chevron.right") }.help(week ? "下一周" : "下个月").disabled(!canMove(1))
             }
+            HStack {
+                Button("回到今天") { visible = Date(); choose(Date()) }
+                    .disabled(!allowed(Date()) || (calendar.isDateInToday(selection) && cells.compactMap { $0 }.contains { calendar.isDateInToday($0) }))
+                Spacer()
+            }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 5) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) {
+                ForEach((0..<7).map { ["日", "一", "二", "三", "四", "五", "六"][(calendar.firstWeekday-1+$0)%7] }, id: \.self) {
                     Text($0).font(.system(size: 11)).foregroundStyle(Palette.muted).frame(height: 22)
                 }
                 ForEach(cells.indices, id: \.self) { index in
@@ -45,16 +50,16 @@ struct PixelCalendar: View {
         .onChange(of: display) { _, _ in visible = selection }
     }
     private func dayButton(_ day: Date) -> some View {
-        let active = Calendar.current.isDate(day, inSameDayAs: selection)
+        let active = calendar.isDate(day, inSameDayAs: selection)
         return Button { choose(day) } label: {
             VStack(spacing: 4) {
-                Text("\(Calendar.current.component(.day, from: day))").font(.system(size: compact ? 12 : 14, weight: Calendar.current.isDateInToday(day) ? .bold : .regular))
+                Text("\(calendar.component(.day, from: day))").font(.system(size: compact ? 12 : 14, weight: calendar.isDateInToday(day) ? .bold : .regular))
                 HStack(spacing: 3) {
                     ForEach(Array(markers(day).prefix(3).enumerated()), id: \.offset) { _, color in Rectangle().fill(color).frame(width: 4, height: 3) }
                 }.frame(height: 4)
             }.frame(maxWidth: .infinity).frame(height: compact ? 36 : 52)
                 .background(PixelFrame(step: 1).fill(active ? Palette.moss : Palette.control.opacity(0.55)))
-                .overlay(PixelFrame(step: 1).strokeBorder(active ? Palette.gold : Calendar.current.isDateInToday(day) ? Palette.gold.opacity(0.5) : Palette.line.opacity(0.5), lineWidth: 1))
+                .overlay(PixelFrame(step: 1).strokeBorder(active ? Palette.gold : calendar.isDateInToday(day) ? Palette.gold.opacity(0.5) : Palette.line.opacity(0.5), lineWidth: 1))
                 .foregroundStyle(active ? Palette.goldLight : Palette.ink).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(!allowed(day)).opacity(allowed(day) ? 1 : 0.3)
             .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
@@ -68,11 +73,11 @@ struct PixelCalendar: View {
         onSelect()
     }
     private func target(_ step: Int) -> Date {
-        let anchor = week ? CalendarDates.weekStart(visible) : CalendarDates.monthStart(visible)
-        return Calendar.current.date(byAdding: week ? .weekOfYear : .month, value: step, to: anchor)!
+        let anchor = week ? CalendarDates.weekStart(visible, calendar:calendar) : CalendarDates.monthStart(visible, calendar:calendar)
+        return calendar.date(byAdding: week ? .weekOfYear : .month, value: step, to: anchor)!
     }
     private func canMove(_ step: Int) -> Bool {
-        CalendarDates.days(in: target(step), week: week).compactMap { $0 }.contains(where: allowed)
+        CalendarDates.days(in: target(step), week: week, calendar:calendar).compactMap { $0 }.contains(where: allowed)
     }
     private func move(_ step: Int) { visible = target(step) }
 }

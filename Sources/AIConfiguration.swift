@@ -1,0 +1,57 @@
+import Foundation
+
+enum AIFeature: String, Codable, CaseIterable, Identifiable {
+    case taskEncouragement, habitEncouragement
+    var id: String { rawValue }
+    var title: String { self == .taskEncouragement ? "任务激励语" : "习惯激励语" }
+}
+
+enum AIFormat: String, Codable, CaseIterable {
+    case responses = "Responses", chatCompletions = "Chat Completions"
+}
+
+struct AIProfile: Codable, Equatable, Identifiable {
+    var id = UUID()
+    var name = ""
+    var baseURL = "https://api.openai.com/v1"
+    var model = ""
+    var format: AIFormat = .responses
+    var isValid: Bool {
+        !name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && name.count<=80 &&
+        !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && model.count<=200 &&
+        Self.secureURL(baseURL) != nil
+    }
+    static func secureURL(_ value:String)->URL? {
+        guard value.count<=2048,!value.unicodeScalars.contains(where:{CharacterSet.controlCharacters.contains($0)}),
+              var parts=URLComponents(string:value.trimmingCharacters(in:.whitespacesAndNewlines)),
+              parts.scheme?.lowercased() == "https",parts.host?.isEmpty == false,
+              parts.user == nil,parts.password == nil,parts.query == nil,parts.fragment == nil,
+              parts.port.map({(1...65535).contains($0)}) ?? true else{return nil}
+        parts.scheme="https"
+        return parts.url
+    }
+    func endpoint(_ resource:String)->URL? {
+        guard ["models","responses","chat/completions"].contains(resource),let base=Self.secureURL(baseURL) else{return nil}
+        return base.appendingPathComponent(resource)
+    }
+    var normalized:AIProfile {
+        var value=self
+        value.name=name.trimmingCharacters(in:.whitespacesAndNewlines)
+        value.model=model.trimmingCharacters(in:.whitespacesAndNewlines)
+        value.baseURL=baseURL.trimmingCharacters(in:.whitespacesAndNewlines)
+        return value
+    }
+}
+
+struct AISettings: Codable, Equatable {
+    var profiles: [AIProfile] = []
+    var assignments: [String:UUID] = [:]
+    var isValid: Bool {
+        let ids = Set(profiles.map(\.id))
+        return profiles.count<=100 && ids.count == profiles.count && profiles.allSatisfy(\.isValid) &&
+            assignments.allSatisfy { AIFeature(rawValue:$0.key) != nil && ids.contains($0.value) }
+    }
+    func profile(for feature:AIFeature) -> AIProfile? {
+        profiles.first { $0.id == assignments[feature.rawValue] }
+    }
+}

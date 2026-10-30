@@ -166,10 +166,12 @@ struct MapPage: View {
     }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins)}
+            SceneHeader {
+                HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins)}
+            }
             if journey == .potions {PotionScene(store:store)}
             else {
-                SceneCanvas(reservedHeight:150) {size in
+                SceneCanvas {size in
                     let w=size.width,h=size.height
                     ZStack {
                         RoomBackdrop(name:journey.scene).frame(width:w,height:h)

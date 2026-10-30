@@ -177,7 +177,7 @@ struct DiaryPage: View {
             HStack {
                 Text("\(diary.characters) 字符（不含空白）")
                 Spacer()
-                Label(store.error.isEmpty ? "本机自动保存" : "请检查保存提示", systemImage: "externaldrive")
+                Label(store.saveStatus, systemImage: "externaldrive")
             }.font(.caption).foregroundStyle(Palette.muted)
         }
     }

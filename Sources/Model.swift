@@ -15,6 +15,9 @@ struct GardenTask: Codable, Identifiable, Equatable {
     var urgent = false
     var due: Date?
     var completedAt: Date?
+    var scheduleRevisions: [ScheduleRevision]? = nil
+    var reminderMinutes: Int? = nil
+    var messageLibrary: ReminderTextLibrary? = nil
     var quadrant: Int { important ? (urgent ? 0 : 1) : (urgent ? 2 : 3) }
 }
 
@@ -34,15 +37,19 @@ struct Habit: Codable, Identifiable, Equatable {
     var reminderMinutes: Int? = nil
     var encouragement: String? = nil
     var checkIns: [String: HabitCheckIn]? = nil
-    func streak(at date: Date = Date()) -> Int {
-        let calendar = Calendar.current
+    var scheduleRevisions: [ScheduleRevision]? = nil
+    var messageLibrary: ReminderTextLibrary? = nil
+    func streak(at date: Date = Date(), calendar: Calendar = .current) -> Int {
         var cursor = calendar.startOfDay(for: date)
-        if !days.contains(dayKey(cursor)) {
+        if !days.contains(CalendarDates.key(cursor, calendar: calendar)) {
             cursor = calendar.date(byAdding: .day, value: -1, to: cursor)!
         }
         var count = 0
-        while days.contains(dayKey(cursor)) {
-            count += 1
+        while true {
+            let key = CalendarDates.key(cursor, calendar: calendar)
+            if days.contains(key) { count += 1 }
+            else if scheduleRevisions == nil || isScheduled(on: cursor, calendar: calendar) { break }
+            else if let first = scheduleRevisions?.map(\.effectiveFrom).min(), key < first { break }
             cursor = calendar.date(byAdding: .day, value: -1, to: cursor)!
         }
         return count
@@ -71,6 +78,7 @@ struct TimerRun: Codable, Identifiable {
     var startedAt: Date
     var resumedAt: Date?
     var accumulated: TimeInterval = 0
+    var occurrenceID: String? = nil
     func elapsed(at now: Date) -> TimeInterval {
         let raw = accumulated + (resumedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
         return kind == .stopwatch ? raw : min(target, raw)
@@ -91,6 +99,7 @@ struct FocusSession: Codable, Identifiable {
     var kind: TimerKind
     var date: Date
     var seconds: TimeInterval
+    var occurrenceID: String? = nil
 }
 
 enum Crop: String, Codable, CaseIterable, Identifiable {
@@ -236,15 +245,19 @@ struct Preferences: Codable {
     var sound = true
     var notifications = false
     var idlePose: Int? = nil
+    var weekStartsOn: Int? = nil
 }
 
 struct AppData: Codable {
-    var version = 2
+    var version = 3
     var savedAt = Date()
     var tasks: [GardenTask] = []
     var events: [Appointment] = []
     var habits: [Habit] = []
     var habitProgress: HabitProgress? = nil
+    var recurringTaskCompletions: [TaskCompletionRecord]? = nil
+    var reminderAssignments: [ReminderAssignment]? = nil
+    var ai: AISettings? = nil
     var diaries: [String: Diary] = [:]
     var sessions: [FocusSession] = []
     var keys: [String: Int] = [:]
@@ -264,7 +277,7 @@ struct AppData: Codable {
         guard seconds >= 1, !sessions.contains(where: { $0.id == run.id }) else { return (0, 0, false) }
         let before = Int(totalFocus / 300)
         sessions.append(FocusSession(id: run.id, taskID: run.taskID, title: run.taskTitle,
-                                     kind: run.kind, date: now, seconds: seconds))
+                                     kind: run.kind, date: now, seconds: seconds, occurrenceID: run.occurrenceID))
         let water = Int(totalFocus / 300) - before
         garden.water += water
         return (seconds, water, false)
@@ -361,12 +374,13 @@ struct AppData: Codable {
         return true
     }
 
-    func validated() throws -> AppData {
+    func validated(at now: Date = Date()) throws -> AppData {
         func require(_ value: Bool) throws { if !value { throw DataIssue.invalid } }
         func validDate(_ date: Date) -> Bool {
             date.timeIntervalSince1970.isFinite && (Date.distantPast...Date.distantFuture).contains(date)
         }
-        try require(version == 1 || version == 2)
+        try require(ai?.isValid ?? true)
+        try require((1...3).contains(version))
         try require(validDate(savedAt))
         try require(tasks.allSatisfy { ($0.due.map(validDate) ?? true) && ($0.completedAt.map(validDate) ?? true) })
         try require(events.allSatisfy { validDate($0.start) && validDate($0.end) })
@@ -390,10 +404,16 @@ struct AppData: Codable {
         try require(garden.ingredients.keys.allSatisfy { Ingredient(rawValue: $0) != nil })
         try require(garden.dishes.keys.allSatisfy { id in garden.recipes[id] != nil || Dish.allCases.contains { $0.id == id } })
         try require(garden.ingredients.values.allSatisfy { (0...1_000_000_000).contains($0) } && garden.dishes.values.allSatisfy { (0...1_000_000_000).contains($0) })
+        try require(tasks.allSatisfy { Recurrence.valid($0.scheduleRevisions) && ($0.reminderMinutes.map { (0..<1440).contains($0) } ?? true) && ($0.messageLibrary?.isValid ?? true) })
+        let completions = recurringTaskCompletions ?? []
+        try require(Set(completions.map(\.id)).count == completions.count && completions.allSatisfy { $0.isValid && $0.scheduledDay != nil && validDate($0.completedAt) })
+        let assignments = reminderAssignments ?? []
+        try require(Set(assignments.map(\.id)).count == assignments.count && assignments.allSatisfy { $0.isValid && validDate($0.fireAt) })
         try require(habits.allSatisfy { $0.isValid })
         try require(habitProgress?.isValid ?? true)
         try require((0...2).contains(preferences.hair) && (0...2).contains(preferences.clothing))
         try require(preferences.idlePose.map { (0...1).contains($0) } ?? true)
+        try require(preferences.weekStartsOn.map { $0 == 1 || $0 == 2 } ?? true)
         try require(garden.plots.allSatisfy { $0.plantedAt.isFinite && $0.plantedAt >= 0 && $0.plantedAt <= totalFocus })
         try require(garden.plots.allSatisfy { $0.bonus.isFinite && (0...1_000_000_000).contains($0.bonus) && ($0.duration.map{$0.isFinite && $0>0 && $0<=1500} ?? true) })
         try require((1...180).contains(preferences.focusMinutes) && (1...60).contains(preferences.breakMinutes))
@@ -431,7 +451,10 @@ struct AppData: Codable {
             try require(trip.kind != .adventure || trip.duration == 1200)
             try require(trip.kind != .fishing || [900.0,780,660,540].contains(trip.duration))
         }
-        var result=self;result.version=2;return result
+        var result = self
+        var calendar = Calendar.current; calendar.firstWeekday = preferences.weekStartsOn ?? 2
+        result.migrateRecurrences(at: now, calendar: calendar)
+        return result
     }
 }
 
