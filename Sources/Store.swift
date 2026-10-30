@@ -5,7 +5,7 @@ import UserNotifications
 import UniformTypeIdentifiers
 
 final class GardenStore: ObservableObject {
-    @Published var data: AppData { didSet { scheduleSave() } }
+    @Published var data: AppData { didSet { invalidateHabitReviews(); scheduleSave() } }
     @Published var now = Date()
     @Published var message = ""
     @Published var error = ""
@@ -40,9 +40,23 @@ final class GardenStore: ObservableObject {
     var pet: PetController?
     var openMain: (() -> Void)?
     let preview: Bool
+    @Published private(set) var reviewingHabits: Set<UUID> = []
+    @Published private(set) var reviewErrors: [UUID: String] = [:]
+    private struct HabitReviewSnapshot {
+        var token: UUID
+        var id: UUID
+        var day: String
+        var title: String
+        var evidence: HabitCheckIn
+        var profile: AIProfile
+    }
+    private var habitReviews: [UUID: HabitReviewSnapshot] = [:]
+    private var habitReviewTasks: [UUID: Task<AIHabitReviewResult, Error>] = [:]
+    private let reviewClock: () -> Date
 
-    init(preview: Bool = false) {
+    init(preview: Bool = false, reviewClock: @escaping () -> Date = Date.init) {
         self.preview = preview
+        self.reviewClock = reviewClock
         let manager = FileManager.default
         let folder = preview ? manager.temporaryDirectory.appendingPathComponent("Daygarden-Preview-\(ProcessInfo.processInfo.processIdentifier)") :
             manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Daygarden")
@@ -132,6 +146,7 @@ final class GardenStore: ObservableObject {
 
     func tick(_ date: Date) {
         now = date
+        invalidateHabitReviews()
         guard !storageLocked else { return }
         if let run = data.timer, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
             finishTimer()
@@ -280,6 +295,7 @@ final class GardenStore: ObservableObject {
             habit.scheduleRevisions = [ScheduleRevision(effectiveFrom: day, anchor: day, rule: RepeatRule(), firstWeekday: calendar.firstWeekday)]
         }
         guard !storageLocked, habit.isValid, scheduleChangeIsValid(old: old?.scheduleRevisions, new: habit.scheduleRevisions) else { return false }
+        if old != nil { cancelHabitReview(habit.id) }
         let previous = data
         if let i = data.habits.firstIndex(where: { $0.id == habit.id }) { data.habits[i] = habit }
         else { data.habits.append(habit) }
@@ -293,6 +309,7 @@ final class GardenStore: ObservableObject {
         let previous = data
         data.removeHabit(id)
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        reviewErrors[id] = nil
         refreshReminders()
         return true
     }
@@ -300,8 +317,12 @@ final class GardenStore: ObservableObject {
         guard !storageLocked else { return false }
         if message == "已提交，待审核。" { message = "" }
         let previous = data
-        guard data.cancelHabitSubmission(id, date: date) else { return false }
+        var updated = data
+        guard updated.cancelHabitSubmission(id, date: date, now: reviewClock()) else { return false }
+        cancelHabitReview(id)
+        data = updated
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        reviewErrors[id] = nil
         refreshReminders()
         return true
     }
@@ -309,10 +330,109 @@ final class GardenStore: ObservableObject {
         guard !storageLocked else { return false }
         if message == "已提交，待审核。" { message = "" }
         let previous = data
-        guard data.submitHabitEvidence(id, date: date, text: text, image: image) else { return false }
+        var updated = data
+        guard updated.submitHabitEvidence(id, date: date, text: text, image: image, now: reviewClock()) else { return false }
+        cancelHabitReview(id)
+        data = updated
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        reviewErrors[id] = nil
         message = "已提交，待审核。"
         return true
+    }
+
+    func cancelHabitReview(_ id: UUID) {
+        guard habitReviews.removeValue(forKey: id) != nil else { return }
+        habitReviewTasks.removeValue(forKey: id)?.cancel()
+        reviewingHabits.remove(id)
+        reviewErrors[id] = "审核已取消，材料仍待审核。"
+    }
+
+    private func habitReviewIsCurrent(_ snapshot: HabitReviewSnapshot) -> Bool {
+        let date = reviewClock()
+        guard !storageLocked, snapshot.day == dayKey(date), date >= snapshot.evidence.submittedAt,
+              let habit = data.habits.first(where: { $0.id == snapshot.id }),
+              habit.title == snapshot.title, !habit.days.contains(snapshot.day),
+              habit.checkIns?[snapshot.day] == snapshot.evidence,
+              data.ai?.profile(for: .habitReview) == snapshot.profile else { return false }
+        return true
+    }
+
+    private func invalidateHabitReviews() {
+        for snapshot in Array(habitReviews.values) where !habitReviewIsCurrent(snapshot) {
+            cancelHabitReview(snapshot.id)
+            reviewErrors[snapshot.id] = data.habits.contains(where: { $0.id == snapshot.id }) ? "材料、日期或审核设置已变化，可以重新审核。" : nil
+        }
+    }
+
+    private func finishHabitReview(_ snapshot: HabitReviewSnapshot) {
+        guard habitReviews[snapshot.id]?.token == snapshot.token else { return }
+        habitReviews[snapshot.id] = nil
+        habitReviewTasks[snapshot.id] = nil
+        reviewingHabits.remove(snapshot.id)
+    }
+
+    @MainActor
+    @discardableResult
+    func reviewHabit(_ id: UUID, date: Date, client: AIClient = AIClient()) async -> Bool {
+        guard !reviewingHabits.contains(id) else { return false }
+        guard !Task.isCancelled else { return false }
+        let current = reviewClock()
+        let day = dayKey(current)
+        guard !storageLocked, Calendar.current.isDate(date, inSameDayAs: current),
+              let habit = data.habits.first(where: { $0.id == id }), !habit.days.contains(day),
+              let evidence = habit.checkIns?[day], evidence.isValid, evidence.status == .pending,
+              Calendar.current.isDate(evidence.submittedAt, inSameDayAs: current), current >= evidence.submittedAt else {
+            reviewErrors[id] = "仅能审核今天已提交、尚未通过的材料。"
+            return false
+        }
+        guard let settings = data.ai, settings.isValid, let profile = settings.profile(for: .habitReview), profile.isValid else {
+            reviewErrors[id] = "请先在设置中为习惯审核选择 API 预设。"
+            return false
+        }
+        guard save() else { reviewErrors[id] = error.isEmpty ? "保存失败，请先恢复存档写入。" : error; return false }
+        let snapshot = HabitReviewSnapshot(token: UUID(), id: id, day: day, title: habit.title, evidence: evidence, profile: profile)
+        guard habitReviewIsCurrent(snapshot) else {
+            reviewErrors[id] = "材料、日期或审核设置已变化，可以重新审核。"
+            return false
+        }
+        habitReviews[id] = snapshot
+        reviewingHabits.insert(id)
+        reviewErrors[id] = nil
+        let worker = Task {
+            guard self.habitReviews[id]?.token == snapshot.token, self.habitReviewIsCurrent(snapshot) else { throw CancellationError() }
+            return try await client.reviewHabit(profile: profile, title: snapshot.title, text: evidence.text, image: evidence.image)
+        }
+        habitReviewTasks[id] = worker
+        defer { finishHabitReview(snapshot) }
+        do {
+            let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+            guard habitReviews[id]?.token == snapshot.token else { return false }
+            guard !Task.isCancelled, !worker.isCancelled, habitReviewIsCurrent(snapshot) else {
+                reviewErrors[id] = "材料、日期或审核设置已变化，可以重新审核。"
+                return false
+            }
+            finishHabitReview(snapshot)
+            let previous = data
+            guard data.applyHabitReview(id, day: day, approved: result.approved, feedback: result.feedback, now: reviewClock()) != nil else {
+                reviewErrors[id] = "材料或日期已变化，可以重新审核。"
+                return false
+            }
+            guard save() else {
+                data = previous
+                saveWork?.cancel()
+                saveStatus = "保存失败"
+                reviewErrors[id] = error.isEmpty ? "审核结果保存失败，请重试。" : error
+                return false
+            }
+            reviewErrors[id] = nil
+            message = result.approved ? "已打卡。" : "需要补充。"
+            refreshReminders()
+            return true
+        } catch {
+            guard habitReviews[id]?.token == snapshot.token else { return false }
+            reviewErrors[id] = AIError.message(error)
+            return false
+        }
     }
 
     func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil) {
@@ -588,6 +708,7 @@ final class GardenStore: ObservableObject {
     }
 
     func shutdown() {
+        for id in Array(habitReviews.keys) { cancelHabitReview(id) }
         data.timer?.pause(at: Date())
         save()
         counter?.stop()

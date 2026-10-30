@@ -1,9 +1,24 @@
 import Foundation
 
 enum AIFeature: String, Codable, CaseIterable, Identifiable {
-    case taskEncouragement, habitEncouragement
+    case taskEncouragement, habitEncouragement, habitReview
     var id: String { rawValue }
-    var title: String { self == .taskEncouragement ? "任务激励语" : "习惯激励语" }
+    var title: String {
+        switch self { case .taskEncouragement:return "任务激励语";case .habitEncouragement:return "习惯激励语";case .habitReview:return "习惯审核" }
+    }
+}
+
+enum AIReasoningEffort:String,Codable,CaseIterable,Identifiable {
+    case none,low,medium,high,xhigh,max
+    var id:String {rawValue}
+    var title:String {
+        switch self {case .none:return "无（none）";case .low:return "低（low）";case .medium:return "中（medium）";case .high:return "高（high）";case .xhigh:return "更高（xhigh）";case .max:return "最高（max）"}
+    }
+}
+
+struct AIHabitReviewResult:Codable,Equatable {
+    var approved:Bool
+    var feedback:String
 }
 
 enum AIFormat: String, Codable, CaseIterable {
@@ -16,6 +31,7 @@ struct AIProfile: Codable, Equatable, Identifiable {
     var baseURL = "https://api.openai.com/v1"
     var model = ""
     var format: AIFormat = .responses
+    var reasoningEffort: AIReasoningEffort? = nil
     var isValid: Bool {
         !name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && name.count<=80 &&
         !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && model.count<=200 &&

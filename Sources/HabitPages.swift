@@ -175,7 +175,7 @@ struct HabitRow: View {
             }
             Spacer()
             Text("累计 \(habit.days.count) 天").font(.caption).foregroundStyle(Palette.muted)
-            Button(completed ? "已完成" : (entry?.status.title ?? (today ? (habit.isScheduled(on: date, calendar: store.calendar) ? "打卡" : "额外打卡") : HabitDayState.value(for: habit, on: date, today: store.now, calendar: store.calendar).rawValue))) { checkingIn = true }
+            Button(store.reviewingHabits.contains(habit.id) && today ? "审核中" : completed ? "已完成" : (entry?.status.title ?? (today ? (habit.isScheduled(on: date, calendar: store.calendar) ? "打卡" : "额外打卡") : HabitDayState.value(for: habit, on: date, today: store.now, calendar: store.calendar).rawValue))) { checkingIn = true }
                 .buttonStyle(PixelButtonStyle(primary: today && !completed)).accessibilityLabel("打卡：" + habit.title).accessibilityValue(completed ? "已完成" : (entry?.status.title ?? "未打卡")).disabled(!today && entry == nil)
         }.sheet(isPresented: $checkingIn) { HabitEvidenceEditor(store: store, habitID: habit.id, date: date) }
     }
@@ -252,21 +252,33 @@ struct HabitEvidenceEditor: View {
     @ObservedObject var store: GardenStore
     var habitID: UUID
     var date: Date
+    var reviewClient = AIClient()
     @State private var text = ""
     @State private var image: Data?
     @State private var error = ""
     @Environment(\.dismiss) private var dismiss
     private var habit: Habit? { store.data.habits.first { $0.id == habitID } }
     private var entry: HabitCheckIn? { habit?.checkIns?[dayKey(date)] }
-    private var editable: Bool { store.calendar.isDate(date, inSameDayAs: store.now) && habit?.days.contains(dayKey(date)) != true }
+    private var isToday: Bool { store.calendar.isDate(date, inSameDayAs: store.now) }
+    private var editable: Bool { isToday && habit != nil && habit?.days.contains(dayKey(date)) != true }
+    private var reviewing: Bool { isToday && store.reviewingHabits.contains(habitID) }
+    private var profile: AIProfile? { store.data.ai?.profile(for: .habitReview) }
+    private var changed: Bool { entry?.text != text.trimmingCharacters(in: .whitespacesAndNewlines) || entry?.image != image }
+    private var reviewError: String { isToday ? (store.reviewErrors[habitID] ?? "") : "" }
+    private var submitTitle: String {
+        guard profile != nil else { return "保存材料" }
+        if entry?.status == .pending && !changed { return reviewError.isEmpty ? "开始审核" : "重试审核" }
+        return "提交并审核"
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 17) {
             Text(habit?.title ?? "习惯打卡").font(.title2)
             Text(date.formatted(.dateTime.year().month().day())).font(.caption).foregroundStyle(Palette.muted)
-            if let entry { Text("状态：\(entry.status.title)").foregroundStyle(Palette.goldLight) }
+            if reviewing { Label("审核中", systemImage: "hourglass").foregroundStyle(Palette.goldLight) }
+            else if let entry { Text("状态：\(entry.status.title)").foregroundStyle(Palette.goldLight) }
             if let feedback = entry?.feedback, !feedback.isEmpty { Text(feedback).font(.callout) }
             Text("打卡材料").font(.callout)
-            TextEditor(text: $text).scrollContentBackground(.hidden).padding(8).frame(height: 135).background(Palette.card).border(Palette.line).disabled(!editable).accessibilityLabel("打卡文字")
+            TextEditor(text: $text).scrollContentBackground(.hidden).padding(8).frame(height: 135).background(Palette.card).border(Palette.line).disabled(!editable || reviewing).accessibilityLabel("打卡文字")
             HStack {
                 if let image, let picture = NSImage(data: image) { Image(nsImage: picture).resizable().scaledToFit().frame(width: 120, height: 100) }
                 if editable {
@@ -274,8 +286,24 @@ struct HabitEvidenceEditor: View {
                     if image != nil { Button("移除照片") { image = nil }.buttonStyle(PixelButtonStyle()) }
                 }
             }
-            Label("审核服务未连接", systemImage: "clock").font(.caption).foregroundStyle(Palette.muted)
-            if !error.isEmpty { Text(error).font(.caption).foregroundStyle(Palette.clay) }
+            .disabled(reviewing)
+            if editable {
+                if let profile {
+                    Label("发送至 \(AIProfile.secureURL(profile.baseURL)?.host ?? profile.name) · \(profile.model)", systemImage: "sparkles")
+                        .font(.caption).foregroundStyle(Palette.muted).textSelection(.enabled)
+                } else {
+                    HStack {
+                        Text("未设置审核服务").font(.caption).foregroundStyle(Palette.muted)
+                        Spacer()
+                        Button("打开设置") {
+                            dismiss(); store.selectedPage = "设置"; store.pet?.openTool("设置")
+                        }.buttonStyle(PixelButtonStyle())
+                    }
+                }
+            }
+            if !error.isEmpty || !reviewError.isEmpty {
+                Text(error.isEmpty ? reviewError : error).font(.caption).foregroundStyle(Palette.clay)
+            }
             HStack {
                 Button("关闭") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
@@ -286,14 +314,26 @@ struct HabitEvidenceEditor: View {
                             else { error = store.error.isEmpty ? "只能撤回当天尚未处理的材料。" : store.error }
                         }.buttonStyle(PixelButtonStyle())
                     }
-                    Button(entry == nil ? "保存打卡材料" : "更新打卡材料") {
-                        if store.submitHabitEvidence(habitID, date: date, text: text, image: image) { dismiss() }
-                        else { error = store.error.isEmpty ? "仅能保存当天的材料，请填写文字或选择照片。" : store.error }
-                    }.buttonStyle(PixelButtonStyle(primary: true)).disabled((text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && image == nil) || text.count > 4000)
+                    if reviewing {
+                        Button("取消审核") { store.cancelHabitReview(habitID) }.buttonStyle(PixelButtonStyle())
+                    } else {
+                        Button(submitTitle) { submit() }.buttonStyle(PixelButtonStyle(primary: true))
+                            .disabled((text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && image == nil) || text.count > 4000)
+                    }
                 }
             }
         }.padding(28).frame(width: 500).magicSurface(Palette.paper, strong: true).magicControls()
             .onAppear { text = entry?.text ?? ""; image = entry?.image }
+    }
+    private func submit() {
+        error = ""
+        if entry?.status != .pending || changed {
+            guard store.submitHabitEvidence(habitID, date: date, text: text, image: image) else {
+                error = store.error.isEmpty ? "材料未能保存，请重试。" : store.error; return
+            }
+        }
+        guard profile != nil else { return }
+        Task { @MainActor in _ = await store.reviewHabit(habitID, date: date, client: reviewClient) }
     }
     private func importImage() {
         let panel = NSOpenPanel()

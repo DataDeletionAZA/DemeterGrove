@@ -43,6 +43,10 @@ struct AISettingsView:View {
                     PixelSelect(selection:$draft.model,items:[("","选择模型")]+models.map{($0,$0)})
                 }
                 HStack {
+                    Text("思考强度")
+                    PixelSelect(selection:$draft.reasoningEffort,items:[(nil as AIReasoningEffort?,"模型默认")]+AIReasoningEffort.allCases.map{(Optional($0),$0.title)})
+                }
+                HStack {
                     Button("保存预设") {save()}.buttonStyle(PixelButtonStyle(primary:true))
                         .disabled(!draft.normalized.isValid || store.storageLocked)
                     if saved {Button("删除预设") {delete()}.disabled(store.storageLocked)}

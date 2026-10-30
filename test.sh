@@ -22,7 +22,7 @@ xcrun swiftc -swift-version 5 Sources/ChibiAnimation.swift Tests/Chibi/main.swif
 "$checks_dir/chibi"
 xcrun swiftc Sources/SceneObject.swift Tests/SceneObjects/main.swift -o "$checks_dir/scenes" -framework AppKit -framework SwiftUI
 "$checks_dir/scenes" Resources/Game
-xcrun swiftc -swift-version 5 -parse-as-library "${model[@]}" Sources/Store.swift Tests/Store/support.swift Tests/Store/main.swift -o "$checks_dir/store" -framework AppKit -framework Combine -framework Carbon -framework UserNotifications
+xcrun swiftc -swift-version 5 -parse-as-library "${model[@]}" Sources/AIClient.swift Sources/Store.swift Tests/Store/support.swift Tests/Store/main.swift -o "$checks_dir/store" -framework AppKit -framework Combine -framework Carbon -framework UserNotifications -framework Security -framework LocalAuthentication
 "$checks_dir/store"
 xcrun swiftc -swift-version 5 -parse-as-library Sources/AIConfiguration.swift Sources/AIClient.swift Tests/AI/main.swift -o "$checks_dir/ai" -framework Security -framework LocalAuthentication
 "$checks_dir/ai"
