@@ -17,6 +17,7 @@ final class GardenStore: ObservableObject {
     @Published var tapPhase = 0
     @Published var petLookDirection:Int?=nil
     @Published var petFacingRight = false
+    @Published var petDocked = false
     @Published var inputStatus = "计数未开启"
     @Published var petAnimationBegan=Date()
     @Published var petExpression = 0

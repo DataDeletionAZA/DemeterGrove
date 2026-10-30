@@ -63,7 +63,7 @@ struct GameRoomView: View {
                 Spacer()
                 if room == "厨房" { Button("配方册") { book = true } }
                 if room == "商店" {Button("采买"){market=true}}
-                else if room == "厨房" {Button("去商店"){store.pet?.openTool("商店")}}
+
             }
             HStack {
                 Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
@@ -73,19 +73,19 @@ struct GameRoomView: View {
                 Spacer()
                 Button("成长与升级") { store.pet?.openTool("成长") }
             }
-            GeometryReader { geo in
-                let w = geo.size.width, h = geo.size.height
+            SceneCanvas(hasSidebar:room == "厨房") { size in
+                let w=size.width,h=size.height
                 ZStack {
-                    RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h).clipped()
-                    if room == "农场" { gardenScene(w: w, h: h) }
-                    else if room == "厨房" { kitchenScene(w: w, h: h) }
-                    else { shopScene(w: w, h: h) }
+                    RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h)
+                    if room == "农场" {gardenScene(w:w,h:h)}
+                    else if room == "厨房" {kitchenScene(w:w,h:h)}
+                    else {shopScene(w:w,h:h)}
+                    if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
+                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
                     SceneParticles()
-                }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
-            }.aspectRatio(1.5, contentMode: .fit)
-                .overlay(alignment:.trailing) {
-                    if room == "厨房" {pantry.frame(width:160).offset(x:172)}
-                }.padding(.trailing,room == "厨房" ? 172:0)
+                    SceneArrows(store:store,scene:room)
+                }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
+            } sidebar: {pantry}
             Text(roomStatus).font(.system(size: 12)).foregroundStyle(Palette.goldLight).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal:false,vertical:true)
             if room == "农场" { seedTray }
             else if room != "厨房" { stockTray }
@@ -132,7 +132,7 @@ struct GameRoomView: View {
     private func workPlot(_ plot: Plot) {
         if let crop = plot.crop {
             let amount=store.data.harvestYield * (crop == .starlightCarrot ? 2:1)
-            if store.data.harvest(plot.id) { harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); hint = "收获 \(crop.harvestName) ×\(amount)"; store.animatePet(20, seconds: 0.65) }
+            if store.data.harvest(plot.id) { harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint=""; store.animatePet(20, seconds: 0.65) }
             else { hint = "\(crop.rawValue)还需记录 \(Int(ceil((1-plot.progress(store.data.totalFocus))*(plot.duration ?? crop.seconds)/60))) 分钟专注。" }
         } else if let selectedSeed { plant(selectedSeed,in:plot) }
         else { plantingPlot=plot }
@@ -150,14 +150,14 @@ struct GameRoomView: View {
             hint=store.data.garden.water < 1 ? "露水不足，记录专注后再来播种。":"这袋种子已用完。"
             return
         }
-        plantingPlot=nil;selectedSeed=nil;harvested=plot.id;harvestedCrop=nil;burst=Date();hint="种下了\(crop.rawValue)。"
+        plantingPlot=nil;selectedSeed=nil;harvested=plot.id;harvestedCrop=nil;burst=Date();hint="";store.message="种下了\(crop.rawValue)。"
     }
     private func seedSelection(_ plot:Plot?) -> some View {
         VStack(alignment:.leading,spacing:14) {
             HStack {Text(plot == nil ? "种子柜":"选择种子").font(.title3);Spacer();Button("关闭"){plantingPlot=nil;seedCabinet=false}}
             Text("露水 \(store.data.garden.water) · 播种消耗 1 袋种子、1 滴露水").font(.caption).foregroundStyle(Palette.muted)
             if ownedSeeds.isEmpty {Text("种子柜空空的").padding(.vertical,20)}
-            ScrollView {
+            PixelScrollView {
                 LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:3),spacing:10) {
                     ForEach(ownedSeeds) {crop in
                         Button {
@@ -237,8 +237,8 @@ struct GameRoomView: View {
         VStack(alignment:.leading,spacing:9) {
             Text("食材柜").font(.system(size:13,weight:.medium)).foregroundStyle(Palette.goldLight)
             IngredientCategoryDropdown(selection:$ingredientCategory)
-            ScrollView {
-                LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:8) {
+            PixelScrollView {
+                LazyVGrid(columns:[GridItem(.adaptive(minimum:58))],spacing:8) {
                     ForEach(Ingredient.allCases.filter{$0.category == ingredientCategory}) {ingredient in
                         let remaining=store.data.ingredientCount(ingredient)-additions[ingredient.rawValue,default:0]
                         Button {addIngredient(ingredient)} label: {
@@ -285,7 +285,7 @@ struct GameRoomView: View {
     private func rename(_ dish: Dish) {
         let name=String(dishName.trimmingCharacters(in:.whitespacesAndNewlines).prefix(60))
         guard !name.isEmpty else{return}
-        var updated=dish;updated.name=name;store.data.garden.recipes[dish.id]=updated;lastDish=updated;hint="配方已命名为\(name)。"
+        var updated=dish;updated.name=name;store.data.garden.recipes[dish.id]=updated;lastDish=updated;hint="";store.message="配方已命名为\(name)。"
     }
     @ViewBuilder private func shopScene(w: CGFloat,h: CGFloat) -> some View {
         let orders=store.data.garden.orders
@@ -294,7 +294,7 @@ struct GameRoomView: View {
             let x=store.data.garden.capacity == 1 ? 0.25 : 0.14+Double(slot)*0.34/Double(store.data.garden.capacity-1)
             ObjectButton(label:order.map{"查看在售料理：\($0.dish.name)"} ?? "第 \(slot+1) 个陈列位，上架料理",action:{
                 if let order { hint="\(order.dish.name) · 售价 \(Money.text(order.price))" }
-                else if let dish=choice, store.data.stock(dish) { soldAt=nil;hint="\(dish.name)已摆上柜台。" }
+                else if let dish=choice, store.data.stock(dish) { soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。" }
                 else { hint="暂无可上架料理" }
             }) {
                 ZStack {
@@ -311,15 +311,13 @@ struct GameRoomView: View {
                 .position(x:w*(progress>=1 ? 0.57:0.83-progress*0.18),y:h*(progress>=1 ? 0.73:0.46+progress*0.20))
         }
         let ready=orders.filter{$0.ready(store.data.totalFocus)}
-        VStack(spacing:4) {
-            Text("陈列 \(orders.count)/\(store.data.garden.capacity)").font(.system(size:12,weight:.medium))
-            Text(ready.isEmpty ? "每份售卖需 5 分钟专注" : "\(ready.count) 份已售出").font(.system(size:10))
-        }.foregroundStyle(Palette.goldLight).padding(6).background(Palette.paper.opacity(0.9)).position(x:w*0.62,y:h*0.18)
+        Text("栏位 \(orders.count)/\(store.data.garden.capacity)").font(.system(size:12,weight:.medium))
+            .foregroundStyle(Palette.goldLight).padding(6).background(Palette.paper.opacity(0.9)).position(x:w*0.62,y:h*0.18)
         if !ready.isEmpty {
             let amount=ready.reduce(0){$0+$1.price}
             ObjectButton(label:"收取 \(Money.text(amount))",action:{
                 for order in ready { _=store.data.collectSale(order.id) }
-                soldAt=Date();hint="收到 \(Money.text(amount))。"
+                soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
             }) { GameSprite(index:10,size:w*0.09) }.position(x:w*0.68,y:h*0.50)
         }
         if let soldAt { SceneParticles(burst:soldAt).frame(width:w*0.25,height:h*0.35).position(x:w*0.68,y:h*0.50) }
@@ -328,11 +326,11 @@ struct GameRoomView: View {
     private var stockTray: some View {
         VStack(alignment:.leading,spacing:7) {
             Text("料理柜 · 累计售出 \(store.data.garden.sales) 份").font(.caption).foregroundStyle(Palette.muted)
-            if availableDishes.isEmpty { Button("去厨房做料理") { store.pet?.openTool("厨房") } }
-            ScrollView(.horizontal) {
+
+            PixelScrollView(.horizontal) {
                 HStack(spacing:8) {
                     ForEach(availableDishes) { dish in
-                        Button { shopChoice=dish.id;hint="已选 \(dish.name)" } label: {
+                        Button { shopChoice=dish.id;hint="" } label: {
                             VStack(spacing:4) {
                                 GameSprite(sheet:"Foods",index:dish.sprite,size:56)
                                 Text(dish.name).font(.system(size:11)).lineLimit(1)
@@ -348,7 +346,7 @@ struct GameRoomView: View {
         VStack(alignment:.leading,spacing:14) {
             HStack { PixelIcon(name:"日记",size:25);Text("配方册").font(.title3);Spacer();Button("关闭"){book=false} }
             Text("已发现 \(store.data.garden.menu.filter{store.data.garden.isDiscovered($0)}.count) 份配方").font(.caption).foregroundStyle(Palette.muted)
-            ScrollView {
+            PixelScrollView {
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
                     ForEach(store.data.garden.menu) { dish in
                         let discovered=store.data.garden.isDiscovered(dish)
@@ -382,7 +380,7 @@ struct GameRoomView: View {
             guard let ingredient=Ingredient(rawValue:name),store.data.ingredientCount(ingredient)>=count else{hint="食材不足，先补齐后再选这份配方。";return}
             for _ in 0..<count {guard prepared.add(ingredient,available:store.data.ingredientCount(ingredient)) else{return}}
         }
-        intent=candidate;method=dish.method;selection=prepared;loadedDish=dish;lastDish=nil;hint="食材已放好。"
+        intent=candidate;method=dish.method;selection=prepared;loadedDish=dish;lastDish=nil;hint="";store.message="食材已放好。"
     }
 
 }
@@ -399,9 +397,9 @@ struct IngredientMarket: View {
             PixelTabs(selection:$section,items:[("种子","种子"),("食材","食材")])
             Toggle(section == "种子" ? "用露水交换（每袋 3 滴）":"用露水交换（每份 1 滴）",isOn:$waterPayment)
             if section == "食材" {
-                ScrollView(.horizontal) {HStack {ForEach(IngredientCategory.allCases) {item in Button(item.rawValue){ingredientCategory=item}.buttonStyle(PixelButtonStyle(primary:ingredientCategory == item))}}}
+                PixelScrollView(.horizontal) {HStack {ForEach(IngredientCategory.allCases) {item in Button(item.rawValue){ingredientCategory=item}.buttonStyle(PixelButtonStyle(primary:ingredientCategory == item))}}}
             }
-            ScrollView {
+            PixelScrollView {
                 LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:4),spacing:10) {
                     if section == "种子" {
                         ForEach(Crop.marketCrops) {crop in

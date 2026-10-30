@@ -1,6 +1,16 @@
 import Foundation
 
 enum CalendarDates {
+    static func key(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
+    }
+    static func replacingMonth(of date: Date, year: Int, month: Int, calendar: Calendar = .current) -> Date {
+        let first = calendar.date(from: DateComponents(year: year, month: month, day: 1))!
+        let day = min(calendar.component(.day, from: date), calendar.range(of: .day, in: .month, for: first)!.count)
+        let target = calendar.date(byAdding: .day, value: day - 1, to: first)!
+        return replacingDay(of: date, with: target, calendar: calendar)
+    }
     static func monthStart(_ date: Date, calendar: Calendar = .current) -> Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
     }

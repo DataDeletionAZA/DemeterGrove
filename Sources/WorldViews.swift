@@ -27,14 +27,14 @@ struct GrowthPage: View {
                     Text("操作兑换").font(.headline)
                     Text("10,000 次操作 = 1 铜纳特").font(.caption).foregroundStyle(Palette.muted)
                 }
-                Text("进度 \((store.data.totalActions-store.data.consumedActions)%10000)/10,000").font(.caption).monospacedDigit().foregroundStyle(Palette.goldLight)
+                CountText(count:store.data.availableActions).font(.caption).monospacedDigit().foregroundStyle(Palette.goldLight)
                 Spacer()
                 Button("兑换 \(store.data.typingReward) 铜纳特") {
                     let value=store.data.typingReward
                     if store.data.redeemTyping(){store.message="兑换了 \(value) 铜纳特。"}
                 }.disabled(store.data.typingReward == 0)
             }.padding(12).magicSurface(Palette.paper)
-            LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:240))],spacing:10) {
                 ForEach(Upgrade.allCases) { item in
                     let rank=store.data.garden.rank(item)
                     VStack(alignment:.leading,spacing:8) {
@@ -73,15 +73,15 @@ struct WardrobePage: View {
     private func adjustmentControl(_ title:String,value:Binding<Double>,range:ClosedRange<Double>,display:String) -> some View {
         VStack(alignment:.leading,spacing:5) {
             HStack {Text(title);Spacer();Text(display).monospacedDigit().foregroundStyle(Palette.goldLight)}
-            Slider(value:value,in:range,step:1).accessibilityLabel(title).accessibilityValue(display)
+            PixelSlider(value:value,in:range,step:1).accessibilityLabel(title).accessibilityValue(display)
         }.font(.caption)
     }
     private var removalTitle:String {
         ([ClothingSlot.outfit,.top,.bottom,.outer,.socks,.shoes].contains(slot) ? "脱下":"取下")+slot.name
     }
-    var body:some View {
-        VStack(alignment:.leading,spacing:14) {
-            HStack(spacing:24) {
+    private func wardrobePreview(horizontal:Bool)->some View {
+        let layout=horizontal ? AnyLayout(HStackLayout(alignment:.center,spacing:24)):AnyLayout(VStackLayout(alignment:.leading,spacing:12))
+        return layout {
                 ProfessorSprite(phase:store.petPhase,size:230,economy:store.data.garden.economy,idlePose:store.idlePose,expression:store.petExpression,basePhase:store.petBasePhase)
                 VStack(alignment:.leading,spacing:10) {
                     Text("当前穿戴").font(.title2)
@@ -93,7 +93,13 @@ struct WardrobePage: View {
                         for category in ClothingSlot.allCases {_=store.data.wear("",slot:category)}
                     }
                 }
-                Spacer()
+        }
+    }
+    var body:some View {
+        VStack(alignment:.leading,spacing:14) {
+            ViewThatFits(in:.horizontal) {
+                wardrobePreview(horizontal:true)
+                wardrobePreview(horizontal:false)
             }.padding(12).magicSurface(Palette.paper)
             HStack(spacing:12) {
                 Text("分类").font(.headline)
@@ -114,7 +120,7 @@ struct WardrobePage: View {
                     }.padding(.top,10)
                 }.id(item.id).padding(12).magicSurface(Palette.paper)
             }
-            LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:240))],spacing:10) {
                 ForEach(Cosmetic.all.filter{$0.slot == slot}) { item in
                     let owned=item.price == 0 || store.data.garden.economy.owned.contains(item.id)
                     let wearing=store.data.garden.economy.worn(slot) == item.id
@@ -145,69 +151,53 @@ struct WardrobePage: View {
 
 struct MapPage: View {
     @ObservedObject var store:GardenStore
-    @State private var selected:JourneyKind = .fishing
-    @State private var recipeID="dew"
+    var journey:JourneyKind = .fishing
     @State private var hint=""
     private var trip:Journey? {store.data.garden.economy.journey}
-    private var unlocked:Bool {store.data.levelProgress.level>=selected.level}
-    private var matching:Bool {trip?.kind == selected}
+    private var unlocked:Bool {store.data.levelProgress.level>=journey.level}
+    private var matching:Bool {trip?.kind == journey}
     private var actionLabel:String {
-        if !unlocked {return "等级 \(selected.level) 解锁"}
+        if !unlocked {return "等级 \(journey.level) 解锁"}
         if let trip {
-            if trip.kind != selected {return "先完成\(trip.kind.rawValue)"}
+            if !matching {return "先完成\(trip.kind.rawValue)"}
             return trip.progress(store.data.totalFocus)>=1 ? "领取收获":"继续专注"
         }
-        return selected == .fishing ? "抛竿":selected == .adventure ? "出发":"开始熬制"
+        return journey == .fishing ? "抛竿":"出发"
     }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            HStack { Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins) }
-            PixelTabs(selection:$selected,items:JourneyKind.allCases.map{($0,$0.rawValue)})
-            GeometryReader { geo in
-                let w=geo.size.width,h=geo.size.height
-                ZStack {
-                    RoomBackdrop(name:selected.scene).frame(width:w,height:h).clipped()
-                    if selected == .potions {
-                        ObjectButton(label:actionLabel,action:act) {GameSprite(index:7,size:w*0.19)}.disabled(!unlocked).position(x:w*0.73,y:h*0.57)
-                        if matching {SceneParticles(steam:true).frame(width:60,height:80).position(x:w*0.73,y:h*0.39)}
-                    } else {
-                        ObjectButton(label:actionLabel,action:act) {GameSprite(sheet:"Equipment",index:selected.icon,size:w*0.13)}
-                            .disabled(!unlocked).position(x:w*(selected == .fishing ? 0.51:0.64),y:h*(selected == .fishing ? 0.54:0.73))
-                        if matching {
-                            SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)
+            HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins)}
+            if journey == .potions {PotionScene(store:store)}
+            else {
+                SceneCanvas(reservedHeight:150) {size in
+                    let w=size.width,h=size.height
+                    ZStack {
+                        RoomBackdrop(name:journey.scene).frame(width:w,height:h)
+                        ObjectButton(label:actionLabel,action:act,caption:actionLabel) {GameSprite(sheet:"Equipment",index:journey.icon,size:w*0.13)}
+                            .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.51:0.64),y:h*(journey == .fishing ? 0.54:0.73))
+                        if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
+                        if matching {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
+                        if !unlocked {
+                            Palette.paper.opacity(0.55).allowsHitTesting(false)
+                            Label("等级 \(journey.level) 解锁",systemImage:"lock.fill").font(.headline).padding(14).magicSurface(Palette.paper)
                         }
-                    }
-                    if !unlocked {
-                        Palette.paper.opacity(0.55).allowsHitTesting(false)
-                        Label("等级 \(selected.level) 解锁",systemImage:"lock.fill").font(.headline)
-                            .padding(14).magicSurface(Palette.paper).position(x:w*0.5,y:h*0.45)
-                    }
-                    VStack(spacing:5) {
-                        Text(actionLabel).font(.system(size:13,weight:.medium))
-                        if let trip,matching {
-                            PixelProgress(value:trip.progress(store.data.totalFocus)).frame(width:w*0.30)
-                            Text(trip.progress(store.data.totalFocus)>=1 ? "收获已备好" : "还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注").font(.caption)
-                        }
-                    }.padding(10).background(Palette.paper.opacity(0.9)).position(x:w*0.5,y:h*0.90)
-                }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
-            }.aspectRatio(1.5,contentMode:.fit)
-            if !hint.isEmpty {Text(hint).font(.callout).foregroundStyle(Palette.goldLight)}
-            if selected == .potions {
-                ForEach(Potion.all) { potion in
-                    HStack {
-                        Button {recipeID=potion.id} label:{Image(systemName:recipeID == potion.id ? "largecircle.fill.circle":"circle")}.buttonStyle(.plain).accessibilityLabel("选择\(potion.name)")
-                        VStack(alignment:.leading,spacing:4) {
-                            Text(potion.name)
-                            Text("\(potion.ingredient) ×1（持有 \(store.data.garden.ingredients[potion.ingredient,default:0])）+ \(potion.material) ×1（持有 \(store.data.garden.economy.finds[potion.material,default:0])）").font(.caption).foregroundStyle(Palette.muted)
-                            Text(potion.benefit).font(.caption).foregroundStyle(Palette.muted)
-                        }
-                        Spacer()
-                    }.padding(10).magicSurface(Palette.paper)
+                        SceneArrows(store:store,scene:journey.rawValue)
+                    }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
                 }
+                if let trip,matching {
+                    PixelProgress(value:trip.progress(store.data.totalFocus))
+                    Text(trip.progress(store.data.totalFocus)>=1 ? "收获已备好" : "还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight)
+                }
+                if !hint.isEmpty {Text(hint).font(.caption).foregroundStyle(Palette.goldLight)}
             }
+            harvestBag
+        }
+    }
+    private var harvestBag:some View {
+        VStack(alignment:.leading,spacing:8) {
             if !store.data.garden.economy.finds.filter({$0.value>0}).isEmpty {
                 Text("收获袋").font(.headline)
-                ForEach(store.data.garden.economy.finds.keys.sorted(),id:\.self) { key in
+                ForEach(store.data.garden.economy.finds.keys.sorted(),id:\.self) {key in
                     let count=store.data.garden.economy.finds[key,default:0]
                     if count>0 {
                         let potion=Potion.all.first{$0.id == key}
@@ -215,21 +205,20 @@ struct MapPage: View {
                             GameSprite(sheet:"Equipment",index:potion != nil ? 11:key.contains("鱼") ? 8:10,size:35)
                             Text("\(potion?.name ?? key) ×\(count)").font(.callout)
                             Spacer()
-                            if let potion {Button("使用"){if store.data.usePotion(potion.id){hint=potion.benefit}else{hint="先在农场播种，再使用繁盛药剂。"}}.accessibilityLabel("使用\(potion.name)")}
-                            Button("出售 · \(Money.text(store.data.findPrice(key)))"){if store.data.sellFind(key){hint="已出售\(potion?.name ?? key)。"}}.accessibilityLabel("出售\(potion?.name ?? key)")
+                            if let potion {Button("使用"){if store.data.usePotion(potion.id){store.message=potion.benefit}else{store.message="先在农场播种，再使用繁盛药剂。"}}.accessibilityLabel("使用\(potion.name)")}
+                            Button("出售 · \(Money.text(store.data.findPrice(key)))"){if store.data.sellFind(key){store.message="已出售\(potion?.name ?? key)。"}}.accessibilityLabel("出售\(potion?.name ?? key)")
                         }.padding(8).magicSurface(Palette.paper)
                     }
                 }
             }
-        }.onChange(of:selected) { _,_ in hint="" }
+        }
     }
     private func act() {
         guard unlocked else{return}
         if let trip {
-            guard trip.kind == selected else{hint="\(trip.kind.rawValue)还未结束。";return}
-            if let result=store.data.collectJourney(){hint=result}
-            else {store.pet?.openTool("计时器")}
-        } else if store.data.embark(selected,recipe:selected == .potions ? recipeID:nil) {hint="\(selected.rawValue)已开始，记录专注后回来领取。"}
-        else {hint="熬制需要配方中的食材和探险材料。"}
+            guard matching else{hint="\(trip.kind.rawValue)还未结束。";return}
+            if let result=store.data.collectJourney(){store.message=result;hint=""}
+            else {SceneNavigation.open("计时器",store:store)}
+        } else if store.data.embark(journey) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}
     }
 }

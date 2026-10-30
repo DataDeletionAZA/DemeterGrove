@@ -7,6 +7,7 @@ struct RootView: View {
     private let pages = [("首页", "house"), ("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
                          ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("成长", "sparkles"),
                          ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
+    private var sidebarPage: String { JourneyKind.allCases.contains { $0.rawValue == store.selectedPage } ? "地图" : store.selectedPage }
     var body: some View {
         HStack(spacing: 0) {
             if sidebarShown {
@@ -17,19 +18,19 @@ struct RootView: View {
                         Text("暮色小院").font(.system(size: 20, weight: .semibold, design: .default))
                     }
                 }.padding(.bottom, 30).padding(.top, 15)
-                ScrollView {
+                PixelScrollView {
                 VStack(spacing: 7) {
                 ForEach(pages, id: \.0) { page in
                     Button { store.selectedPage = page.0 } label: {
                         HStack(spacing: 13) {
                             PixelIcon(name: page.1, size: 23)
-                            Text(page.0).fontWeight(store.selectedPage == page.0 ? .semibold : .regular)
+                            Text(page.0).fontWeight(sidebarPage == page.0 ? .semibold : .regular)
                             Spacer()
                             if page.0 == "任务", !store.todayTasks.isEmpty {
                                 Text("\(store.todayTasks.count)").font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(Palette.control, in: PixelFrame())
                             }
                         }.padding(.horizontal, 13).padding(.vertical, 12)
-                            .background(store.selectedPage == page.0 ? Palette.moss.opacity(0.7) : .clear, in: PixelFrame())
+                            .background(sidebarPage == page.0 ? Palette.moss.opacity(0.7) : .clear, in: PixelFrame())
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 }
@@ -62,14 +63,8 @@ struct RootView: View {
                     Label(store.error, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
                         .padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.red.opacity(0.06)).padding(.horizontal, 30)
                 }
-                if !store.message.isEmpty {
-                    HStack {
-                        Text(store.message).font(.callout)
-                        Spacer()
-                        Button { store.message = "" } label: { Image(systemName: "xmark") }.buttonStyle(.plain).help("关闭提示")
-                    }.padding(11).background(Palette.moss.opacity(0.35), in: PixelFrame()).padding(.horizontal, 30).padding(.bottom, 12)
-                }
-                ScrollView {
+                GeometryReader { viewport in
+                PixelScrollView {
                     Group {
                         switch store.selectedPage {
                         case "首页": HomeScene(store: store)
@@ -83,16 +78,20 @@ struct RootView: View {
                         case "厨房": FarmPage(store: store, section: "厨房")
                         case "商店": FarmPage(store: store, section: "商店")
                         case "成长": GrowthPage(store: store)
-                        case "地图": MapPage(store: store)
+                        case "地图", "湖畔钓鱼": MapPage(store: store, journey: .fishing)
+                        case "林间冒险": MapPage(store: store, journey: .adventure)
+                        case "熬制魔药": MapPage(store: store, journey: .potions)
                         case "衣柜": WardrobePage(store: store)
                         case "统计": StatsPage(store: store)
                         default: SettingsPage(store: store)
                         }
                     }.disabled(store.storageLocked && store.selectedPage != "设置")
                         .padding(.horizontal, 24).padding(.bottom, 24).frame(maxWidth: .infinity, alignment: .topLeading)
+                        .environment(\.sceneViewport, CGSize(width:max(200,viewport.size.width-48),height:max(180,viewport.size.height-24)))
+                }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
-        }.frame(minWidth: 1040, minHeight: 720).foregroundStyle(Palette.ink).tint(Palette.sage)
+        }.frame(minWidth: 560, minHeight: 400).foregroundStyle(Palette.ink).tint(Palette.sage)
             .magicControls().environment(\.locale, Locale(identifier: "zh_CN"))
     }
 }

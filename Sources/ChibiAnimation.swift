@@ -29,23 +29,29 @@ struct ChibiPose {
         return idlePose == 1 ? .sit : .stand
     }
     var reacting: Bool { (phase == 20 && elapsed < 1.35) || (phase == 23 && elapsed < 1.8) }
+    private var glanceMoment: Double? {
+        guard glances, !reduceMotion, !reacting, body != .rest, body != .drag else { return nil }
+        return time.truncatingRemainder(dividingBy: body == .focus ? 97 : 47)
+    }
     var blinking: Bool {
         guard !reduceMotion else { return false }
+        if let local = glanceMoment {
+            if (10..<10.18).contains(local) || (12.18..<12.36).contains(local) { return true }
+            if glance > 0 { return false }
+        }
         let local = time.truncatingRemainder(dividingBy: 17)
         return [2.7, 7.4, 7.75, 13.1].contains { local >= $0 && local < $0 + 0.15 }
     }
     var imageName: String {
         if reacting && body != .drag { return body.rawValue + "Expression" + String(phase == 23 ? 2 : max(0, min(3, expression))) }
-        if blinking && (body == .stand || body == .sit) { return body.rawValue + "Blink" }
-        if blinking && body == .focus { return "FocusExpression2" }
+        if blinking && (body == .stand || body == .sit || body == .focus) { return body.rawValue + "Blink" }
+        if glance > 0 { return body.rawValue + "Gaze" }
         return body.rawValue
     }
     var breath: Double { reduceMotion || body == .drag ? 0 : sin(time * 2 * .pi / (body == .rest ? 4.8 : 3.8)) * 3.2 }
     var glance: Double {
-        guard glances, !reduceMotion, !reacting, body != .rest, body != .drag else { return 0 }
-        let local = time.truncatingRemainder(dividingBy: body == .focus ? 97 : 47)
-        guard local > 10, local < 13 else { return 0 }
-        return pow(sin((local-10) / 3 * .pi), 2)
+        guard let local = glanceMoment, (10.18..<12.18).contains(local) else { return 0 }
+        return 1
     }
     var spring: Double {
         guard !reduceMotion, phase == 20 || phase == 21 || phase == 22 else { return 0 }
@@ -63,8 +69,9 @@ struct ChibiPose {
 
 enum ChibiImages {
     static let images: [String: NSImage] = {
-        let names = ChibiBody.allCases.map(\.rawValue) + ["StandBlink", "SitBlink"] +
-            ["Stand", "Sit", "Focus", "Rest"].flatMap { body in (0..<4).map { body + "Expression" + String($0) } }
+        var names = ChibiBody.allCases.map(\.rawValue)
+        names += ["StandBlink", "SitBlink", "FocusBlink", "StandGaze", "SitGaze", "FocusGaze"]
+        names += ["Stand", "Sit", "Focus", "Rest"].flatMap { body in (0..<4).map { body + "Expression" + String($0) } }
         return names.reduce(into: [:]) { result, name in
             if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Chibi"),
                let image = NSImage(contentsOf: url) { result[name] = image }
@@ -84,6 +91,7 @@ struct ChibiSprite: View, Animatable {
     var dragAge: Double? = nil
     var facingRight = false
     var glances = false
+    var grounded = false
     var animatableData: Double {
         get { dragImpulse }
         set { dragImpulse = newValue }
@@ -97,7 +105,7 @@ struct ChibiSprite: View, Animatable {
             let image = context.resolve(Image(nsImage: source).interpolation(.none))
             let w = source.size.width, h = source.size.height
             let scale = min(size.width / 480, size.height / 535)
-            let baseline = size.height - 14
+            let baseline = size.height - (grounded ? 0 : 14)
             var drawing = context
             if facingRight {
                 drawing.translateBy(x:size.width,y:0)

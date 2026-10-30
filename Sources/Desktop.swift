@@ -95,6 +95,8 @@ final class PetController {
     private var resizeObserver: NSObjectProtocol?
     private var localClicks: Any?
     private var globalClicks: Any?
+    private let toast = ToastController()
+    private var toastSubscription: AnyCancellable?
     private var menuSide: PetMenuSide?
     private var toolSide: PetMenuSide?
     private var toolHistory: [String] = []
@@ -103,7 +105,7 @@ final class PetController {
     var managerIsOpen: Bool { manager?.isVisible == true || manager?.isMiniaturized == true }
     init(store: GardenStore) {
         self.store = store
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 292),
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 310),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -116,11 +118,12 @@ final class PetController {
         panel.setFrameAutosaveName("DaygardenPet")
         panel.contentView = NSHostingView(rootView: DesktopPet(store: store, click: { [weak self] in self?.store.clickPet() }, menu: { [weak self] in self?.toggleMenu() }, drag: { [weak self] direction in
             self?.store.dragPet(direction)
-        }, drop: { [weak self] in self?.store.dropPet() }, move: { [weak self] origin, pointer in self?.movePet(to: origin, pointer: pointer) }))
+        }, drop: { [weak self] in self?.finishPetDrag() }, move: { [weak self] origin, pointer in self?.movePet(to: origin, pointer: pointer) }))
         if !panel.setFrameUsingName("DaygardenPet"), let screen = NSScreen.main {
             panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 220, y: screen.visibleFrame.minY + 25))
         }
-        panel.setContentSize(NSSize(width: 200, height: 292))
+        store.petDocked = panel.frame.height < 250
+        panel.setContentSize(NSSize(width:200,height:store.petDocked ? 225:310))
         if !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }), let screen = NSScreen.main {
             panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 220, y: screen.visibleFrame.minY + 25))
         }
@@ -141,14 +144,15 @@ final class PetController {
             self?.positionChanged()
         }
         localClicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
-            guard let self else { return event }
-            if !self.owns(event.window), !self.hasAttachedSheet { self.dismissFloating() }
+            self?.toast.outsideClick(window:event.window,point:NSEvent.mouseLocation)
             return event
         }
         globalClicks = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            guard let self, self.menuPanel.isVisible || self.toolPanel?.isVisible == true, !self.hasAttachedSheet else { return }
-            let point = NSEvent.mouseLocation
-            if !self.panel.frame.contains(point) && !(self.menuPanel.isVisible && self.menuPanel.frame.contains(point)) && !(self.toolPanel?.isVisible == true && self.toolPanel!.frame.contains(point)) { self.dismissFloating() }
+            self?.toast.outsideClick(window:nil,point:NSEvent.mouseLocation)
+        }
+        toastSubscription = store.$message.sink { [weak self] message in
+            guard let self else { return }
+            self.toast.show(message,anchor:{ [weak self] in self?.toastAnchor ?? .zero },cleared:{ [weak self] in self?.store.message = "" })
         }
         positionChanged()
     }
@@ -162,11 +166,20 @@ final class PetController {
     private var screenArea: NSRect {
         PetPlacement.screen(for: panel.frame, screens: NSScreen.screens.map(\.visibleFrame))
     }
-    private var hasAttachedSheet: Bool { NSApp.modalWindow != nil || toolPanel?.attachedSheet != nil || menuPanel.attachedSheet != nil }
-    private func owns(_ window: NSWindow?) -> Bool {
-        guard let window else { return false }
-        if window === panel || window === menuPanel || window === toolPanel { return true }
-        return owns(window.parent ?? window.sheetParent)
+    private var toastAnchor: NSRect {
+        if let toolPanel, toolPanel.isVisible { return toolPanel.frame }
+        if let manager, manager.isVisible { return manager.frame }
+        return panel.frame
+    }
+    private func finishPetDrag() {
+        let area = screenArea
+        let dock = panel.frame.minY <= area.minY + 22
+        let top = panel.frame.maxY
+        store.petDocked = dock
+        panel.setContentSize(NSSize(width:200,height:dock ? 225:310))
+        panel.setFrameOrigin(NSPoint(x:panel.frame.minX,y:dock ? area.minY:max(area.minY,top-310)))
+        positionChanged()
+        store.dropPet()
     }
     func movePet(to origin: NSPoint, pointer: NSPoint) {
         var proposed = panel.frame
@@ -185,6 +198,7 @@ final class PetController {
         store.petFacingRight = PetPlacement.facingRight(pet: panel.frame, screen: area, previous: store.petFacingRight)
         if menuPanel.isVisible { positionMenu() }
         if toolPanel?.isVisible == true { positionTool() }
+        toast.position()
     }
     private func positionMenu() {
         let size = NSSize(width: min(320, screenArea.width-16), height: min(store.data.timer == nil ? 590 : 670, screenArea.height-16))
@@ -222,7 +236,7 @@ final class PetController {
     }
     func toggleMenu() {
         if managerIsOpen { openManager(); return }
-        if menuPanel.isVisible { closeMenu(); return }
+        if menuPanel.isVisible { menuPanel.makeKeyAndOrderFront(nil); return }
         closeTool()
         toolHistory.removeAll()
         showMenu()
@@ -235,7 +249,7 @@ final class PetController {
         menuPanel.makeKeyAndOrderFront(nil)
     }
     func openTool(_ name: String) {
-        let name = ["待办":"任务", "四象限":"任务"][name] ?? name
+        let name = ["待办":"任务", "四象限":"任务", "专注":"计时器"][name] ?? name
         if managerIsOpen {
             store.selectedPage = ["待办":"任务", "计时器":"专注"][name] ?? name
             openManager()
@@ -249,7 +263,7 @@ final class PetController {
     private func showTool(_ name: String) {
         if name == "统计" {store.previewMotion(.review)}
         store.activeTool = name
-        let game = ["农场", "厨房", "商店", "成长", "地图", "衣柜"].contains(name)
+        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "湖畔钓鱼", "林间冒险", "熬制魔药", "衣柜"].contains(name)
         let wide = name == "任务" || game
         if toolPanel == nil {
             let panel = MagicPanel(contentRect: .zero, styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
@@ -297,25 +311,36 @@ final class PetController {
 
 struct DesktopPet: View {
     @ObservedObject var store: GardenStore
+    @State private var countScope = 0
     var click: () -> Void
     var menu: () -> Void
     var drag: (CGFloat) -> Void
     var drop: () -> Void
     var move: (NSPoint, NSPoint) -> Void
+    private var countBadge: some View {
+        let title = ["目前","今日","总量"][countScope]
+        let count = [store.data.availableActions,store.todayActions,store.data.totalActions][countScope]
+        return Button { countScope = (countScope+1)%3 } label: {
+            HStack(spacing:6) {
+                Image(systemName:"keyboard")
+                Text(title).foregroundStyle(Palette.muted)
+                Text(compactActionCount(count)).monospacedDigit()
+            }.font(.system(size:11,weight:.medium)).foregroundStyle(Palette.ink)
+                .padding(.horizontal,10).frame(height:24).magicSurface(Palette.card.opacity(0.94))
+        }.buttonStyle(.plain)
+            .accessibilityLabel("切换计数").accessibilityValue(title+"："+count.formatted()+" 次")
+            .help(title+"："+count.formatted()+" 次")
+    }
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true).frame(width:200,height:225)
+                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true,grounded:store.petDocked).frame(width:200,height:225)
                 PetDragSurface(click:click,drag:drag,drop:drop,move:move,look:{point,size in store.updatePetLook(point:point,size:size)})
             }.frame(width:200,height:225)
+            if !store.petDocked {
             HStack(spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "keyboard")
-                    Text("\(store.todayActions)").monospacedDigit()
-                }.font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 10).frame(height: 24).magicSurface(Palette.card.opacity(0.94))
-                    .help("今日操作 · \(store.inputStatus)")
-                Button(action: menu) {
+                countBadge
+                Button(action:menu) {
                     Image(systemName:"ellipsis").font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.ink)
                         .frame(width:24,height:24).magicSurface(Palette.card.opacity(0.94))
                 }.buttonStyle(.plain).accessibilityLabel("功能菜单").help("功能菜单")
@@ -329,8 +354,9 @@ struct DesktopPet: View {
                     }.foregroundStyle(Palette.goldLight).padding(.horizontal,9).frame(height:28).magicSurface(Palette.card.opacity(0.94))
                 }.buttonStyle(.plain).padding(.top,5).accessibilityLabel("打开当前计时")
             }
+            }
             Spacer(minLength: 0)
-        }.frame(width: 200, height: 292, alignment:.top).preferredColorScheme(.dark)
+        }.frame(width:200,height:store.petDocked ? 225:310,alignment:.top).preferredColorScheme(.dark)
             .onChange(of:store.error) { _,value in
                 if !value.isEmpty {store.animatePet(PetMotion.failed.rawValue,seconds:PetMotion.failed.duration)}
             }
@@ -384,7 +410,7 @@ final class PetDragView: NSView {
         move?(NSPoint(x: origin.x + delta.x, y: origin.y + delta.y), point)
     }
     override func mouseUp(with event: NSEvent) {
-        if moved { window?.saveFrame(usingName: "DaygardenPet"); drop?() } else { click?() }
+        if moved { drop?(); window?.saveFrame(usingName: "DaygardenPet") } else { click?() }
     }
     override func rightMouseDown(with event: NSEvent) { click?() }
     override func keyDown(with event: NSEvent) {
@@ -401,7 +427,7 @@ struct PetMenu: View {
     var body: some View {
         VStack(spacing: 0) {
             MagicHeader(title: store.data.preferences.name, draggable: false) { store.pet?.closeMenu() }
-            ScrollView {
+            PixelScrollView {
             VStack(alignment: .leading, spacing: 13) {
                 if store.counter == nil {
                     Button { store.setTyping(true) } label: {
@@ -414,11 +440,7 @@ struct PetMenu: View {
                             .background(Color.red.opacity(0.10),in:PixelFrame())
                     }.buttonStyle(.plain).accessibilityLabel("开启操作计数")
                 }
-                HStack {
-                    Text("今日操作").foregroundStyle(Palette.muted)
-                    Spacer()
-                    Text("\(store.todayActions)").monospacedDigit().foregroundStyle(Palette.goldLight)
-                }.font(.system(size: 12))
+                ActionCountsView(store:store)
                 if let run = store.data.timer {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -464,16 +486,10 @@ struct ToolPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
         MagicHeader(title: tool, draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
-        ScrollView {
+        GeometryReader { viewport in
+        PixelScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if !store.error.isEmpty { Text(store.error).font(.caption).foregroundStyle(.red) }
-                if !store.message.isEmpty {
-                    HStack {
-                        Text(store.message).font(.caption)
-                        Spacer()
-                        Button { store.message = "" } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
-                    }.padding(10).background(Palette.moss.opacity(0.3), in: PixelFrame())
-                }
                 Group {
                     switch tool {
                     case "任务", "待办": TasksPage(store: store)
@@ -485,12 +501,18 @@ struct ToolPanelView: View {
                     case "农场", "厨房", "商店": FarmPage(store: store, section: tool)
                     case "统计": StatsPage(store: store)
                     case "成长": GrowthPage(store:store)
-                    case "地图": MapPage(store:store)
+                    case "首页": HomeScene(store:store)
+                    case "书房": StudyScene(store:store)
+                    case "地图", "湖畔钓鱼": MapPage(store:store,journey:.fishing)
+                    case "林间冒险": MapPage(store:store,journey:.adventure)
+                    case "熬制魔药": MapPage(store:store,journey:.potions)
                     case "衣柜": WardrobePage(store:store)
                     default: SettingsPage(store: store)
                     }
                 }.disabled(store.storageLocked && tool != "设置")
             }.padding(18).frame(maxWidth: .infinity, alignment: .topLeading)
+                .environment(\.sceneViewport,CGSize(width:max(200,viewport.size.width-36),height:max(180,viewport.size.height-36)))
+        }
         }
         }.magicSurface(Palette.card, strong: true).foregroundStyle(Palette.ink).magicControls()
             .environment(\.locale, Locale(identifier: "zh_CN"))

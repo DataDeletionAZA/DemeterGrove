@@ -20,14 +20,17 @@ struct HabitsPage: View {
                     PixelTabs(selection: $display, items: [(.week, "周"), (.month, "月")]).frame(width: 110)
                     Button("添加习惯", systemImage: "plus") { adding = true }.buttonStyle(PixelButtonStyle(primary: true))
                 }
-                PixelCalendar(selection: $date, display: display, maximum: store.now, compact: true, markers: { day in
-                    let key = dayKey(day)
-                    if store.data.habitDays.contains(key) { return [Palette.sage] }
-                    if store.data.habits.contains(where: { $0.checkIns?[key]?.status == .pending }) { return [Palette.goldLight] }
-                    return []
-                })
-                HStack { Text("累计签到 \(total) 天").font(.headline).foregroundStyle(Palette.goldLight); Spacer(); Text("同一天多个习惯只计 1 天").font(.caption).foregroundStyle(Palette.muted) }
-                Text("当天任一习惯审核通过，获得 \(HabitProgress.dailyCoins) 铜纳特。累计天数无需连续。").font(.caption).foregroundStyle(Palette.muted)
+                if display == .week {
+                    HabitWeekBoard(store: store, selection: $date)
+                } else {
+                    PixelCalendar(selection: $date, display: .month, maximum: store.now, compact: true, markers: { day in
+                        let key = dayKey(day)
+                        if store.data.habitDays.contains(key) { return [Palette.sage] }
+                        if store.data.habits.contains(where: { $0.checkIns?[key]?.status == .pending }) { return [Palette.goldLight] }
+                        return []
+                    })
+                }
+                Text("累计签到 \(total) 天").font(.headline).foregroundStyle(Palette.goldLight).frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 12) {
                     ForEach(HabitProgress.milestones, id: \.self) { milestone in
                         VStack(spacing: 5) {
@@ -39,8 +42,8 @@ struct HabitsPage: View {
                 }.padding(.vertical, 8)
             }
             Card(title: date.formatted(.dateTime.month().day().weekday(.wide)), icon: "checkmark.circle") {
-                if !Calendar.current.isDate(date, inSameDayAs: store.now) { Text("历史记录仅供查看。打卡材料只能在当天提交。").font(.caption).foregroundStyle(Palette.muted) }
-                if store.data.habits.isEmpty { EmptyNote(text: "添加一个想慢慢养成的小习惯。") }
+                if !Calendar.current.isDate(date, inSameDayAs: store.now) { Text("历史记录").font(.caption).foregroundStyle(Palette.muted) }
+                if store.data.habits.isEmpty { EmptyNote(text: "暂无习惯") }
                 ForEach(store.data.habits) { habit in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 12) {
@@ -67,6 +70,86 @@ struct HabitsPage: View {
             Button("取消", role: .cancel) { deleting = nil }
             Button("删除", role: .destructive) { if let deleting { store.removeHabit(deleting.id) }; deleting = nil }
         } message: { Text("累计签到天数和已获得的奖励会保留。") }
+    }
+}
+
+struct HabitWeekBoard: View {
+    @ObservedObject var store: GardenStore
+    @Binding var selection: Date
+    @Environment(\.sceneViewport) private var viewport
+    private var days: [Date] { CalendarDates.days(in: selection, week: true).compactMap { $0 } }
+    private var cardWidth: CGFloat { max(158, (viewport.width - 108) / 7) }
+    private var boardHeight: CGFloat { max(190, CGFloat(store.data.habits.count) * 48 + 112) }
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text(days.first!.formatted(.dateTime.year().month().day()) + " — " + days.last!.formatted(.dateTime.month().day())).font(.callout).foregroundStyle(Palette.goldLight)
+                Spacer(minLength: 6)
+                Button { move(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一周")
+                Button("今天") { selection = store.now }.buttonStyle(PixelButtonStyle())
+                Button { move(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一周")
+                    .disabled(Calendar.current.date(byAdding: .day, value: 7, to: days.first!)! > Calendar.current.startOfDay(for: store.now))
+            }
+            ScrollViewReader { reader in
+                PixelScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(days, id: \.self) { day in
+                            HabitDayCard(habits: store.data.habits, day: day, today: store.now, selected: Calendar.current.isDate(day, inSameDayAs: selection)) { selection = day }
+                                .frame(width: cardWidth, height: boardHeight).id(dayKey(day))
+                        }
+                    }.padding(.bottom, 8)
+                }.frame(height: boardHeight + 12)
+                    .onAppear { reader.scrollTo(dayKey(selection), anchor: .center) }
+                    .onChange(of: selection) { _, value in reader.scrollTo(dayKey(value), anchor: .center) }
+            }
+        }
+    }
+    private func move(_ amount: Int) { selection = Calendar.current.date(byAdding: .day, value: amount * 7, to: selection)! }
+}
+
+struct HabitDayCard: View {
+    var habits: [Habit]
+    var day: Date
+    var today: Date
+    var selected: Bool
+    var choose: () -> Void
+    private var completed: Int { habits.filter { HabitDayState.value(for: $0, on: day, today: today) == .completed }.count }
+    private var future: Bool { Calendar.current.startOfDay(for: day) > Calendar.current.startOfDay(for: today) }
+    var body: some View {
+        Button(action: choose) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.system(size: 13, weight: .medium))
+                    Spacer(minLength: 3)
+                    if Calendar.current.isDate(day, inSameDayAs: today) { Text("今天").font(.system(size: 10)).foregroundStyle(Palette.goldLight) }
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(day.formatted(.dateTime.day())).font(.system(size: 25, weight: .medium))
+                    Spacer(minLength: 3)
+                    Text("\(completed)/\(habits.count)").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                }
+                Rectangle().fill(Palette.line).frame(height: 1)
+                if habits.isEmpty { Text("暂无习惯").font(.caption).foregroundStyle(Palette.muted) }
+                ForEach(habits) { habit in
+                    let state = HabitDayState.value(for: habit, on: day, today: today)
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: symbol(state)).font(.system(size: 12)).foregroundStyle(color(state)).padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(habit.title).font(.system(size: 12)).lineLimit(1)
+                            Text(state.rawValue).font(.system(size: 10)).foregroundStyle(color(state))
+                        }
+                    }.frame(height: 37, alignment: .top)
+                }
+                Spacer(minLength: 0)
+            }.padding(5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }.buttonStyle(PixelButtonStyle(primary: selected)).disabled(future).opacity(future ? 0.55 : 1)
+            .accessibilityLabel(day.formatted(date: .complete, time: .omitted)).accessibilityValue((["已完成 \(completed) / \(habits.count) 项"] + habits.map { $0.title + "：" + HabitDayState.value(for: $0, on: day, today: today).rawValue }).joined(separator: "，"))
+    }
+    private func symbol(_ state: HabitDayState) -> String {
+        switch state { case .completed: return "checkmark.circle.fill"; case .pending: return "clock"; case .needsMore: return "exclamationmark.circle"; case .empty, .upcoming: return "circle" }
+    }
+    private func color(_ state: HabitDayState) -> Color {
+        switch state { case .completed: return Palette.sage; case .pending: return Palette.goldLight; case .needsMore: return Palette.clay; case .empty, .upcoming: return Palette.muted }
     }
 }
 
@@ -123,7 +206,7 @@ struct HabitEditor: View {
                     PixelSelect(selection: $reminderMinute, items: (0..<60).map { ($0, String(format: "%02d 分", $0)) })
                 }
                 if !store.data.preferences.notifications {
-                    HStack { Text("需要允许系统通知").font(.caption).foregroundStyle(Palette.muted); Spacer(); Button("开启通知") { store.requestNotifications() }.buttonStyle(PixelButtonStyle()) }
+                    HStack { Text("系统通知未开启").font(.caption).foregroundStyle(Palette.muted); Spacer(); Button("开启通知") { store.requestNotifications() }.buttonStyle(PixelButtonStyle()) }
                 }
             }
             TextField("给自己的激励语（可选）", text: Binding(get: { habit.encouragement ?? "" }, set: { habit.encouragement = $0 }), axis: .vertical).lineLimit(2...4).textFieldStyle(PixelTextFieldStyle())
@@ -159,7 +242,7 @@ struct HabitEvidenceEditor: View {
             Text(date.formatted(.dateTime.year().month().day())).font(.caption).foregroundStyle(Palette.muted)
             if let entry { Text("状态：\(entry.status.title)").foregroundStyle(Palette.goldLight) }
             if let feedback = entry?.feedback, !feedback.isEmpty { Text(feedback).font(.callout) }
-            Text("用文字或照片记录今天做过的事。").font(.callout)
+            Text("打卡材料").font(.callout)
             TextEditor(text: $text).scrollContentBackground(.hidden).padding(8).frame(height: 135).background(Palette.card).border(Palette.line).disabled(!editable).accessibilityLabel("打卡文字")
             HStack {
                 if let image, let picture = NSImage(data: image) { Image(nsImage: picture).resizable().scaledToFit().frame(width: 120, height: 100) }
@@ -168,7 +251,7 @@ struct HabitEvidenceEditor: View {
                     if image != nil { Button("移除照片") { image = nil }.buttonStyle(PixelButtonStyle()) }
                 }
             }
-            Text("审核服务尚未连接。材料会保存在本机，审核通过后计入签到并发放奖励。").font(.caption).foregroundStyle(Palette.muted)
+            Label("审核服务未连接", systemImage: "clock").font(.caption).foregroundStyle(Palette.muted)
             if !error.isEmpty { Text(error).font(.caption).foregroundStyle(Palette.clay) }
             HStack {
                 Button("关闭") { dismiss() }.keyboardShortcut(.cancelAction)

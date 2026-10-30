@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SceneObject: CaseIterable {
-    case farmDoor, kitchenDoor, studyDoor, shopDoor, signpost
+    case farmDoor, kitchenDoor, studyDoor, shopDoor, signpost, shopExit, gardenExit, forestExit
     case taskMemo, calendar, diary, hourglass, habitBook, recipeBook, cookingCounter
     case plotOne, plotTwo, plotThree, plotFour, plotFive, plotSix
 
@@ -12,12 +12,18 @@ enum SceneObject: CaseIterable {
         case .farmDoor, .kitchenDoor, .studyDoor, .shopDoor, .signpost: return "Courtyard"
         case .taskMemo, .calendar, .diary, .hourglass, .habitBook: return "Study"
         case .recipeBook, .cookingCounter: return "Kitchen"
+        case .shopExit: return "Shop"
+        case .gardenExit: return "Garden"
+        case .forestExit: return "Forest"
         case .plotOne, .plotTwo, .plotThree, .plotFour, .plotFive, .plotSix: return "Garden"
         }
     }
 
     var target: (x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) {
         switch self {
+        case .gardenExit: return (0.50,0.16,0.10,0.24)
+        case .forestExit: return (0.50,0.29,0.18,0.28)
+        case .shopExit: return (0.91,0.34,0.16,0.52)
         case .farmDoor: return (0.211, 0.52, 0.07, 0.18)
         case .kitchenDoor: return (0.406, 0.52, 0.07, 0.18)
         case .studyDoor: return (0.626, 0.52, 0.07, 0.18)
@@ -42,6 +48,12 @@ enum SceneObject: CaseIterable {
     var outline: Path {
         let points: [(CGFloat, CGFloat)]
         switch self {
+        case .gardenExit:
+            points = [(702,264),(702,79),(724,46),(770,24),(812,47),(835,83),(835,264)]
+        case .forestExit:
+            points = [(632,432),(637,287),(650,241),(683,205),(726,187),(770,186),(814,202),(845,235),(863,281),(870,432)]
+        case .shopExit:
+            points = [(1268,588),(1268,252),(1275,198),(1298,157),(1333,132),(1375,124),(1420,138),(1452,168),(1473,210),(1473,588)]
         case .farmDoor:
             points = [(269,617),(269,494),(273,474),(283,459),(299,448),(318,443),(335,445),(352,454),(365,471),(372,491),(372,617)]
         case .kitchenDoor:

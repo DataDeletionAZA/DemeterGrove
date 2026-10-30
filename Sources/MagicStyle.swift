@@ -32,7 +32,7 @@ struct MagicSurface: ViewModifier {
 extension View {
     func magicSurface(_ color: Color = Palette.card, strong: Bool = false) -> some View { modifier(MagicSurface(color: color, strong: strong)) }
     func magicControls() -> some View {
-        self.font(.system(size: 13)).buttonStyle(PixelButtonStyle()).toggleStyle(PixelToggleStyle())
+        self.background(WindowScrollSkin().frame(width:0,height:0)).font(.system(size: 13)).buttonStyle(PixelButtonStyle()).toggleStyle(PixelToggleStyle())
             .textFieldStyle(PixelTextFieldStyle()).tint(Palette.gold).preferredColorScheme(.dark)
     }
 }
@@ -103,7 +103,7 @@ struct PixelSelect<Value: Hashable>: View {
         }.buttonStyle(PixelButtonStyle()).accessibilityValue(label)
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 ScrollViewReader { reader in
-                    ScrollView {
+                    PixelScrollView {
                         VStack(spacing: 3) {
                             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                                 Button { selection = item.0; showing = false } label: {
@@ -301,7 +301,7 @@ struct MagicHeader: View {
                 Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.goldLight)
                 Spacer()
             }.contentShape(Rectangle()).overlay { if draggable { WindowDragArea() } }
-            Button(action: close) { PixelIcon(name: "close", size: 16) }.buttonStyle(.plain).help("关闭")
+            Button(action: close) { PixelIcon(name: "close", size: 16) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
         }.padding(.horizontal, 16).frame(height: 48)
             .background(Palette.paper).overlay(alignment: .bottom) { Rectangle().fill(Palette.gold.opacity(0.6)).frame(height: 1).padding(.horizontal, 10) }
     }

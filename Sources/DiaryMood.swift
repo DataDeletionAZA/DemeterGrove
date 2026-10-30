@@ -108,7 +108,7 @@ struct DiaryMoodPicker: View {
             }
         }.buttonStyle(PixelButtonStyle()).accessibilityLabel("心情：" + diary.mood)
             .popover(isPresented: $showing, arrowEdge: .bottom) {
-                ScrollView {
+                PixelScrollView {
                     VStack(alignment: .leading, spacing: 15) {
                         Text("心情").font(.headline).foregroundStyle(Palette.goldLight)
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {

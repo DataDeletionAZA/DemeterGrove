@@ -247,6 +247,7 @@ struct ProfessorSprite: View {
     var basePhase=0
     var facingRight=false
     var glances=false
+    var grounded=false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var began=Date()
     var body:some View {
@@ -255,10 +256,10 @@ struct ProfessorSprite: View {
                 ChibiSprite(phase:phase,time:timeline.date.timeIntervalSince1970,
                             elapsed:timeline.date.timeIntervalSince(motionStart ?? began),basePhase:basePhase,
                             reduceMotion:reduceMotion,idlePose:idlePose,expression:expression,dragImpulse:dragImpulse,
-                            dragAge:dragUpdated.map {timeline.date.timeIntervalSince($0)},facingRight:facingRight,glances:glances)
+                            dragAge:dragUpdated.map {timeline.date.timeIntervalSince($0)},facingRight:facingRight,glances:glances,grounded:grounded)
                     .animation(reduceMotion ? nil:.easeOut(duration:0.14),value:dragImpulse)
             } else {Text("人物图片未载入").font(.caption).foregroundStyle(Palette.muted)}
-        }.frame(width:size,height:size*208/192).accessibilityHidden(true)
+        }.frame(width:size,height:grounded ? size*1.125:size*208/192).accessibilityHidden(true)
             .onAppear {began=Date()}
             .onChange(of:phase) { old,value in
                 if !([10,11].contains(old) && [10,11].contains(value)) {began=Date()}

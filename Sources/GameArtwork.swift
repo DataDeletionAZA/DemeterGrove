@@ -138,7 +138,7 @@ struct HarvestEffect: View {
 struct RoomBackdrop: View {
     var name: String
     var body: some View {
-        if let image = GameImages.backgrounds[name] { Image(nsImage: image).resizable().interpolation(.none).scaledToFill() }
+        if let image = GameImages.backgrounds[name] { Image(nsImage: image).resizable().interpolation(.none).scaledToFit() }
     }
 }
 
@@ -186,12 +186,18 @@ struct ObjectButton<Content: View>: View {
     var caption: String? = nil
     @ViewBuilder var content: Content
     @State private var hovered = false
-    @FocusState private var focused: Bool
+    @State private var focused=false
     var body: some View {
-        Button(action: action) { content.contentShape(Rectangle()) }
-            .buttonStyle(ObjectButtonStyle(hovered: hovered, embeddedInBackdrop: embeddedInBackdrop))
-            .focusable()
-            .focused($focused)
+        Button {
+            if NSApp.keyWindow?.firstResponder is ObjectKeyboardView {NSApp.keyWindow?.makeFirstResponder(nil)}
+            focused=false
+            action()
+        } label: {content.contentShape(Rectangle())}
+            .buttonStyle(ObjectButtonStyle(hovered:hovered,embeddedInBackdrop:embeddedInBackdrop))
+            .focusable(false)
+            .focusEffectDisabled()
+            .background(ObjectKeyboardFocus(focused:$focused,action:action))
+            .overlay {if focused {PixelFrame().stroke(Palette.goldLight,lineWidth:1).allowsHitTesting(false)}}
             .overlay(alignment:.bottom) {
                 if let caption, hovered || focused {
                     Text(caption).font(.system(size:12,weight:.medium)).foregroundStyle(Palette.goldLight)
@@ -200,6 +206,43 @@ struct ObjectButton<Content: View>: View {
                 }
             }
             .onHover { hovered = $0 }.help(label).accessibilityLabel(label)
+    }
+}
+
+private struct ObjectKeyboardFocus:NSViewRepresentable {
+    @Environment(\.isEnabled) private var enabled
+    @Binding var focused:Bool
+    var action:()->Void
+    func makeNSView(context:Context)->ObjectKeyboardView {ObjectKeyboardView()}
+    func updateNSView(_ view:ObjectKeyboardView,context:Context) {
+        view.changed={focused=$0};view.action=action;view.enabled=enabled
+        if !enabled,view.window?.firstResponder === view {view.window?.makeFirstResponder(nil)}
+    }
+}
+
+private final class ObjectKeyboardView:NSView {
+    private static let tabMonitor:Any?=NSEvent.addLocalMonitorForEvents(matching:.keyDown) {event in
+        guard event.keyCode == 48,let window=event.window,
+              window.firstResponder === window || window.firstResponder === window.contentView,
+              let target=window.contentView?.nextValidKeyView as? ObjectKeyboardView,target.enabled else{return event}
+        return window.makeFirstResponder(target) ? nil:event
+    }
+    var changed:(Bool)->Void={_ in}
+    var action:()->Void={}
+    var enabled=true
+    override var acceptsFirstResponder:Bool {enabled}
+    override var canBecomeKeyView:Bool {enabled}
+    override func hitTest(_ point:NSPoint)->NSView? {nil}
+    override func viewDidMoveToWindow() {super.viewDidMoveToWindow();_=Self.tabMonitor;DispatchQueue.main.async {[weak self] in self?.window?.recalculateKeyViewLoop()}}
+    override func becomeFirstResponder()->Bool {guard enabled else{return false};changed(true);scrollToVisible(bounds);return true}
+    override func resignFirstResponder()->Bool {changed(false);return true}
+    override func keyDown(with event:NSEvent) {
+        guard enabled else{return}
+        if [36,49,76].contains(event.keyCode) {if !event.isARepeat {action()}}
+        else if event.keyCode == 48 {
+            if event.modifierFlags.contains(.shift) {window?.selectPreviousKeyView(self)}
+            else {window?.selectNextKeyView(self)}
+        } else {super.keyDown(with:event)}
     }
 }
 

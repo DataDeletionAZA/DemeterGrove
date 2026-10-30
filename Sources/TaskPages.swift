@@ -45,7 +45,7 @@ struct TasksPage: View {
                 }
             } else {
                 Card(title: "任务清单", icon: "checklist") {
-                    if tasks.isEmpty { EmptyNote(text: "这里还没有任务。") }
+                    if tasks.isEmpty { EmptyNote(text: "暂无任务") }
                     ForEach(tasks.sorted { $0.quadrant < $1.quadrant }) { task in TaskRow(store: store, task: task) }
                 }
             }
@@ -205,7 +205,7 @@ struct TimerControls: View {
                     }.buttonStyle(PixelButtonStyle(primary: true))
                     Button(run.kind == .rest ? "结束休息" : "结束并记录") { store.finishTimer() }.buttonStyle(PixelButtonStyle())
                 }
-                Text(run.kind == .rest ? "休息不会计入专注，也不会消耗收成。" : "结束时记录实际专注时间；累计每 5 分钟获得 1 滴露水。")
+                Text(run.kind == .rest ? "休息中" : "每 5 分钟专注 · 1 滴露水")
                     .font(.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
             } else {
                 PixelTabs(selection: $kind, items: [(.pomodoro, "番茄钟"), (.stopwatch, "正计时"), (.countdown, "倒计时")])
@@ -255,7 +255,7 @@ struct FocusTaskPicker: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack { Text("这次想做什么？").font(.title2); Spacer(); Button("关闭") { dismiss() } }
             TextField("搜索现有任务或类型", text: $search).textFieldStyle(PixelTextFieldStyle())
-            ScrollView {
+            PixelScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     if tasks.isEmpty { EmptyNote(text: "没有找到未完成的事项") }
                     ForEach(tasks) { task in
