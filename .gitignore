@@ -1,0 +1,12 @@
+/*
+!/Sources/
+!/Resources/
+!/Tests/
+!/README.md
+!/CHANGELOG.md
+!/build.sh
+!/test.sh
+!/publish.sh
+!/.gitignore
+.DS_Store
+*.dSYM/
