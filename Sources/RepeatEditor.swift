@@ -60,6 +60,7 @@ struct ReminderMessagesEditor: View {
                     ForEach($library.phrases) { $phrase in
                         HStack(alignment: .top) {
                             TextField("激励语", text: $phrase.text, axis: .vertical).lineLimit(1...4).textFieldStyle(PixelTextFieldStyle())
+                            if phrase.text.count > ReminderTextLibrary.maximumTextLength { Text("内容过长").font(.caption).foregroundStyle(Palette.clay) }
                             Button { library.phrases.removeAll { $0.id == phrase.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).accessibilityLabel("删除激励语")
                         }
                     }
@@ -67,7 +68,7 @@ struct ReminderMessagesEditor: View {
             }.frame(minHeight: 0, maxHeight: library.phrases.isEmpty ? 0 : 170)
             HStack(alignment: .top) {
                 TextField("添加一条激励语", text: $draft, axis: .vertical).lineLimit(1...4).textFieldStyle(PixelTextFieldStyle())
-                Button("添加") { library.phrases.append(ReminderPhrase(text: draft)); library.normalize(); draft = "" }.buttonStyle(PixelButtonStyle()).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("添加") { library.phrases.append(ReminderPhrase(text: draft)); library.normalize(); draft = "" }.buttonStyle(PixelButtonStyle()).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > ReminderTextLibrary.maximumTextLength)
             }
         }
     }

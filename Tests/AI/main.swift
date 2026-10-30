@@ -58,6 +58,45 @@ private final class Stub:URLProtocol,@unchecked Sendable {
         let secrets=Secrets();secrets.values[profile.id]="mock-key"
         let client=AIClient(secrets:secrets,protocolClasses:[Stub.self])
         check(profile.isValid,"valid profile")
+        let standard = AIWritingPreset.standard
+        check(standard == AIWritingPreset.standard && standard.isValid, "stable built-in writing preset")
+        var writing = AIWritingPreset(name: "双语日常", character: "克制", userProfile: "正在学习", additionalRequirements: "俄语（中文翻译）")
+        writing.templates[AIPromptPurpose.encouragement.rawValue] = "{{附加要求}} | {{事项}} | {{数量}} | {{长度}} | {{人物设定}} | {{用户设定}}"
+        check(writing.isValid, "editable reordered placeholders")
+        let rendered = writing.rendered(for: .encouragement, values: ["事项":"{{数量}}", "数量":"7", "长度":"短"], additional:"一句话")
+        check(rendered.hasPrefix("俄语（中文翻译）\n一句话") && rendered.contains("| {{数量}} | 7 |"), "single-pass rendering does not expand inserted values")
+        check(AIPromptPurpose.encouragement.problem(in: "{{未知}}") != nil && AIPromptPurpose.habitReview.problem(in: "{{事项}} {{材料}}") != nil, "invalid and missing placeholders rejected")
+        let oldSettings = try JSONDecoder().decode(AISettings.self, from: Data("{\"profiles\":[],\"assignments\":{}}".utf8))
+        check(oldSettings.writing(for: .habitReview) == .standard, "older settings inherit default writing")
+        let promptSettings = AISettings(writingPresets:[writing], writingAssignments:[AIFeature.focusReview.rawValue:writing.id])
+        let reloadedPrompts = try JSONDecoder().decode(AISettings.self, from: JSONEncoder().encode(promptSettings))
+        check(reloadedPrompts == promptSettings, "writing preset roundtrip")
+        for size in [1, 20, 50] {
+            let requested = try client.generationRequest(profile:profile,key:"mock-key",feature:.habitEncouragement,subject:"阅读",preferences:"保留译文",count:size,length:.long,writing:writing,previous:["已有句子"])
+            let body = try JSONSerialization.jsonObject(with:requested.httpBody!) as! [String:Any]
+            check((body["instructions"] as! String).contains("俄语（中文翻译）") && (body["instructions"] as! String).contains(String(size)), "variable amount and additional requirements reach request")
+            check((body["input"] as! String).contains("已有句子") && body["max_output_tokens"] as! Int > 1200, "previous batches and long output allowance")
+        }
+        for size in [0,51] {expectSync(.configuration){_ = try client.generationRequest(profile:profile,key:"mock-key",feature:.taskEncouragement,subject:"阅读",count:size)}}
+        let longText = String(repeating:"学习",count:600)
+        let longParsed = try AIClient.phrases(from:String(data:JSONSerialization.data(withJSONObject:[longText]),encoding:.utf8)!,expectedCount:1)
+        check(longParsed == [longText], "long paragraph preserved")
+        expectSync(.output){_ = try AIClient.phrases(from:"[\"a\",\"b\"]",expectedCount:1)}
+        expectSync(.output){_ = try AIClient.phrases(from:"[\"a\",\"a\"]",expectedCount:2)}
+        let focusRecord = "{\"感想\":\"整理出了要点\",\"暂停\":\"未知\"}"
+        for format in AIFormat.allCases {
+            var chosen = profile; chosen.format = format
+            let request = try client.focusRequest(profile:chosen,key:"mock-key",record:focusRecord,writing:writing)
+            let body = try JSONSerialization.jsonObject(with:request.httpBody!) as! [String:Any]
+            check(body["store"] as? Bool == false && body["model"] as? String == profile.model, "focus privacy and model request")
+            let feedbackText = "{\"feedback\":\"这次整理出了重点，可以从这里继续。\"}"
+            let envelope:[String:Any] = format == .responses ? ["status":"completed","output":[["type":"message","content":[["type":"output_text","text":feedbackText]]]]] : ["choices":[["finish_reason":"stop","message":["content":feedbackText]]]]
+            Stub.prepare(envelope)
+            let focusReply = try await client.reviewFocus(profile:chosen,record:focusRecord,writing:writing)
+            check(focusReply == "这次整理出了重点，可以从这里继续。", "focus feedback parsed")
+            var failed=envelope; failed["error"]=["message":"private-mock-key"]
+            expectSync(.response){_ = try AIClient.focusFeedback(from:JSONSerialization.data(withJSONObject:failed),format:format)}
+        }
         var oldProfile = try JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as! [String: Any]
         oldProfile.removeValue(forKey: "reasoningEffort")
         let restored = try JSONDecoder().decode(AIProfile.self, from: JSONSerialization.data(withJSONObject: oldProfile))

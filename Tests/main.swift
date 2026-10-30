@@ -295,7 +295,7 @@ oldGarden.removeValue(forKey:"economy");oldGarden["coins"] = 42
 oldGarden["order"] = ["dish":"胡萝卜浓汤","placedAt":0]
 legacyV1["version"] = 1;legacyV1["garden"] = oldGarden
 let oldData = try JSONDecoder().decode(AppData.self,from:JSONSerialization.data(withJSONObject:legacyV1)).validated()
-assert(oldData.version == 3 && oldData.garden.coins == 42*29 && oldData.garden.order?.price == 12*29)
+assert(oldData.version == 4 && oldData.garden.coins == 42*29 && oldData.garden.order?.price == 12*29)
 try SaveFile.write(oldData,to:file)
 let oldDataAgain = try SaveFile.read(file)
 assert(oldDataAgain.garden.coins == 42*29)

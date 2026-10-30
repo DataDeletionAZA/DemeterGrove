@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeScene: View {
     @ObservedObject var store: GardenStore
+    @State private var choosingTrail=false
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
@@ -9,6 +10,7 @@ struct HomeScene: View {
                     Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
                     WalletView(coins: store.data.garden.coins)
+                    InventoryButton(store:store)
                 }
             }
             SceneCanvas { size in
@@ -19,7 +21,14 @@ struct HomeScene: View {
                     SceneTarget(object: .kitchenDoor, sceneSize: size, label: "厨房", action: { SceneNavigation.open("厨房",store:store) })
                     SceneTarget(object: .studyDoor, sceneSize: size, label: "书房", action: { SceneNavigation.open("书房",store:store) })
                     SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store) })
-                    SceneTarget(object: .signpost, sceneSize: size, label: "去远方", action: { SceneNavigation.open("地图",store:store) })
+                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{choosingTrail=true})
+                        .popover(isPresented:$choosingTrail) {
+                            VStack(spacing:10) {
+                                ForEach(SceneNavigation.wilds,id:\.self) {route in
+                                    Button(route) {choosingTrail=false;SceneNavigation.open(route,store:store)}.buttonStyle(PixelButtonStyle())
+                                }
+                            }.padding(14).frame(width:210).magicSurface(Palette.paper,strong:true).magicControls()
+                        }
                     SceneParticles()
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
             }
@@ -66,6 +75,7 @@ struct StudyScene: View {
                     Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
                     WalletView(coins:store.data.garden.coins)
+                    InventoryButton(store:store)
                 }
             }
             SceneCanvas { size in

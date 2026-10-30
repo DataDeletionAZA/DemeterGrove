@@ -4,10 +4,13 @@ import AppKit
 struct RootView: View {
     @ObservedObject var store: GardenStore
     @State private var sidebarShown = true
-    private let pages = [("首页", "house"), ("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
-                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("成长", "sparkles"),
+    private let pages = [("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
+                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
                          ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
-    private var sidebarPage: String { JourneyKind.allCases.contains { $0.rawValue == store.selectedPage } ? "地图" : store.selectedPage }
+    private var sidebarPage:String {
+        let route=SceneNavigation.canonical(store.selectedPage)
+        return route == "首页" || SceneNavigation.wilds.contains(route) ? "地图":route
+    }
     var body: some View {
         HStack(spacing: 0) {
             if sidebarShown {
@@ -48,12 +51,14 @@ struct RootView: View {
                 HStack(spacing: 14) {
                     Button { sidebarShown.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 17)) }
                         .buttonStyle(.plain).help(sidebarShown ? "收起侧栏" : "展开侧栏").accessibilityLabel(sidebarShown ? "收起侧栏" : "展开侧栏")
-                    if store.selectedPage != "首页" {
-                        Button { store.selectedPage = "首页" } label: { Image(systemName: "house") }
-                            .buttonStyle(.plain).help("回到小院").accessibilityLabel("回到小院")
-                    }
+                    Button {
+                        if let pet=store.pet {pet.back()}
+                        else {store.selectedPage=SceneNavigation.parent(of:store.selectedPage) ?? "菜单"}
+                    } label: {Image(systemName:"chevron.left")}
+                        .buttonStyle(.plain).help(SceneNavigation.parent(of:store.selectedPage) == nil ? "返回菜单":"回到小院")
+                        .accessibilityLabel(SceneNavigation.parent(of:store.selectedPage) == nil ? "返回菜单":"回到小院")
                     VStack(alignment: .leading, spacing: 7) {
-                        Text(store.selectedPage == "首页" ? "暮色小院" : store.selectedPage).font(.system(size: 23, weight: .semibold, design: .default))
+                        Text(SceneNavigation.title(store.selectedPage)).font(.system(size: 23, weight: .semibold, design: .default))
                     }
                     Spacer()
                     Text(store.now.formatted(.dateTime.year().month().day().weekday(.wide)))
@@ -74,13 +79,16 @@ struct RootView: View {
                         case "日程": SchedulePage(store: store)
                         case "习惯": HabitsPage(store: store)
                         case "日记": DiaryPage(store: store)
-                        case "小院", "农场": FarmPage(store: store, section: "农场")
+                        case "小院":HomeScene(store:store)
+                        case "农场": FarmPage(store: store, section: "农场")
                         case "厨房": FarmPage(store: store, section: "厨房")
                         case "商店": FarmPage(store: store, section: "商店")
                         case "成长": GrowthPage(store: store)
-                        case "地图", "湖畔钓鱼": MapPage(store: store, journey: .fishing)
+                        case "地图":HomeScene(store:store)
+                        case "湖畔钓鱼":MapPage(store:store,journey:.fishing)
                         case "林间冒险": MapPage(store: store, journey: .adventure)
-                        case "熬制魔药": MapPage(store: store, journey: .potions)
+                        case "炼金室", "熬制魔药": MapPage(store: store, journey: .potions)
+                        case "菜单":PetMenu(store:store)
                         case "衣柜": WardrobePage(store: store)
                         case "统计": StatsPage(store: store)
                         default: SettingsPage(store: store)
@@ -94,6 +102,9 @@ struct RootView: View {
         }.frame(minWidth: 560, minHeight: 400).environment(\.calendar,store.calendar).foregroundStyle(Palette.ink).tint(Palette.sage)
             .magicControls().environment(\.locale, Locale(identifier: "zh_CN"))
             .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:560,height:400))}
+            .sheet(isPresented:Binding(get:{store.pendingFocusReviewID != nil && store.pet?.managerIsOpen == true},set:{if !$0 {store.pendingFocusReviewID=nil}})) {
+                if let id=store.pendingFocusReviewID {FocusSessionEditor(store:store,sessionID:id)}
+            }
     }
 }
 

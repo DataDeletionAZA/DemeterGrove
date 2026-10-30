@@ -28,6 +28,9 @@ struct GameRoomView: View {
     @State private var book = false
     @State private var market = false
     @State private var soldAt: Date?
+    @State private var listedAt:Date?
+    @State private var resultStock=0
+    @State private var customerArrivedAt=Date()
     @State private var shopChoice: String?
     private var recipe: Dish? {
         if var saved = loadedDish, saved.ingredients == additions, saved.method == method, saved.category == category {
@@ -40,6 +43,10 @@ struct GameRoomView: View {
     }
     private var availableDishes: [Dish] { store.data.garden.menu.filter { store.data.garden.dishes[$0.id, default: 0] > 0 } }
     private var choice: Dish? { availableDishes.first { $0.id == shopChoice } ?? availableDishes.first }
+    private var visibleResult:Dish? {
+        guard let dish=lastDish else{return nil}
+        return dish.outputIngredient != nil || store.data.garden.dishes[dish.id,default:0]>=resultStock ? dish:nil
+    }
     private var cooking: Bool { store.now < cookingUntil }
     private var readyToCook:Bool {recipe.map{store.data.canCook($0)} ?? false}
     private var roomStatus:String {
@@ -64,6 +71,7 @@ struct GameRoomView: View {
                     Spacer()
                     if room == "厨房" { Button("配方册") { book = true } }
                     if room == "商店" {Button("采买"){market=true}}
+                    InventoryButton(store:store)
 
                 }
                 HStack {
@@ -79,29 +87,32 @@ struct GameRoomView: View {
                     }
                 }
             }
-            SceneCanvas(hasSidebar:room == "厨房") { size in
+            SceneCanvas(hasSidebar:room == "厨房" || room == "商店") { size in
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h)
+                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
                     if room == "农场" {gardenScene(w:w,h:h)}
                     else if room == "厨房" {kitchenScene(w:w,h:h)}
                     else {shopScene(w:w,h:h)}
                     if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
-                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
                     SceneParticles()
                     SceneArrows(store:store,scene:room)
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
-            } sidebar: {pantry}
+            } sidebar: {if room == "商店" {stockTray} else {pantry}}
             Text(roomStatus).font(.system(size: 12)).foregroundStyle(Palette.goldLight).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal:false,vertical:true)
             if room == "农场" { seedTray }
-            else if room != "厨房" { stockTray }
-            if room == "厨房", let dish = lastDish, !cooking { resultCard(dish) }
+            if room == "厨房", let dish = visibleResult, !cooking { resultCard(dish) }
         }
         .sheet(item:$plantingPlot) { plot in seedSelection(plot) }
         .sheet(isPresented:$seedCabinet) { seedSelection(nil) }
         .sheet(isPresented:$methodWindow) { methodSelection }
         .sheet(isPresented: $book) { recipeBook }
         .sheet(isPresented: $market) { IngredientMarket(store: store) }
+        .onChange(of:store.data.garden.orders.first?.id) {_,_ in customerArrivedAt=Date()}
+        .onChange(of:store.data.garden.dishes) {previous,current in
+            if let dish=lastDish,dish.outputIngredient == nil,current[dish.id,default:0]<previous[dish.id,default:0] {lastDish=nil}
+        }
     }
     private func resource(_ index: Int, _ name: String, _ count: Int) -> some View {
         HStack(spacing: 3) { GameSprite(index:index,size:28); Text("\(count)").monospacedDigit().font(.system(size:13,weight:.medium)) }.help("\(name) \(count)").accessibilityLabel("\(name) \(count)")
@@ -137,7 +148,7 @@ struct GameRoomView: View {
     private func workPlot(_ plot: Plot) {
         if let crop = plot.crop {
             let amount=store.data.harvestYield * (crop == .starlightCarrot ? 2:1)
-            if store.data.harvest(plot.id) { harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint=""; store.animatePet(20, seconds: 0.65) }
+            if store.data.harvest(plot.id) { harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint="" }
             else { hint = "\(crop.rawValue)还需记录 \(Int(ceil((1-plot.progress(store.data.totalFocus))*(plot.duration ?? crop.seconds)/60))) 分钟专注。" }
         } else if let selectedSeed { plant(selectedSeed,in:plot) }
         else { plantingPlot=plot }
@@ -182,27 +193,29 @@ struct GameRoomView: View {
         }.padding(20).frame(width:460,height:370).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
     }
     private var methodSelection:some View {
-        VStack(alignment:.leading,spacing:16) {
+        SceneDialog(preferred:CGSize(width:530,height:460)) {
             HStack {Text("想做些什么？").font(.title3);Spacer();Button("关闭"){methodWindow=false}}
-            Text(additions.sorted{$0.key<$1.key}.map{"\($0.key) ×\($0.value)"}.joined(separator:" · ")).font(.caption).foregroundStyle(Palette.muted)
-            PixelTabs(selection:Binding(get:{intent},set:{intent=$0;loadedDish=nil;chooseDefaultMethod()}),items:CookingIntent.allCases.map{($0,$0.rawValue)})
-            let methods=intent.methods(ingredients:additions)
-            if methods.isEmpty { Text(intent == .process ? "这些食材还不能加工成原料，试试单独的茶叶，或米、麦搭配蛋奶。":"这些食材暂时不适合这类料理，可以换个方向。表里的食材会保留。").font(.system(size:13)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true) }
-            LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
-                ForEach(methods) {item in
-                    Button {method=item;loadedDish=nil} label: {
-                        VStack(spacing:8) {CookingToolArt(method:item).frame(width:64,height:50);Text(item.rawValue).font(.system(size:13))}.frame(maxWidth:.infinity).padding(10).magicSurface(method == item ? Palette.card:Palette.paper)
-                            .overlay(PixelFrame().stroke(method == item ? Palette.goldLight:Palette.line,lineWidth:1))
-                    }.buttonStyle(.plain)
+        } content: {
+            VStack(alignment:.leading,spacing:16) {
+                Text(additions.sorted{$0.key<$1.key}.map{"\($0.key) ×\($0.value)"}.joined(separator:" · ")).font(.caption).foregroundStyle(Palette.muted)
+                PixelTabs(selection:Binding(get:{intent},set:{intent=$0;loadedDish=nil;chooseDefaultMethod()}),items:CookingIntent.allCases.map{($0,$0.rawValue)})
+                let methods=intent.methods(ingredients:additions)
+                if methods.isEmpty {Text(intent == .process ? "这些食材还不能加工成原料，试试单独的茶叶，或米、麦搭配蛋奶。":"这些食材暂时不适合这类料理，可以换个方向。桌上的食材会保留。").font(.system(size:13)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)}
+                LazyVGrid(columns:[GridItem(.adaptive(minimum:105))],spacing:10) {
+                    ForEach(methods) {item in
+                        Button {method=item;loadedDish=nil} label: {
+                            VStack(spacing:8) {CookingToolArt(method:item).frame(width:64,height:50);Text(item.rawValue).font(.system(size:13))}.frame(maxWidth:.infinity).padding(10).magicSurface(method == item ? Palette.card:Palette.paper)
+                                .overlay(PixelFrame().stroke(method == item ? Palette.goldLight:Palette.line,lineWidth:1))
+                        }.buttonStyle(.plain)
+                    }
                 }
             }
-            Spacer(minLength:0)
+        } footer: {
             HStack {
-                Text(intent == .process ? "成品将放入食材柜":"完成后记入配方册").font(.caption).foregroundStyle(Palette.muted)
                 Spacer()
-                Button("开始制作"){makeFood()}.buttonStyle(PixelButtonStyle(primary:true)).disabled(!methods.contains(method) || !readyToCook)
+                Button("开始制作"){makeFood()}.buttonStyle(PixelButtonStyle(primary:true)).disabled(!intent.methods(ingredients:additions).contains(method) || !readyToCook)
             }
-        }.padding(22).frame(width:530,height:365).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
+        }
     }
     private func chooseDefaultMethod() {
         let methods=intent.methods(ingredients:additions)
@@ -228,7 +241,7 @@ struct GameRoomView: View {
                 TableIngredient(portion:portion,size:w*0.095) {selection.remove(portion.id);loadedDish=nil;lastDish=nil;hint=""}
                     .position(x:w*(0.37+CGFloat(portion.slot%3)*0.15),y:h*(portion.slot<3 ? 0.60:0.72))
             }
-            if let displayed=lastDish {
+            if let displayed=visibleResult {
                 ObjectButton(label:displayed.name,action:{hint=displayed.name},caption:displayed.name) {
                     Group {
                         if let ingredient=displayed.outputIngredient {IngredientArt(name:ingredient.rawValue,size:w*0.17)}
@@ -268,23 +281,24 @@ struct GameRoomView: View {
         guard let dish=recipe else { hint="请为这些食材选择适合的做法。";return }
         guard store.data.cook(dish) else { hint="食材不足";return }
         cookingIngredients=selection.portions.map{$0.ingredient.rawValue};selection.clear();methodWindow=false
-        lastDish=store.data.garden.recipes[dish.id] ?? dish;dishName=dish.name;cookingStarted=Date();cookingUntil=cookingStarted.addingTimeInterval(3)
+        lastDish=store.data.garden.recipes[dish.id] ?? dish;resultStock=store.data.garden.dishes[dish.id,default:0];dishName=dish.name;cookingStarted=Date();cookingUntil=cookingStarted.addingTimeInterval(3)
         hint=""
-        store.animatePet(20, seconds: 0.65)
     }
-    private func resultCard(_ dish: Dish) -> some View {
+    private func resultCard(_ dish:Dish)->some View {
         HStack(spacing:12) {
             if let ingredient=dish.outputIngredient {IngredientArt(name:ingredient.rawValue,size:48)}
             else {GameSprite(sheet:"Foods",index:dish.sprite,size:48)}
-            VStack(alignment:.leading,spacing:5) {
-                Text(String(repeating:"★",count:dish.stars) + "  品质 \(dish.quality)").foregroundStyle(Palette.goldLight).font(.caption)
-                HStack {
-                    TextField("料理名称",text:$dishName).onSubmit { rename(dish) }
-                    Button("命名") { rename(dish) }.disabled(dishName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+            VStack(alignment:.leading,spacing:8) {
+                Text(String(repeating:"★",count:dish.stars)+"  品质 \(dish.quality)").foregroundStyle(Palette.goldLight).font(.caption)
+                HStack(alignment:.center,spacing:8) {
+                    TextField("料理名称",text:$dishName).textFieldStyle(PixelTextFieldStyle()).frame(height:32).onSubmit{rename(dish)}
+                    Button("命名"){rename(dish)}.frame(height:32).disabled(dishName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                    if dish.outputIngredient == nil {
+                        Button("去上架"){SceneNavigation.open("商店",store:store)}.frame(height:32)
+                    }
                 }
+                if dish.outputIngredient != nil {Text("已放入食材柜").font(.caption).foregroundStyle(Palette.goldLight)}
             }
-            if dish.outputIngredient == nil { Button("去上架") {store.pet?.openTool("商店")} }
-            else {Text("已放入食材柜").font(.caption).foregroundStyle(Palette.goldLight)}
         }.padding(10).magicSurface(Palette.paper)
     }
     private func rename(_ dish: Dish) {
@@ -292,58 +306,95 @@ struct GameRoomView: View {
         guard !name.isEmpty else{return}
         var updated=dish;updated.name=name;store.data.garden.recipes[dish.id]=updated;lastDish=updated;hint="";store.message="配方已命名为\(name)。"
     }
-    @ViewBuilder private func shopScene(w: CGFloat,h: CGFloat) -> some View {
+    @ViewBuilder private func shopScene(w:CGFloat,h:CGFloat)->some View {
         let orders=store.data.garden.orders
-        ForEach(0..<store.data.garden.capacity,id:\.self) { slot in
-            let order=orders.indices.contains(slot) ? orders[slot] : nil
-            let x=store.data.garden.capacity == 1 ? 0.25 : 0.14+Double(slot)*0.34/Double(store.data.garden.capacity-1)
+        let customer=orders.first.map{ShopCustomerPose(progress:$0.ready(store.data.totalFocus) ? 1:store.now.timeIntervalSince(customerArrivedAt)/6)}
+        if let customer,customer.behindCounter {customerSprite(customer,w:w,h:h)}
+        let counter=SceneObject.shopCounter
+        ObjectButton(label:"柜台，上架选中的料理",action:stockChoice,embeddedInBackdrop:true,caption:"上架料理") {
+            SceneObjectArtwork(object:counter,sceneSize:CGSize(width:w,height:h))
+        }.frame(width:w*counter.target.width,height:h*counter.target.height).position(x:w*counter.target.x,y:h*counter.target.y)
+        ForEach(0..<store.data.garden.capacity,id:\.self) {slot in
+            let order=orders.indices.contains(slot) ? orders[slot]:nil
+            let x=store.data.garden.capacity == 1 ? 0.25:0.14+Double(slot)*0.34/Double(store.data.garden.capacity-1)
             ObjectButton(label:order.map{"查看在售料理：\($0.dish.name)"} ?? "第 \(slot+1) 个陈列位，上架料理",action:{
-                if let order { hint="\(order.dish.name) · 售价 \(Money.text(order.price))" }
-                else if let dish=choice, store.data.stock(dish) { soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。" }
-                else { hint="暂无可上架料理" }
+                if let order {hint="\(order.dish.name) · \(order.ready(store.data.totalFocus) ? "待收款":"在售") · \(Money.text(order.price))"}
+                else {stockChoice()}
             }) {
                 ZStack {
                     Color.white.opacity(0.001)
-                    if let order { GameSprite(sheet:"Shelf",index:order.dish.sprite,size:w*0.043) }
-                    else { Text("+").font(.system(size:12)).foregroundStyle(Palette.goldLight.opacity(0.7)) }
+                    if let order {GameSprite(sheet:"Shelf",index:order.dish.sprite,size:w*0.043)}
+                    else {Text("+").font(.system(size:12)).foregroundStyle(Palette.goldLight.opacity(0.7))}
                 }.frame(width:w*0.065,height:h*0.09)
             }.position(x:w*x,y:h*0.519)
         }
         DisplayGlass()
-        if let order=orders.first {
-            let progress=min(1,max(0,(store.data.totalFocus-order.placedAt)/300))
-            GameSprite(index:store.data.garden.sales%2 == 0 ? 12:13,size:w*0.15)
-                .position(x:w*(progress>=1 ? 0.57:0.83-progress*0.18),y:h*(progress>=1 ? 0.73:0.46+progress*0.20))
-        }
+        if let customer,!customer.behindCounter {customerSprite(customer,w:w,h:h)}
+        if let listedAt {SceneParticles(burst:listedAt).frame(width:w*0.3,height:h*0.25).position(x:w*0.3,y:h*0.50)}
         let ready=orders.filter{$0.ready(store.data.totalFocus)}
         if !ready.isEmpty {
             let amount=ready.reduce(0){$0+$1.price}
             ObjectButton(label:"收取 \(Money.text(amount))",action:{
-                for order in ready { _=store.data.collectSale(order.id) }
+                for order in ready {_=store.data.collectSale(order.id)}
                 soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
-            }) { GameSprite(index:10,size:w*0.09) }.position(x:w*0.68,y:h*0.50)
+            }) {GameSprite(index:10,size:w*0.09)}.position(x:w*0.68,y:h*0.50)
         }
-        if let soldAt { SceneParticles(burst:soldAt).frame(width:w*0.25,height:h*0.35).position(x:w*0.68,y:h*0.50) }
-        ObjectButton(label:"购买食材与种子",action:{market=true}) { GameSprite(index:11,size:w*0.14) }.position(x:w*0.16,y:h*0.82)
+        if let soldAt {SceneParticles(burst:soldAt).frame(width:w*0.25,height:h*0.35).position(x:w*0.68,y:h*0.50)}
+        ObjectButton(label:"购买食材与种子",action:{market=true}) {GameSprite(index:11,size:w*0.14)}.position(x:w*0.16,y:h*0.82)
     }
-    private var stockTray: some View {
-        VStack(alignment:.leading,spacing:7) {
-            Text("料理柜 · 累计售出 \(store.data.garden.sales) 份").font(.caption).foregroundStyle(Palette.muted)
-
-            PixelScrollView(.horizontal) {
-                HStack(spacing:8) {
-                    ForEach(availableDishes) { dish in
-                        Button { shopChoice=dish.id;hint="" } label: {
-                            VStack(spacing:4) {
-                                GameSprite(sheet:"Foods",index:dish.sprite,size:56)
-                                Text(dish.name).font(.system(size:11)).lineLimit(1)
-                                Text("×\(store.data.garden.dishes[dish.id,default:0]) · \(Money.text(store.data.salePrice(dish)))").font(.system(size:10)).foregroundStyle(Palette.goldLight)
-                            }.frame(width:112).padding(6).magicSurface(choice?.id == dish.id ? Palette.moss : Palette.paper)
-                        }.buttonStyle(.plain)
+    private func customerSprite(_ pose:ShopCustomerPose,w:CGFloat,h:CGFloat)->some View {
+        let size=w*0.13
+        return GameSprite(index:store.data.garden.sales%2 == 0 ? 12:13,size:size)
+            .position(x:w*pose.foot.x,y:h*pose.foot.y-size/2).animation(.linear(duration:0.9),value:pose.foot).allowsHitTesting(false).accessibilityHidden(true)
+    }
+    private func stockChoice() {
+        guard let dish=choice else{hint="料理柜里还没有成品，先去厨房制作。";return}
+        let previous=store.data
+        guard store.data.stock(dish) else{hint="陈列位已满，先收款或下架在售料理。";return}
+        guard store.save() else{store.data=previous;return}
+        listedAt=Date();soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。"
+    }
+    private func unstock(_ order:ShopOrder) {
+        let previous=store.data
+        guard store.data.unstock(order.id) else{hint="这份料理已成交，请先收款。";return}
+        guard store.save() else{store.data=previous;return}
+        hint="";store.message="\(order.dish.name)已放回料理柜。"
+    }
+    private var stockTray:some View {
+        VStack(alignment:.leading,spacing:9) {
+            Text("料理柜").font(.headline).foregroundStyle(Palette.goldLight)
+            PixelScrollView {
+                VStack(alignment:.leading,spacing:10) {
+                    ForEach(availableDishes) {dish in
+                        Button{shopChoice=dish.id;hint=""} label:{
+                            HStack(spacing:8) {
+                                GameSprite(sheet:"Foods",index:dish.sprite,size:44)
+                                VStack(alignment:.leading,spacing:4) {
+                                    Text(dish.name).font(.system(size:11)).lineLimit(2)
+                                    Text("×\(store.data.garden.dishes[dish.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
+                                }
+                                Spacer(minLength:0)
+                            }.padding(7).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
+                                .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
+                        }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)")
+                        if choice?.id == dish.id {
+                            Text(Money.text(store.data.salePrice(dish))).font(.caption).foregroundStyle(Palette.goldLight)
+                            Button("上架料理",action:stockChoice).buttonStyle(PixelButtonStyle(primary:true))
+                                .disabled(store.data.garden.orders.count>=store.data.garden.capacity)
+                        }
                     }
-                }.padding(.bottom,4)
+                    if availableDishes.isEmpty {Text("还没有可上架的成品").font(.caption).foregroundStyle(Palette.muted)}
+                    if !store.data.garden.orders.isEmpty {Divider();Text("柜台").font(.caption).foregroundStyle(Palette.goldLight)}
+                    ForEach(store.data.garden.orders,id:\.id) {order in
+                        VStack(alignment:.leading,spacing:6) {
+                            Text(order.dish.name).font(.system(size:11)).lineLimit(2)
+                            Text(order.ready(store.data.totalFocus) ? "已成交 · 待收款":"在售").font(.caption).foregroundStyle(Palette.muted)
+                            Button("下架"){unstock(order)}.disabled(order.ready(store.data.totalFocus)).accessibilityLabel("下架\(order.dish.name)")
+                        }.padding(7).magicSurface(Palette.card)
+                    }
+                }.padding(.trailing,20)
             }
-        }
+        }.padding(10).magicSurface(Palette.paper)
     }
     private var recipeBook: some View {
         VStack(alignment:.leading,spacing:14) {

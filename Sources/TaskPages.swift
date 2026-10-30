@@ -75,7 +75,7 @@ struct TaskRow: View {
                 Image(systemName: occurrence.completedAt == nil ? "circle" : "checkmark.circle.fill")
                     .font(.system(size: 19)).foregroundStyle(occurrence.completedAt == nil ? Palette.muted : Palette.sage)
             }.buttonStyle(.plain).help(occurrence.completedAt == nil ? "标记完成" : "恢复未完成")
-                .accessibilityLabel("完成状态：" + task.title + (occurrence.scheduledDay.map { " · " + $0 } ?? "")).accessibilityValue(occurrence.completedAt == nil ? "未完成" : "已完成")
+                .accessibilityLabel("完成状态：" + task.title + (occurrence.displayDay.map { " · " + $0 } ?? "")).accessibilityValue(occurrence.completedAt == nil ? "未完成" : "已完成")
             Button { editing = true } label: {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(task.title).strikethrough(occurrence.completedAt != nil).lineLimit(2).multilineTextAlignment(.leading)
@@ -83,7 +83,7 @@ struct TaskRow: View {
                         Circle().fill(quadrantColors[task.quadrant]).frame(width: 5, height: 5)
                         Text(task.categoryName)
                         Text(quadrantTitles[task.quadrant])
-                        if let day = occurrence.scheduledDay { Text("计划 " + day).foregroundStyle(day < CalendarDates.key(store.now, calendar: store.calendar) && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
+                        if let day = occurrence.displayDay { Text("计划 " + day).foregroundStyle(day < CalendarDates.key(store.now, calendar: store.calendar) && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
                         else if let due = task.due { Text("截止 " + due.formatted(.dateTime.month().day())).foregroundStyle(due < store.calendar.startOfDay(for: store.now) && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
@@ -212,7 +212,7 @@ struct FocusPage: View {
                             Text("\(session.kind.rawValue) · \(session.date.formatted(.dateTime.hour().minute())) 结束").font(.caption).foregroundStyle(Palette.muted)
                         }
                         Spacer()
-                        Text(clockText(session.seconds)).monospacedDigit()
+                        Text(clockText(session.focusSeconds(in: store.calendar.dateInterval(of: .day, for: store.now)!))).monospacedDigit()
                     }.padding(.vertical, 6)
                 }
             }
@@ -249,7 +249,7 @@ struct TimerControls: View {
                 }
                 HStack(spacing: 12) {
                     Button(run.resumedAt == nil ? "继续" : "暂停", systemImage: run.resumedAt == nil ? "play.fill" : "pause.fill") {
-                        run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer()
+                        _ = run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer()
                     }.buttonStyle(PixelButtonStyle(primary: true))
                     Button(run.kind == .rest ? "结束休息" : "结束并记录") { store.finishTimer() }.buttonStyle(PixelButtonStyle())
                 }
@@ -309,7 +309,7 @@ struct FocusTaskPicker: View {
                     ForEach(tasks) { occurrence in
                         let task = occurrence.task
                         Button { choose(occurrence, task.title) } label: {
-                            HStack { Text(task.title).multilineTextAlignment(.leading); Spacer(); Text(occurrence.scheduledDay ?? task.categoryName).font(.caption).foregroundStyle(Palette.muted) }.frame(maxWidth: .infinity, alignment: .leading)
+                            HStack { Text(task.title).multilineTextAlignment(.leading); Spacer(); Text(occurrence.displayDay ?? task.categoryName).font(.caption).foregroundStyle(Palette.muted) }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(PixelButtonStyle()).accessibilityLabel(task.title)
                     }
                 }

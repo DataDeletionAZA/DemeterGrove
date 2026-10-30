@@ -113,3 +113,33 @@ do { try SaveFile.write(large, to: saveURL); fatalError("Oversized save accepted
 let bytesAfterOversize = try Data(contentsOf: saveURL)
 assert(bytesAfterOversize == savedBytes)
 print("PASS: photo-only evidence and oversized save refusal preserve the previous readable file")
+
+var archived = AppData()
+archived.habits = [Habit(title: "历史阅读", days: [dayKey(first)], checkIns: [dayKey(first): HabitCheckIn(text: "第一章", image: Data([1, 2, 3]), submittedAt: first, status: .approved, reviewedAt: first, feedback: "已完成")])]
+let archivedID = archived.habits[0].id
+let history = archived.habits[0]
+archived.removeHabit(archivedID, now: day(1))
+assert(archived.habits.count == 1 && archived.habits[0].archivedAt == day(1))
+assert(archived.habits[0].days == history.days && archived.habits[0].checkIns == history.checkIns)
+assert(archived.habitDays == [dayKey(first)])
+assert(!archived.submitHabitEvidence(archivedID, date: day(1), text: "新记录", image: nil, now: day(1)))
+archived.removeHabit(archivedID, now: day(2))
+assert(archived.habits[0].archivedAt == day(1))
+_ = try archived.validated()
+let archivedRoundTrip = try JSONDecoder().decode(AppData.self, from: JSONEncoder().encode(archived))
+assert(archivedRoundTrip.habits[0] == archived.habits[0])
+var pendingArchive = AppData(); pendingArchive.habits = [Habit(title: "散步")]
+let pendingID = pendingArchive.habits[0].id
+assert(pendingArchive.submitHabitEvidence(pendingID, date: first, text: "公园散步", image: nil, now: first))
+pendingArchive.removeHabit(pendingID, now: first)
+assert(!pendingArchive.cancelHabitSubmission(pendingID, date: first, now: first))
+assert(pendingArchive.applyHabitReview(pendingID, day: dayKey(first), approved: true, feedback: "相关", now: first) == nil)
+assert(pendingArchive.habits[0].checkIns?[dayKey(first)]?.status == .pending && pendingArchive.garden.coins == 0)
+print("PASS: archiving preserves evidence, photos, historical completions and rewards, survives save/load and prevents later submissions or in-flight approval")
+
+var longEncouragement = AppData()
+longEncouragement.habits = [Habit(title: "阅读", encouragement: String(repeating: "读", count: ReminderTextLibrary.maximumTextLength))]
+_ = try longEncouragement.validated()
+longEncouragement.habits[0].encouragement?.append("读")
+rejected(longEncouragement)
+print("PASS: historical encouragement text shares the reminder library length boundary")

@@ -80,7 +80,7 @@ print("PASS: unbounded phrase counts, blank/duplicate normalization, random bags
 var old = AppData(); old.version = 2
 old.habits = [Habit(title:"旧习惯",days:["2029-12-31"],encouragement:"继续")]
 let migrated = try old.validated(at:date(2030,1,1))
-assert(migrated.version == 3 && migrated.habits[0].days == old.habits[0].days)
+assert(migrated.version == 4 && migrated.habits[0].days == old.habits[0].days)
 assert(migrated.habits[0].messageLibrary!.phrases.map(\.text) == ["继续"])
 assert(!migrated.habits[0].isScheduled(on:date(2029,12,30),calendar:calendar))
 let reopened = try JSONDecoder().decode(AppData.self,from:JSONEncoder().encode(migrated)).validated(at:date(2030,1,2))
@@ -106,3 +106,33 @@ var malformed = AppData()
 malformed.recurringTaskCompletions = [TaskCompletionRecord(id:sameIDTask.id.uuidString,taskID:sameIDTask.id,title:"任务",scheduledDay:nil,completedAt:date(2030,1,1))]
 assert((try? malformed.validated()) == nil)
 print("PASS: task/habit libraries stay independent across shared identifiers and malformed completion-ledger entries are rejected")
+
+var replanned = AppData()
+let series = GardenTask(title: "每日阅读", scheduleRevisions: [ScheduleRevision(effectiveFrom: "2030-01-01", anchor: "2030-01-01", rule: RepeatRule())], reminderMinutes: 10*60)
+replanned.tasks = [series]
+let originalOccurrence = replanned.taskOccurrences(from: date(2030,1,1), through: date(2030,1,1), calendar: calendar)[0]
+let reflection = FocusSession(id: UUID(), taskID: series.id, title: series.title, kind: .stopwatch, date: date(2030,1,1), seconds: 60, occurrenceID: originalOccurrence.id)
+replanned.sessions = [reflection]
+assert(replanned.editFocusSession(reflection.id, title: "读第一节", notes: "明天继续", mood: nil, moodSymbol: nil, moodImage: nil, taskAction: .reschedule, rescheduleDate: date(2030,1,3), at: date(2030,1,1), calendar: calendar))
+assert(replanned.tasks == [series] && replanned.taskCompletionRecords.isEmpty)
+assert(replanned.taskOccurrences(from: date(2030,1,1), through: date(2030,1,1), calendar: calendar).isEmpty)
+let moved = replanned.taskOccurrences(from: date(2030,1,3), through: date(2030,1,3), calendar: calendar)
+assert(moved.count == 2 && Set(moved.map(\.id)).count == 2)
+assert(moved.first { $0.id == originalOccurrence.id }?.displayDay == "2030-01-03")
+assert(moved.first { $0.id == originalOccurrence.id }?.scheduledDay == "2030-01-01")
+let futurePlan = replanned.planReminders(at: date(2030,1,1), calendar: calendar, horizonDays: 4)
+assert(futurePlan.first { $0.id == "task-" + originalOccurrence.id }?.fireAt == calendar.date(bySettingHour:10,minute:0,second:0,of:date(2030,1,3)))
+assert(replanned.editFocusSession(reflection.id, title: "读第一节", notes: "补完", mood: nil, moodSymbol: nil, moodImage: nil, taskAction: .complete, at: date(2030,1,3), calendar: calendar))
+assert(replanned.taskCompletionRecords.count == 1 && replanned.taskCompletionRecords[0].id == originalOccurrence.id && replanned.taskCompletionRecords[0].scheduledDay == "2030-01-01")
+assert(replanned.taskOccurrences(from:date(2030,1,3),through:date(2030,1,3),calendar:calendar).filter { $0.completedAt == nil }.count == 1)
+let movedReload = try JSONDecoder().decode(AppData.self,from:JSONEncoder().encode(replanned)).validated(at:date(2030,1,3))
+assert(movedReload.taskOccurrenceReschedules == replanned.taskOccurrenceReschedules && movedReload.taskCompletionRecords == replanned.taskCompletionRecords)
+var archivePlan = AppData()
+archivePlan.habits = [Habit(title:"归档",reminderMinutes:600,archivedAt:date(2030,1,1))]
+assert(archivePlan.planReminders(at:date(2030,1,1),calendar:calendar).isEmpty)
+assert(!archivePlan.habits[0].isScheduled(on:date(2030,1,2),calendar:calendar))
+var longLibrary = ReminderTextLibrary(texts:[String(repeating:"长",count:4000)])
+assert(longLibrary.isValid && longLibrary.phrases[0].text.count == 4000)
+longLibrary.phrases[0].text += "长"; longLibrary.normalize()
+assert(!longLibrary.isValid && longLibrary.phrases[0].text.count == 4001)
+print("PASS: occurrence-only rescheduling preserves identity, history and series; reminders follow moved dates; archives and long-phrase bounds are validated")

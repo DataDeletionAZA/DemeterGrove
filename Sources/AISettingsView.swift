@@ -15,8 +15,6 @@ struct AISettingsView:View {
     private var saved:Bool {settings.profiles.contains{$0.id == draft.id}}
     var body:some View {
         Card(title:"AI 预设",icon:"sparkles") {
-            Text("密钥保存在 Mac 钥匙串，备份不包含密钥。")
-                .font(.callout).foregroundStyle(Palette.muted)
             HStack {
                 if !settings.profiles.isEmpty {
                     PixelSelect(selection:Binding(get:{saved ? Optional(draft.id):nil},set:{id in

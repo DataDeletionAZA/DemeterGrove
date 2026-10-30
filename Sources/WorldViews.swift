@@ -159,7 +159,7 @@ struct MapPage: View {
     private var actionLabel:String {
         if !unlocked {return "等级 \(journey.level) 解锁"}
         if let trip {
-            if !matching {return "先完成\(trip.kind.rawValue)"}
+            if !matching {return "先完成\(SceneNavigation.title(trip.kind.rawValue))"}
             return trip.progress(store.data.totalFocus)>=1 ? "领取收获":"继续专注"
         }
         return journey == .fishing ? "抛竿":"出发"
@@ -167,7 +167,7 @@ struct MapPage: View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             SceneHeader {
-                HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins)}
+                HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins);InventoryButton(store:store)}
             }
             if journey == .potions {PotionScene(store:store)}
             else {
@@ -218,7 +218,7 @@ struct MapPage: View {
     private func act() {
         guard unlocked else{return}
         if let trip {
-            guard matching else{hint="\(trip.kind.rawValue)还未结束。";return}
+            guard matching else{hint="\(SceneNavigation.title(trip.kind.rawValue))还未结束。";return}
             if let result=store.data.collectJourney(){store.message=result;hint=""}
             else {SceneNavigation.open("计时器",store:store)}
         } else if store.data.embark(journey) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}

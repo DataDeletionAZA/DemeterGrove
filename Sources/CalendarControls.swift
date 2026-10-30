@@ -55,7 +55,7 @@ struct PixelCalendar: View {
             VStack(spacing: 4) {
                 Text("\(calendar.component(.day, from: day))").font(.system(size: compact ? 12 : 14, weight: calendar.isDateInToday(day) ? .bold : .regular))
                 HStack(spacing: 3) {
-                    ForEach(Array(markers(day).prefix(3).enumerated()), id: \.offset) { _, color in Rectangle().fill(color).frame(width: 4, height: 3) }
+                    ForEach(Array(markers(day).prefix(5).enumerated()), id: \.offset) { _, color in Rectangle().fill(color).frame(width: 4, height: 3) }
                 }.frame(height: 4)
             }.frame(maxWidth: .infinity).frame(height: compact ? 36 : 52)
                 .background(PixelFrame(step: 1).fill(active ? Palette.moss : Palette.control.opacity(0.55)))

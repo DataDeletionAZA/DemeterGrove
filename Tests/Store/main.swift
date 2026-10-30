@@ -95,6 +95,7 @@ enum HabitStoreChecks {
         assert(store.removeTask(repeating.id) && store.taskCompletionRecords == savedRecords)
         print("PASS: Store current versus missed recurring tasks, actual completion timestamps, restart persistence, historical schedule protection, completion/delete rollback and retained deleted-series history")
         try await HabitReviewChecks.run(store, clock: reviewClock)
+        try FocusStoreChecks.run(store)
     }
 }
 
@@ -298,7 +299,7 @@ private enum HabitReviewChecks {
         try await waitForStop()
         check(store.reviewingHabits.isEmpty && store.data.habits[0].checkIns?[day]?.status == .pending, "caller cancellation stops transport and preserves pending")
 
-        for change in ["resubmit", "sameEvidence", "withdraw", "delete", "rename", "profile", "assignment", "midnight"] {
+        for change in ["resubmit", "sameEvidence", "withdraw", "delete", "rename", "profile", "assignment", "writing", "archive", "midnight"] {
             reset()
             let habit = pending()
             let oldCoins = store.data.garden.coins
@@ -313,6 +314,11 @@ private enum HabitReviewChecks {
             case "rename": var renamed = store.data.habits[0]; renamed.title = "新名称"; check(store.upsert(renamed), "rename during review")
             case "profile": store.data.ai!.profiles[0].model = "changed-model"; store.data.ai = settings
             case "assignment": store.data.ai!.assignments[AIFeature.habitReview.rawValue] = nil
+            case "writing":
+                var writing = AIWritingPreset.standard; writing.character = "温和的记录员"
+                store.data.ai!.writingPresets = [writing]
+                store.data.ai!.writingAssignments = [AIFeature.habitReview.rawValue: writing.id]
+            case "archive": store.data.habits[0].archivedAt = baseline
             default: clock.date = Calendar.current.date(byAdding: .day, value: 1, to: baseline)!; store.tick(clock.date)
             }
             if change == "resubmit" {
@@ -334,5 +340,101 @@ private enum HabitReviewChecks {
         check(restored.habits[0].checkIns?[day]?.status == .pending && ReviewProtocol.count == 0 && store.reviewingHabits.isEmpty, "saved pending evidence has no automatic request")
         check(store.cancelHabitSubmission(pendingReload.id, date: baseline) && store.reviewErrors[pendingReload.id] == nil, "withdraw clears runtime review error")
         print("PASS: \(checks) Store habit-review checks cover text/photo approval, daily and milestone rewards, duplicate requests, rejection/resubmission, missing configuration, network retry, save rollback, cancellation, replacement, deletion, rename, preset changes and midnight")
+    }
+}
+
+@MainActor
+private enum FocusStoreChecks {
+    private static var checks = 0
+    private static func check(_ value: Bool, _ name: String) { guard value else { fatalError("FAIL: \(name)") }; checks += 1 }
+    static func run(_ store: GardenStore) throws {
+        let start = Date()
+        func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        func reset() { store.data = AppData(); store.data.preferences.sound = false; store.pendingFocusReviewID = nil; store.error = ""; store.message = ""; store.now = start }
+        func unwritable(_ operation: () throws -> Void) throws {
+            let backup = store.file.deletingLastPathComponent().appendingPathComponent("focus-backup.json")
+            try FileManager.default.moveItem(at: store.file, to: backup)
+            try FileManager.default.createDirectory(at: store.file, withIntermediateDirectories: false)
+            defer {
+                try? FileManager.default.removeItem(at: store.file)
+                try? FileManager.default.moveItem(at: backup, to: store.file)
+            }
+            try operation()
+        }
+        reset()
+        let task = GardenTask(title: "阅读")
+        check(store.upsert(task), "focus task exists")
+        check(store.startTimer(kind: .pomodoro, minutes: 10, task: task, at: start), "timer start saved")
+        let timerID = store.data.timer!.id
+        check(store.pauseTimer(at: at(100)) && store.resumeTimer(at: at(200)), "pause resume saved")
+        check(store.pauseTimer(at: at(300)), "second pause saved")
+        let paused = try SaveFile.read(store.file).timer!
+        check(paused.resumedAt == nil && paused.accumulated == 200 && paused.pausedAt == at(300) && paused.pauseIntervals?.count == 1, "paused timer details survive read")
+        check(store.finishTimer(at: at(360)), "paused focus finish saved")
+        let session = store.data.sessions[0]
+        check(session.id == timerID && session.seconds == 200 && session.pauseCount == 2 && session.pausedSeconds == 160, "finish records active and paused seconds")
+        check(store.pendingFocusReviewID == session.id && store.data.tasks[0].completedAt == nil, "finish opens optional review without completing task")
+        let disk = try SaveFile.read(store.file)
+        check(disk.sessions == [session] && disk.timer == nil, "session saved before review appears")
+        store.pendingFocusReviewID = nil
+        check(try SaveFile.read(store.file).sessions == [session], "skip reflection preserves persisted record")
+        let water = store.data.garden.water, focus = store.data.totalFocus
+        check(store.updateFocusSession(session.id, title: "读了三节", notes: "记下两个问题", mood: "专注", moodSymbol: "focus", taskAction: .complete, at: at(400)), "save reflection and task completion")
+        check(store.data.tasks[0].completedAt == at(400) && store.data.totalFocus == focus && store.data.garden.water == water, "reflection completes associated task once without reward")
+        check(store.updateFocusSession(session.id, title: "读了三节", notes: "记下两个问题", mood: "专注", moodSymbol: "focus", at: at(450)) && store.data.tasks[0].completedAt == at(400), "default historical edit preserves task status")
+        check(store.updateFocusFeedback(session.id, feedback: "记录了问题，可以下次接着看。", at: at(460)), "AI feedback persists independently")
+        check(store.updateFocusSession(session.id, title: "整理阅读笔记", notes: "先处理第一个问题", mood: "平静", moodSymbol: "calm", at: at(470)) && store.data.sessions[0].aiFeedbackIsEarlierVersion, "later notes mark previous feedback")
+        let beforeEdit = store.data
+        try unwritable {
+            check(!store.updateFocusSession(session.id, title: "不能落盘的编辑", notes: "改期", mood: nil, taskAction: .reschedule, rescheduleDate: at(86400), at: at(480)), "reflection disk failure returns false")
+            check(store.data.sessions == beforeEdit.sessions && store.data.tasks == beforeEdit.tasks && store.data.garden.water == beforeEdit.garden.water && store.saveStatus == "保存失败", "failed reflection and task change roll back together")
+            check(!store.updateFocusFeedback(session.id, feedback: "不能落盘的反馈", at: at(490)) && store.data.sessions == beforeEdit.sessions, "AI feedback save failure rolls back")
+        }
+        reset()
+        check(store.save(), "empty fixture saved")
+        try unwritable { check(!store.startTimer(kind: .countdown, minutes: 1, task: nil, at: start) && store.data.timer == nil, "start failure restores idle state") }
+        check(store.startTimer(kind: .countdown, minutes: 1, task: nil, at: start), "retry start after write recovery")
+        let active = store.data.timer!
+        try unwritable { check(!store.pauseTimer(at: at(10)) && store.data.timer == active, "pause save failure restores active interval") }
+        check(store.pauseTimer(at: at(10)), "pause recovery")
+        let pausedTimer = store.data.timer!
+        try unwritable { check(!store.resumeTimer(at: at(20)) && store.data.timer == pausedTimer, "resume save failure restores pause") }
+        check(store.resumeTimer(at: at(20)), "resume recovery")
+        let beforeFinish = store.data
+        try unwritable {
+            store.tick(at(100))
+            check(store.data.timer == beforeFinish.timer && store.data.sessions.isEmpty && store.data.garden.water == beforeFinish.garden.water && store.pendingFocusReviewID == nil, "automatic finish save failure restores timer and rewards")
+            store.tick(at(101))
+            check(store.data.sessions.isEmpty && store.data.timer == beforeFinish.timer && store.saveStatus == "保存失败", "failed automatic finish keeps retryable timer")
+        }
+        check(store.finishTimer(at: at(102)), "manual retry safely commits automatic target")
+        check(store.data.sessions.count == 1 && store.data.sessions[0].seconds == 60 && store.data.sessions[0].endedAt == at(70), "retry keeps exact active deadline")
+        check(!store.finishTimer(at: at(103)) && store.data.sessions.count == 1, "repeat finish cannot duplicate record")
+        reset()
+        check(store.startTimer(kind: .pomodoro, minutes: 1, task: nil, at: start) && store.finishTimer(at: at(60)), "complete pomodoro opens rest")
+        let earned = store.data.totalFocus, earnedWater = store.data.garden.water, earnedExperience = store.data.levelProgress.experience
+        store.pendingFocusReviewID = nil
+        check(store.startTimer(kind: .rest, minutes: 1, task: nil, at: at(70)), "rest starts separately")
+        check(store.pauseTimer(at: at(80)) && store.resumeTimer(at: at(90)) && store.finishTimer(at: at(150)), "rest pause and finish saved")
+        check(store.data.sessions.count == 2 && store.data.sessions.last?.kind == .rest && store.data.sessions.last?.seconds == 60 && store.data.sessions.last?.pauseCount == 0, "rest history preserves duration without focus pauses")
+        check(store.data.totalFocus == earned && store.data.garden.water == earnedWater && store.data.levelProgress.experience == earnedExperience && store.pendingFocusReviewID == nil && store.todaySessions.count == 1, "rest does not count as focus or reopen focus reflection")
+        reset()
+        let key = CalendarDates.key(start, calendar: store.calendar)
+        let revision = ScheduleRevision(effectiveFrom: key, anchor: key, rule: RepeatRule())
+        let repeating = GardenTask(title: "每日阅读", scheduleRevisions: [revision])
+        check(store.upsert(repeating), "recurring focus task exists")
+        let occurrence = store.todayTaskOccurrences[0]
+        check(store.startTimer(kind: .stopwatch, minutes: 1, task: repeating, occurrenceID: occurrence.id, at: start) && store.finishTimer(at: at(10)), "record linked occurrence")
+        let recordID = store.data.sessions[0].id
+        let movedDate = store.calendar.date(byAdding: .day, value: 2, to: start)!
+        check(store.updateFocusSession(recordID, title: "本期继续", notes: "两天后继续", mood: nil, taskAction: .reschedule, rescheduleDate: movedDate, at: at(20)), "reschedule linked occurrence only")
+        check(store.todayTaskOccurrences.isEmpty && store.data.tasks[0].scheduleRevisions == [revision] && store.taskCompletionRecords.isEmpty, "reschedule leaves series and completion history unchanged")
+        let movedOccurrences = store.taskOccurrences(from: movedDate, through: movedDate)
+        check(movedOccurrences.count == 2 && movedOccurrences.contains(where: { $0.id == occurrence.id }), "moved occurrence coexists with next scheduled occurrence")
+        store.now = movedDate
+        check(store.toggleTaskOccurrence(movedOccurrences.first { $0.id == occurrence.id }!) && store.taskCompletionRecords.count == 1, "rescheduled occurrence can complete by original identity")
+        let reload = try SaveFile.read(store.file)
+        check(reload.taskOccurrenceReschedules == store.data.taskOccurrenceReschedules && reload.sessions == store.data.sessions && reload.taskCompletionRecords == store.taskCompletionRecords, "reflection and occurrence overlay survive reload")
+        print("PASS: \(checks) Store focus checks cover atomic start/pause/resume/end, optional reflection, history edits, AI feedback rollback, automatic finish failure/retry, separate rest and occurrence-only reschedule")
     }
 }

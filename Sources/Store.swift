@@ -15,6 +15,9 @@ final class GardenStore: ObservableObject {
     @Published var journalDate = Date()
     @Published var activeTool = "任务"
     @Published var focusDraftMinutes = 25
+    @Published var pendingFocusReviewID: UUID? = nil
+    @Published var focusReviewRequests: [UUID: UUID] = [:]
+    private var blockedFocusFinishID: UUID? = nil
     @Published var tapPhase = 0
     @Published var petLookDirection:Int?=nil
     @Published var petFacingRight = false
@@ -49,6 +52,7 @@ final class GardenStore: ObservableObject {
         var title: String
         var evidence: HabitCheckIn
         var profile: AIProfile
+        var writing: AIWritingPreset
     }
     private var habitReviews: [UUID: HabitReviewSnapshot] = [:]
     private var habitReviewTasks: [UUID: Task<AIHabitReviewResult, Error>] = [:]
@@ -148,8 +152,8 @@ final class GardenStore: ObservableObject {
         now = date
         invalidateHabitReviews()
         guard !storageLocked else { return }
-        if let run = data.timer, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
-            finishTimer()
+        if let run = data.timer, run.id != blockedFocusFinishID, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
+            finishTimer(at: date)
         }
         if !preview, data.preferences.notifications, date.timeIntervalSince(lastReminderRefresh) >= 6*3600 { refreshReminders() }
         if date.timeIntervalSince(lastCheckpoint) >= 20 {
@@ -167,8 +171,8 @@ final class GardenStore: ObservableObject {
         return value
     }
 
-    var todaySessions: [FocusSession] { data.sessions.filter { Calendar.current.isDate($0.date, inSameDayAs: now) } }
-    var todayMinutes: Int { Int(todaySessions.reduce(0) { $0 + $1.seconds } / 60) }
+    var todaySessions: [FocusSession] { data.sessions.filter { $0.kind != .rest && $0.focusSeconds(in: calendar.dateInterval(of: .day, for: now)!) > 0 } }
+    var todayMinutes: Int { Int(data.focusSeconds(in: calendar.dateInterval(of: .day, for: now)!) / 60) }
     var todayKeys: Int { data.keys[dayKey(now), default: 0] }
     var todayClicks: Int { data.mouseClicks?[dayKey(now)] ?? 0 }
     var todayActions: Int { todayKeys + todayClicks }
@@ -197,11 +201,12 @@ final class GardenStore: ObservableObject {
     func taskOccurrences(from start: Date, through end: Date) -> [TaskOccurrence] {
         data.taskOccurrences(from: start, through: end, calendar: calendar).sorted {
             if $0.task.quadrant != $1.task.quadrant { return $0.task.quadrant < $1.task.quadrant }
-            return ($0.scheduledDay ?? "") > ($1.scheduledDay ?? "")
+            return ($0.displayDay ?? "") > ($1.displayDay ?? "")
         }
     }
     var allTaskOccurrences: [TaskOccurrence] {
-        let first = data.tasks.compactMap { $0.scheduleRevisions?.map(\.effectiveFrom).min() }.min().flatMap { Recurrence.date($0, calendar: calendar) } ?? now
+        let firstKey = (data.tasks.compactMap { $0.scheduleRevisions?.map(\.effectiveFrom).min() } + (data.taskOccurrenceReschedules ?? []).map(\.rescheduledDay)).min()
+        let first = firstKey.flatMap { Recurrence.date($0, calendar: calendar) } ?? now
         return taskOccurrences(from: min(first, now), through: now)
     }
     var reminderCoverageText: String {
@@ -246,7 +251,7 @@ final class GardenStore: ObservableObject {
         guard !storageLocked, let i = data.tasks.firstIndex(where: { $0.id == occurrence.task.id }) else { return false }
         let previous = data
         if let day = occurrence.scheduledDay {
-            guard day <= CalendarDates.key(now, calendar: calendar), let date = Recurrence.date(day, calendar: calendar),
+            guard let displayDay = occurrence.displayDay, displayDay <= CalendarDates.key(now, calendar: calendar), let date = Recurrence.date(displayDay, calendar: calendar),
                   data.taskOccurrences(from: date, through: date, calendar: calendar).contains(where: { $0.id == occurrence.id }) else { return false }
             if data.recurringTaskCompletions == nil { data.recurringTaskCompletions = [] }
             if data.recurringTaskCompletions!.contains(where: { $0.id == occurrence.id }) { data.recurringTaskCompletions!.removeAll { $0.id == occurrence.id } }
@@ -351,9 +356,10 @@ final class GardenStore: ObservableObject {
         let date = reviewClock()
         guard !storageLocked, snapshot.day == dayKey(date), date >= snapshot.evidence.submittedAt,
               let habit = data.habits.first(where: { $0.id == snapshot.id }),
-              habit.title == snapshot.title, !habit.days.contains(snapshot.day),
+              habit.title == snapshot.title, habit.archivedAt == nil, !habit.days.contains(snapshot.day),
               habit.checkIns?[snapshot.day] == snapshot.evidence,
-              data.ai?.profile(for: .habitReview) == snapshot.profile else { return false }
+              data.ai?.profile(for: .habitReview) == snapshot.profile,
+              (data.ai?.writing(for: .habitReview) ?? .standard) == snapshot.writing else { return false }
         return true
     }
 
@@ -379,7 +385,7 @@ final class GardenStore: ObservableObject {
         let current = reviewClock()
         let day = dayKey(current)
         guard !storageLocked, Calendar.current.isDate(date, inSameDayAs: current),
-              let habit = data.habits.first(where: { $0.id == id }), !habit.days.contains(day),
+              let habit = data.habits.first(where: { $0.id == id }), habit.archivedAt == nil, !habit.days.contains(day),
               let evidence = habit.checkIns?[day], evidence.isValid, evidence.status == .pending,
               Calendar.current.isDate(evidence.submittedAt, inSameDayAs: current), current >= evidence.submittedAt else {
             reviewErrors[id] = "仅能审核今天已提交、尚未通过的材料。"
@@ -390,7 +396,7 @@ final class GardenStore: ObservableObject {
             return false
         }
         guard save() else { reviewErrors[id] = error.isEmpty ? "保存失败，请先恢复存档写入。" : error; return false }
-        let snapshot = HabitReviewSnapshot(token: UUID(), id: id, day: day, title: habit.title, evidence: evidence, profile: profile)
+        let snapshot = HabitReviewSnapshot(token: UUID(), id: id, day: day, title: habit.title, evidence: evidence, profile: profile, writing: data.ai?.writing(for: .habitReview) ?? .standard)
         guard habitReviewIsCurrent(snapshot) else {
             reviewErrors[id] = "材料、日期或审核设置已变化，可以重新审核。"
             return false
@@ -400,7 +406,7 @@ final class GardenStore: ObservableObject {
         reviewErrors[id] = nil
         let worker = Task {
             guard self.habitReviews[id]?.token == snapshot.token, self.habitReviewIsCurrent(snapshot) else { throw CancellationError() }
-            return try await client.reviewHabit(profile: profile, title: snapshot.title, text: evidence.text, image: evidence.image)
+            return try await client.reviewHabit(profile: profile, title: snapshot.title, text: evidence.text, image: evidence.image, writing: snapshot.writing)
         }
         habitReviewTasks[id] = worker
         defer { finishHabitReview(snapshot) }
@@ -435,41 +441,87 @@ final class GardenStore: ObservableObject {
         }
     }
 
-    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil) {
-        guard data.timer == nil else { message = "先结束或继续当前计时，再开始下一段。"; return }
-        guard kind != .rest || canStartBreak else { message = "完成一段番茄钟后，可以开始休息。"; return }
-        let date = Date()
+    @discardableResult
+    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil, at date: Date = Date()) -> Bool {
+        guard !storageLocked else { return false }
+        guard data.timer == nil else { message = "先结束或继续当前计时，再开始下一段。"; return false }
+        guard kind != .rest || canStartBreak else { message = "完成一段番茄钟后，可以开始休息。"; return false }
+        let previous = data
         data.pomodoroBreakReady = false
         data.timer = TimerRun(kind: kind, target: Double(max(1, minutes)) * 60,
-                              taskID: task?.id, taskTitle: kind == .rest ? "休息" : (task?.title ?? title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? "自由专注"),
-                              startedAt: date, resumedAt: date, occurrenceID: occurrenceID)
+                              taskID: kind == .rest ? nil : task?.id,
+                              taskTitle: kind == .rest ? "休息" : (task?.title ?? title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? "自由专注"),
+                              startedAt: date, resumedAt: date, occurrenceID: kind == .rest ? nil : occurrenceID, segments: [], pauseIntervals: [])
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
         now = date
-        save()
+        blockedFocusFinishID = nil
         refreshTimerReminder()
+        return true
     }
-    func pauseTimer() {
-        data.timer?.pause(at: Date())
-        save()
+    @discardableResult
+    func pauseTimer(at date: Date = Date()) -> Bool {
+        guard !storageLocked, data.timer?.resumedAt != nil else { return false }
+        let previous = data
+        data.timer?.pause(at: date)
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        now = date
         refreshTimerReminder()
+        return true
     }
-    func resumeTimer() {
-        guard data.timer != nil, data.timer?.resumedAt == nil else { return }
-        data.timer?.resumedAt = Date()
-        save()
+    @discardableResult
+    func resumeTimer(at date: Date = Date()) -> Bool {
+        guard !storageLocked, data.timer != nil, data.timer?.resumedAt == nil else { return false }
+        let previous = data
+        data.timer?.resume(at: date)
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        now = date
         refreshTimerReminder()
+        return true
     }
-    func finishTimer() {
-        let previousLevel=data.levelProgress.level
-        let kind = data.timer?.kind
-        guard let result = data.finishTimer(at: Date()) else { return }
-        message = result.rest ? "休息结束，可以开始下一段了。" :
+    @discardableResult
+    func finishTimer(at date: Date = Date()) -> Bool {
+        guard !storageLocked, let run = data.timer else { return false }
+        let previous = data
+        let previousLevel = data.levelProgress.level
+        guard let result = data.finishTimer(at: date) else { return false }
+        guard save() else {
+            data = previous; saveWork?.cancel(); saveStatus = "保存失败"; blockedFocusFinishID = run.id
+            return false
+        }
+        blockedFocusFinishID = nil
+        now = date
+        if run.kind != .rest, data.sessions.contains(where: { $0.id == run.id }) { pendingFocusReviewID = run.id }
+        message = result.rest ? "休息结束，已记录休息时长。" : result.seconds == 0 ? "计时已结束，本次未累计有效时长。" :
             "已记录 \(Int(result.seconds / 60)) 分 \(Int(result.seconds) % 60) 秒专注，获得 \(result.water) 滴露水。"
-        animatePet(PetMotion.jumping.rawValue,seconds:PetMotion.jumping.duration)
+        animatePet(PetMotion.jumping.rawValue, seconds: PetMotion.jumping.duration)
         if data.preferences.sound { NSSound(named: "Glass")?.play() }
-        if kind == .pomodoro && canStartBreak { message += " 可以开始 \(data.preferences.breakMinutes) 分钟休息。" }
-        if data.levelProgress.level>previousLevel {message += " 升到 \(data.levelProgress.level) 级了。"}
-        save()
+        if run.kind == .pomodoro && canStartBreak { message += " 可以开始 \(data.preferences.breakMinutes) 分钟休息。" }
+        if data.levelProgress.level > previousLevel { message += " 升到 \(data.levelProgress.level) 级了。" }
         refreshTimerReminder()
+        return true
+    }
+    @discardableResult
+    func updateFocusSession(_ id: UUID, title: String, notes: String, mood: String?, moodSymbol: String? = nil, moodImage: Data? = nil,
+                            taskAction: FocusTaskAction = .none, rescheduleDate: Date? = nil, at date: Date = Date()) -> Bool {
+        guard !storageLocked else { return false }
+        let previous = data
+        guard data.editFocusSession(id, title: title, notes: notes, mood: mood, moodSymbol: moodSymbol, moodImage: moodImage,
+                                    taskAction: taskAction, rescheduleDate: rescheduleDate, at: date, calendar: calendar) else {
+            error = "无法保存，请检查记录内容和关联任务。"; return false
+        }
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        refreshReminders()
+        return true
+    }
+    @discardableResult
+    func updateFocusFeedback(_ id: UUID, feedback: String, at date: Date = Date()) -> Bool {
+        let feedback = feedback.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !storageLocked, !feedback.isEmpty, feedback.count <= 4000, let index = data.sessions.firstIndex(where: { $0.id == id && $0.kind != .rest }) else { return false }
+        let previous = data
+        data.sessions[index].aiFeedback = feedback
+        data.sessions[index].aiReviewedAt = date
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        return true
     }
 
     func setTyping(_ enabled: Bool, requestPermission: Bool = true) {

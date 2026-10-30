@@ -95,6 +95,8 @@ struct TaskOccurrence: Identifiable, Equatable {
     var scheduledDay: String?
     var revisionID: UUID?
     var completedAt: Date?
+    var rescheduledDay: String? = nil
+    var displayDay: String? { rescheduledDay ?? scheduledDay }
     var id: String { revisionID.map { task.id.uuidString + "/" + $0.uuidString + "/" + scheduledDay! } ?? task.id.uuidString }
 }
 
@@ -104,17 +106,25 @@ extension AppData {
     }
     func taskOccurrences(from start: Date, through end: Date, calendar: Calendar) -> [TaskOccurrence] {
         let completed = Dictionary(uniqueKeysWithValues: (recurringTaskCompletions ?? []).map { ($0.id, $0.completedAt) })
+        let reschedules = Dictionary(uniqueKeysWithValues: (taskOccurrenceReschedules ?? []).map { ($0.id, $0) })
         let days = Recurrence.days(from: start, through: end, calendar: calendar)
+        let first = CalendarDates.key(start, calendar: calendar), last = CalendarDates.key(end, calendar: calendar)
         return tasks.flatMap { task -> [TaskOccurrence] in
             guard task.scheduleRevisions != nil else { return [TaskOccurrence(task: task, completedAt: task.completedAt)] }
-            return days.compactMap { day in
-                guard let revision = Recurrence.revision(task.scheduleRevisions, on: day, calendar: calendar), revision.occurs(on: day, calendar: calendar) else { return nil }
-                var occurrence = TaskOccurrence(task: task, scheduledDay: CalendarDates.key(day, calendar: calendar), revisionID: revision.id)
+            var originalDays = Set(days.map { CalendarDates.key($0, calendar: calendar) })
+            for overlay in reschedules.values where overlay.taskID == task.id && overlay.rescheduledDay >= first && overlay.rescheduledDay <= last { originalDays.insert(overlay.scheduledDay) }
+            return originalDays.sorted().compactMap { key in
+                guard let day = Recurrence.date(key, calendar: calendar),
+                      let revision = Recurrence.revision(task.scheduleRevisions, on: day, calendar: calendar), revision.occurs(on: day, calendar: calendar) else { return nil }
+                var occurrence = TaskOccurrence(task: task, scheduledDay: key, revisionID: revision.id)
+                if let overlay = reschedules[occurrence.id] { occurrence.rescheduledDay = overlay.rescheduledDay }
+                guard let displayDay = occurrence.displayDay, displayDay >= first && displayDay <= last else { return nil }
                 occurrence.completedAt = completed[occurrence.id]
                 return occurrence
             }
         }
     }
+
     mutating func migrateRecurrences(at date: Date, calendar: Calendar) {
         let key = CalendarDates.key(date, calendar: calendar)
         for i in habits.indices {
@@ -122,12 +132,13 @@ extension AppData {
             if habits[i].messageLibrary == nil { habits[i].messageLibrary = ReminderTextLibrary(texts: [habits[i].encouragement ?? ""]) }
         }
         for i in tasks.indices where tasks[i].messageLibrary == nil { tasks[i].messageLibrary = ReminderTextLibrary() }
-        version = 3
+        version = max(version, 4)
     }
 }
 
 extension Habit {
     func isScheduled(on date: Date, calendar: Calendar) -> Bool {
+        if let archivedAt, calendar.startOfDay(for: date) > calendar.startOfDay(for: archivedAt) { return false }
         guard scheduleRevisions != nil else { return true }
         return Recurrence.revision(scheduleRevisions, on: date, calendar: calendar)?.occurs(on: date, calendar: calendar) ?? false
     }

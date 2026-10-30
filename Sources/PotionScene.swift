@@ -36,7 +36,7 @@ struct PotionScene:View {
                         Palette.paper.opacity(0.55).allowsHitTesting(false)
                         Text("等级 8 解锁").font(.headline).padding(14).magicSurface(Palette.paper)
                     }
-                    SceneArrows(store:store,scene:JourneyKind.potions.rawValue)
+                    SceneArrows(store:store,scene:"炼金室")
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
             } sidebar: {cabinet}
             if let trip,brewing {
@@ -90,17 +90,18 @@ struct PotionScene:View {
         } else {recipes=true}
     }
     private var recipeWindow:some View {
-        VStack(alignment:.leading,spacing:14) {
+        SceneDialog(preferred:CGSize(width:550,height:420)) {
             HStack {Text(brewing ? "正在熬制":"选择配方").font(.title3);Spacer();Button("关闭"){recipes=false}}
-            if brewing,let trip {
-                let potion=Potion.all.first{$0.id == trip.recipe}
-                Text(potion?.name ?? "魔药").font(.headline)
-                Text(potion?.benefit ?? "").font(.caption).foregroundStyle(Palette.muted)
-                PixelProgress(value:trip.progress(store.data.totalFocus))
-                Text("熬制需要累计 15 分钟专注").font(.caption)
-            } else {
-                Text("桌上："+(selection.portions.isEmpty ? "尚未选材":selection.portions.map(\.name).joined(separator:" + "))).font(.caption).foregroundStyle(Palette.goldLight)
-                PixelScrollView {
+        } content: {
+            VStack(alignment:.leading,spacing:14) {
+                if brewing,let trip {
+                    let potion=Potion.all.first{$0.id == trip.recipe}
+                    Text(potion?.name ?? "魔药").font(.headline)
+                    Text(potion?.benefit ?? "").font(.caption).foregroundStyle(Palette.muted)
+                    PixelProgress(value:trip.progress(store.data.totalFocus))
+                    Text("熬制需要累计 15 分钟专注").font(.caption)
+                } else {
+                    Text("桌上："+(selection.portions.isEmpty ? "尚未选材":selection.portions.map(\.name).joined(separator:" + "))).font(.caption).foregroundStyle(Palette.goldLight)
                     ForEach(Potion.all) {potion in
                         let matches=selection.matches(potion)
                         HStack(spacing:12) {
@@ -115,9 +116,10 @@ struct PotionScene:View {
                         }.padding(12).magicSurface(matches ? Palette.card:Palette.paper)
                     }
                 }
-                Text(trip == nil ? "熬制用时：15 分钟专注":"进行中：\(trip!.kind.rawValue)").font(.caption).foregroundStyle(Palette.muted)
             }
-        }.padding(20).frame(width:550,height:365).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
+        } footer: {
+            Text(trip == nil ? "熬制用时：15 分钟专注":"进行中：\(trip!.kind == .potions ? "炼金室":trip!.kind.rawValue)").font(.caption).foregroundStyle(Palette.muted)
+        }
     }
     private func brew(_ potion:Potion) {
         guard selection.matches(potion) else{return}

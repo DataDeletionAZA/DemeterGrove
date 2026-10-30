@@ -6,6 +6,7 @@ struct ReminderPhrase: Codable, Equatable, Identifiable {
 }
 
 struct ReminderTextLibrary: Codable, Equatable {
+    static let maximumTextLength = 4000
     var phrases: [ReminderPhrase] = []
     var used: Set<UUID> = []
     var lastID: UUID?
@@ -23,7 +24,7 @@ struct ReminderTextLibrary: Codable, Equatable {
     }
     var isValid: Bool {
         Set(phrases.map(\.id)).count == phrases.count && Set(phrases.map(\.text)).count == phrases.count &&
-        phrases.allSatisfy { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } && used.isSubset(of: Set(phrases.map(\.id))) && (lastID.map { id in phrases.contains { $0.id == id } } ?? true)
+        phrases.allSatisfy { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text.count <= Self.maximumTextLength } && used.isSubset(of: Set(phrases.map(\.id))) && (lastID.map { id in phrases.contains { $0.id == id } } ?? true)
     }
     mutating func reserve(_ id: UUID) -> Bool {
         guard phrases.contains(where: { $0.id == id }) else { return false }
@@ -71,7 +72,7 @@ extension AppData {
             guard let fire = calendar.date(bySettingHour: minutes/60, minute: minutes%60, second: 0, of: day), fire > now else { return nil }
             return ReminderAssignment(id: id, ownerID: ownerID, isHabit: habit, fireAt: fire, title: title, text: "")
         }
-        for habit in habits {
+        for habit in habits where habit.archivedAt == nil {
             guard let minutes = habit.reminderMinutes else { continue }
             for day in days where habit.isScheduled(on: day, calendar: calendar) && !habit.days.contains(CalendarDates.key(day, calendar: calendar)) && habit.checkIns?[CalendarDates.key(day, calendar: calendar)]?.status != .pending {
                 if let value = event(id: "habit-"+habit.id.uuidString+"-"+CalendarDates.key(day, calendar: calendar), ownerID: habit.id, habit: true, day: day, minutes: minutes, title: "习惯提醒："+habit.title) { events.append(value) }
@@ -79,7 +80,7 @@ extension AppData {
         }
         for occurrence in taskOccurrences(from: now, through: last, calendar: calendar) where occurrence.completedAt == nil {
             guard let minutes = occurrence.task.reminderMinutes else { continue }
-            let day = occurrence.scheduledDay.flatMap { Recurrence.date($0, calendar: calendar) } ?? occurrence.task.due
+            let day = occurrence.displayDay.flatMap { Recurrence.date($0, calendar: calendar) } ?? occurrence.task.due
             guard let day, calendar.startOfDay(for: day) >= calendar.startOfDay(for: now), calendar.startOfDay(for: day) <= calendar.startOfDay(for: last) else { continue }
             if let value = event(id: "task-"+occurrence.id, ownerID: occurrence.task.id, habit: false, day: day, minutes: minutes, title: "任务提醒："+occurrence.task.title) { events.append(value) }
         }

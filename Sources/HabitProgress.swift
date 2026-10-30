@@ -52,8 +52,9 @@ func validDayKey(_ key: String) -> Bool {
 extension Habit {
     var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        (archivedAt.map { $0.timeIntervalSince1970.isFinite } ?? true) &&
         (reminderMinutes.map { (0..<1440).contains($0) } ?? true) &&
-        (encouragement?.count ?? 0) <= 300 && Recurrence.valid(scheduleRevisions) && (messageLibrary?.isValid ?? true) && days.allSatisfy(validDayKey) &&
+        (encouragement?.count ?? 0) <= ReminderTextLibrary.maximumTextLength && Recurrence.valid(scheduleRevisions) && (messageLibrary?.isValid ?? true) && days.allSatisfy(validDayKey) &&
         (checkIns ?? [:]).allSatisfy { key, entry in
             validDayKey(key) && entry.isValid &&
             (entry.status != .approved || days.contains(key))
@@ -73,7 +74,7 @@ extension AppData {
     mutating func submitHabitEvidence(_ id: UUID, date: Date, text: String, image: Data?, now: Date = Date()) -> Bool {
         guard Calendar.current.isDate(date, inSameDayAs: now), let i = habits.firstIndex(where: { $0.id == id }) else { return false }
         let key = dayKey(now)
-        guard !habits[i].days.contains(key) else { return false }
+        guard habits[i].archivedAt == nil, !habits[i].days.contains(key) else { return false }
         let entry = HabitCheckIn(text: text.trimmingCharacters(in: .whitespacesAndNewlines), image: image, submittedAt: now)
         guard entry.isValid else { return false }
         if habits[i].checkIns == nil { habits[i].checkIns = [:] }
@@ -83,14 +84,14 @@ extension AppData {
     mutating func cancelHabitSubmission(_ id: UUID, date: Date, now: Date = Date()) -> Bool {
         guard Calendar.current.isDate(date, inSameDayAs: now),
               let i = habits.firstIndex(where: { $0.id == id }),
-              habits[i].checkIns?[dayKey(now)]?.status == .pending else { return false }
+              habits[i].archivedAt == nil, habits[i].checkIns?[dayKey(now)]?.status == .pending else { return false }
         habits[i].checkIns?.removeValue(forKey: dayKey(now))
         return true
     }
     mutating func applyHabitReview(_ id: UUID, day: String, approved: Bool, feedback: String, now: Date = Date()) -> HabitReward? {
         guard day == dayKey(now), feedback.count <= 1000,
               let i = habits.firstIndex(where: { $0.id == id }),
-              var entry = habits[i].checkIns?[day], entry.isValid,
+              habits[i].archivedAt == nil, var entry = habits[i].checkIns?[day], entry.isValid,
               entry.status == .pending, Calendar.current.isDate(entry.submittedAt, inSameDayAs: now), now >= entry.submittedAt else { return nil }
         entry.status = approved ? .approved : .rejected
         entry.reviewedAt = now
@@ -123,10 +124,12 @@ extension AppData {
         habitProgress = progress
         return HabitReward(coins: coins, milestones: milestones)
     }
-    mutating func removeHabit(_ id: UUID) {
+    mutating func removeHabit(_ id: UUID, now: Date = Date()) {
         var progress = habitProgress ?? HabitProgress(days: habitDays, pastMilestones: Set(HabitProgress.milestones.filter { $0 <= habitDays.count }))
         progress.days.formUnion(habitDays)
         habitProgress = progress
-        habits.removeAll { $0.id == id }
+        if let index = habits.firstIndex(where: { $0.id == id }), habits[index].archivedAt == nil {
+            habits[index].archivedAt = now
+        }
     }
 }

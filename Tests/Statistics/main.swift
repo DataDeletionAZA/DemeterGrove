@@ -67,3 +67,46 @@ assert(HabitDayState.value(for:habit, on:today, today:today, calendar:calendar) 
 assert(HabitDayState.value(for:habit, on:date(2030, 2, 14), today:today, calendar:calendar) == .empty)
 assert(HabitDayState.value(for:habit, on:date(2030, 2, 16), today:today, calendar:calendar) == .upcoming)
 print("PASS: weekly habit card states distinguish completed, pending, rejected, missing and upcoming days")
+
+let yearPeriod = StatsPeriod(date: date(2032, 8, 15), range: .year, calendar: calendar)
+assert(yearPeriod.days.count == 366 && key(yearPeriod.start) == "2032-01-01" && key(yearPeriod.end) == "2033-01-01")
+assert(key(yearPeriod.shifted(-1)) == "2031-08-15")
+let midnight = date(2030, 2, 1, 0)
+let beforeMidnight = midnight.addingTimeInterval(-600), afterMidnight = midnight.addingTimeInterval(900)
+var crossing = AppData()
+crossing.sessions = [
+    FocusSession(id: UUID(), title: "跨日阅读", kind: .stopwatch, date: afterMidnight, seconds: 1200,
+                 beganAt: beforeMidnight, endedAt: afterMidnight,
+                 segments: [FocusInterval(beganAt: beforeMidnight, endedAt: midnight), FocusInterval(beganAt: midnight.addingTimeInterval(300), endedAt: afterMidnight)],
+                 pauseIntervals: [FocusInterval(beganAt: midnight, endedAt: midnight.addingTimeInterval(300))]),
+    FocusSession(id: UUID(), title: "休息", kind: .rest, date: afterMidnight, seconds: 600,
+                 beganAt: midnight.addingTimeInterval(300), endedAt: afterMidnight,
+                 segments: [FocusInterval(beganAt: midnight.addingTimeInterval(300), endedAt: afterMidnight)], pauseIntervals: [])
+]
+let januarySummary = StatsSummary(data: crossing, period: StatsPeriod(date: date(2030, 1, 31), range: .month, calendar: calendar))
+let februarySummary = StatsSummary(data: crossing, period: february)
+assert(januarySummary.seconds == 600 && januarySummary.sessions == 1 && januarySummary.restSeconds == 0)
+assert(februarySummary.seconds == 600 && februarySummary.sessions == 1 && februarySummary.restSeconds == 600 && februarySummary.restSessions == 1 && februarySummary.pausedSeconds == 300)
+let fullYear = StatsPeriod(date: date(2030, 2, 15), range: .year, calendar: calendar)
+let months = StatsMonth.months(data: crossing, year: fullYear)
+assert(months.count == 12 && months[0].summary.seconds == 600 && months[1].summary.seconds == 600)
+assert(months.reduce(0) { $0 + $1.summary.seconds } == StatsSummary(data: crossing, period: fullYear).seconds)
+let archivedDay = key(date(2030, 2, 5))
+crossing.habits = [Habit(title: "归档阅读", days: [archivedDay], archivedAt: date(2030, 2, 10))]
+assert(StatsSummary(data: crossing, period: february).habitCompletions == 1)
+let febRecords = DailyRecords(date: midnight, calendar: calendar)
+let janRecords = DailyRecords(date: beforeMidnight, calendar: calendar)
+assert(febRecords.sessions(in: crossing).count == 2 && janRecords.sessions(in: crossing).count == 1)
+crossing.events = [Appointment(title: "跨日", start: beforeMidnight, end: midnight), Appointment(title: "当天", start: midnight, end: afterMidnight)]
+assert(febRecords.events(in: crossing).map(\.title) == ["当天"] && janRecords.events(in: crossing).map(\.title) == ["跨日"])
+let habitRecords = DailyRecords(date: date(2030, 2, 5), calendar: calendar).habits(in: crossing)
+assert(habitRecords.count == 1 && habitRecords[0].habit.archivedAt != nil)
+let revision = ScheduleRevision(effectiveFrom: "2030-01-01", anchor: "2030-01-01", rule: RepeatRule(), firstWeekday: 2)
+let task = GardenTask(title: "每日阅读", scheduleRevisions: [revision])
+crossing.tasks = [task]
+assert(febRecords.tasks(in: crossing).count == 1)
+let occurrence = febRecords.tasks(in: crossing)[0]
+crossing.taskOccurrenceReschedules = [TaskOccurrenceReschedule(id: occurrence.id, taskID: task.id, scheduledDay: "2030-02-01", rescheduledDay: "2030-02-02", updatedAt: midnight)]
+assert(febRecords.tasks(in: crossing).isEmpty)
+assert(DailyRecords(date: date(2030, 2, 2), calendar: calendar).tasks(in: crossing).count == 2)
+print("PASS: annual leap-year months, cross-midnight focus/rest/pause allocation, legacy focus compatibility, archived habit statistics, half-open appointments, unique-source daily records and recurring task rescheduling")

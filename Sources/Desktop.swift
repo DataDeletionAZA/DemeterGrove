@@ -6,7 +6,7 @@ import UserNotifications
 let desktopTools: [(String, String)] = [
     ("任务", "checklist"), ("计时器", "timer"),
     ("日程", "calendar"), ("习惯", "checkmark.circle"), ("日记", "book.closed"),
-    ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("统计", "chart.bar"),
+    ("书房", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
     ("成长", "sparkles"), ("地图", "map"), ("衣柜", "tshirt")
 ]
 
@@ -99,7 +99,12 @@ final class PetController {
     private var toastSubscription: AnyCancellable?
     private var menuSide: PetMenuSide?
     private var toolSide: PetMenuSide?
-    private var toolHistory: [String] = []
+    private var inventoryPanel:NSPanel?
+    private var inventorySide:PetMenuSide?
+    private var inventoryObserver:NSObjectProtocol?
+    private var inventoryResizeObserver:NSObjectProtocol?
+    private var resizingInventory=false
+    private var focusReviewSubscription:AnyCancellable?
     private var toolViews: [String: NSHostingView<ToolPanelView>] = [:]
     private var positioning = false
     private var resizingTool = false
@@ -155,12 +160,25 @@ final class PetController {
             guard let self else { return }
             self.toast.show(message,anchor:{ [weak self] in self?.toastAnchor ?? .zero },cleared:{ [weak self] in self?.store.message = "" })
         }
+        inventoryObserver=NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:nil,queue:.main) { [weak self] notice in
+            guard let self,let moved=notice.object as? NSWindow,moved === self.manager || moved === self.toolPanel else{return}
+            self.positionInventory()
+        }
+        inventoryResizeObserver=NotificationCenter.default.addObserver(forName:NSWindow.didResizeNotification,object:nil,queue:.main) { [weak self] notice in
+            guard let self,let resized=notice.object as? NSWindow,resized === self.manager || resized === self.toolPanel else{return}
+            self.positionInventory()
+        }
+        focusReviewSubscription=store.$pendingFocusReviewID.receive(on:RunLoop.main).sink { [weak self] id in
+            if id != nil {self?.openTool("计时器")}
+        }
         positionChanged()
     }
     deinit {
         if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+        if let inventoryObserver {NotificationCenter.default.removeObserver(inventoryObserver)}
+        if let inventoryResizeObserver {NotificationCenter.default.removeObserver(inventoryResizeObserver)}
         if let localClicks { NSEvent.removeMonitor(localClicks) }
         if let globalClicks { NSEvent.removeMonitor(globalClicks) }
     }
@@ -199,6 +217,7 @@ final class PetController {
         store.petFacingRight = PetPlacement.facingRight(pet: panel.frame, screen: area, previous: store.petFacingRight)
         if menuPanel.isVisible { positionMenu() }
         if toolPanel?.isVisible == true, !resizingTool { positionTool() }
+        positionInventory()
         toast.position()
     }
     private func positionMenu() {
@@ -227,21 +246,21 @@ final class PetController {
     func hide() { dismissFloating(); panel.orderOut(nil) }
     func closeMenu() { panel.removeChildWindow(menuPanel); menuPanel.orderOut(nil); menuSide = nil }
     func closeTool() {
+        closeInventory()
         if let toolPanel { panel.removeChildWindow(toolPanel); toolPanel.orderOut(nil); toolPanel.contentView = nil }
         toolViews.removeAll()
-        toolHistory.removeAll()
         toolSide = nil
     }
     private func dismissFloating() { closeMenu(); closeTool() }
     func back() {
-        if let previous = toolHistory.popLast() { showTool(previous) }
-        else { closeTool(); showMenu() }
+        let route=managerIsOpen ? store.selectedPage:store.activeTool
+        if let parent=SceneNavigation.parent(of:route) {openTool(parent)}
+        else {manager?.orderOut(nil);closeTool();showMenu()}
     }
     func toggleMenu() {
         if managerIsOpen { openManager(); return }
         if menuPanel.isVisible { menuPanel.makeKeyAndOrderFront(nil); return }
         closeTool()
-        toolHistory.removeAll()
         showMenu()
     }
     private func showMenu() {
@@ -252,21 +271,19 @@ final class PetController {
         menuPanel.makeKeyAndOrderFront(nil)
     }
     func openTool(_ name: String) {
-        let name = ["待办":"任务", "四象限":"任务", "专注":"计时器"][name] ?? name
+        let name=SceneNavigation.canonical(name)
         if managerIsOpen {
             store.selectedPage = ["待办":"任务", "计时器":"专注"][name] ?? name
             openManager()
             return
         }
-        if toolPanel?.isVisible == true, store.activeTool != name { toolHistory.append(store.activeTool) }
-        else if menuPanel.isVisible || toolPanel?.isVisible != true { toolHistory.removeAll() }
         closeMenu()
         showTool(name)
     }
     private func showTool(_ name: String) {
         if name == "统计" {store.previewMotion(.review)}
         store.activeTool = name
-        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "湖畔钓鱼", "林间冒险", "熬制魔药", "衣柜"].contains(name)
+        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "湖畔钓鱼", "林间冒险", "炼金室", "衣柜"].contains(name)
         let wide = name == "任务" || game
         let preserveSize = toolPanel?.isVisible == true
         if toolPanel == nil {
@@ -286,7 +303,7 @@ final class PetController {
         guard let toolPanel else { return }
         if toolViews[name] == nil { toolViews[name] = NSHostingView(rootView: ToolPanelView(store: store, tool: name)) }
         toolPanel.contentView = toolViews[name]
-        toolPanel.title = name
+        toolPanel.title = SceneNavigation.title(name)
         let area = screenArea
         toolPanel.minSize = NSSize(width: min(game ? 640 : 460, area.width-16), height: min(420,area.height-16))
         if !preserveSize {
@@ -296,6 +313,36 @@ final class PetController {
         if toolPanel.parent !== panel { panel.addChildWindow(toolPanel, ordered: .above) }
         NSApp.activate(ignoringOtherApps: true)
         toolPanel.makeKeyAndOrderFront(nil)
+    }
+    func openInventory() {
+        if inventoryPanel == nil {
+            let inventory=MagicPanel(contentRect:.zero,styleMask:[.borderless,.resizable],backing:.buffered,defer:false)
+            inventory.isOpaque=false;inventory.backgroundColor = .clear;inventory.hasShadow=false
+            inventory.isMovable=false;inventory.isReleasedWhenClosed=false;inventory.hidesOnDeactivate=false
+            inventory.level = .floating;inventory.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
+            inventory.minSize=NSSize(width:340,height:300);inventory.title="库存"
+            inventory.contentView=NSHostingView(rootView:InventoryView(store:store,close:{[weak self] in self?.closeInventory()})
+                .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:340,height:300),began:{[weak self] in self?.resizingInventory=true},ended:{[weak self] in self?.resizingInventory=false;self?.positionInventory()})})
+            inventoryPanel=inventory
+            inventory.setContentSize(NSSize(width:min(580,screenArea.width-16),height:min(600,screenArea.height-16)))
+        }
+        guard let inventoryPanel else{return}
+        let host:NSWindow=(toolPanel?.isVisible == true ? toolPanel:nil) ?? (managerIsOpen ? manager:nil) ?? panel
+        if inventoryPanel.parent !== host {inventoryPanel.parent?.removeChildWindow(inventoryPanel);host.addChildWindow(inventoryPanel,ordered:.above)}
+        positionInventory();inventoryPanel.makeKeyAndOrderFront(nil)
+    }
+    func closeInventory() {
+        guard let inventoryPanel else{return}
+        inventoryPanel.parent?.removeChildWindow(inventoryPanel);inventoryPanel.orderOut(nil);inventorySide=nil
+    }
+    private func positionInventory() {
+        guard let inventoryPanel,let host=inventoryPanel.parent,!resizingInventory else{return}
+        let area=PetPlacement.screen(for:host.frame,screens:NSScreen.screens.map(\.visibleFrame))
+        if inventoryPanel.frame.width>area.width-16 || inventoryPanel.frame.height>area.height-16 {
+            inventoryPanel.setContentSize(NSSize(width:min(inventoryPanel.frame.width,area.width-16),height:min(inventoryPanel.frame.height,area.height-16)))
+        }
+        let placement=PetPlacement.menu(pet:host.frame,size:inventoryPanel.frame.size,screen:area,previous:inventorySide)
+        inventorySide=placement.1;inventoryPanel.setFrameOrigin(placement.0)
     }
     func openManager() {
         closeMenu()
@@ -454,7 +501,7 @@ struct PetMenu: View {
                             Text(run.taskTitle).font(.caption).lineLimit(1).foregroundStyle(Palette.muted)
                         }
                         Spacer()
-                        Button { run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer() } label: { Image(systemName: run.resumedAt == nil ? "play.fill" : "pause.fill") }
+                        Button { _ = run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer() } label: { Image(systemName: run.resumedAt == nil ? "play.fill" : "pause.fill") }
                         Button { store.finishTimer() } label: { Image(systemName: "stop.fill") }.help("结束并记录")
                     }.padding(10).magicSurface(Palette.paper)
                 }
@@ -491,7 +538,7 @@ struct ToolPanelView: View {
     var tool: String
     var body: some View {
         VStack(spacing: 0) {
-        MagicHeader(title: tool, draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
+        MagicHeader(title: SceneNavigation.title(tool), draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
         GeometryReader { viewport in
         PixelScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -509,9 +556,10 @@ struct ToolPanelView: View {
                     case "成长": GrowthPage(store:store)
                     case "首页": HomeScene(store:store)
                     case "书房": StudyScene(store:store)
-                    case "地图", "湖畔钓鱼": MapPage(store:store,journey:.fishing)
+                    case "地图": HomeScene(store:store)
+                    case "湖畔钓鱼": MapPage(store:store,journey:.fishing)
                     case "林间冒险": MapPage(store:store,journey:.adventure)
-                    case "熬制魔药": MapPage(store:store,journey:.potions)
+                    case "炼金室", "熬制魔药": MapPage(store:store,journey:.potions)
                     case "衣柜": WardrobePage(store:store)
                     default: SettingsPage(store: store)
                     }
@@ -524,6 +572,9 @@ struct ToolPanelView: View {
             .overlay { WindowResizeBorder(began:{store.pet?.beginToolResize()},ended:{store.pet?.finishToolResize()}) }
             .environment(\.locale, Locale(identifier: "zh_CN"))
             .environment(\.calendar,store.calendar)
+            .sheet(isPresented:Binding(get:{tool == "计时器" && store.activeTool == tool && store.pendingFocusReviewID != nil && store.pet?.managerIsOpen != true},set:{if !$0 {store.pendingFocusReviewID=nil}})) {
+                if let id=store.pendingFocusReviewID {FocusSessionEditor(store:store,sessionID:id)}
+            }
     }
 }
 

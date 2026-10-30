@@ -1,10 +1,10 @@
 import Foundation
 
 enum AIFeature: String, Codable, CaseIterable, Identifiable {
-    case taskEncouragement, habitEncouragement, habitReview
+    case taskEncouragement, habitEncouragement, habitReview, focusReview
     var id: String { rawValue }
     var title: String {
-        switch self { case .taskEncouragement:return "任务激励语";case .habitEncouragement:return "习惯激励语";case .habitReview:return "习惯审核" }
+        switch self { case .taskEncouragement:return "任务激励语";case .habitEncouragement:return "习惯激励语";case .habitReview:return "习惯审核";case .focusReview:return "专注评价" }
     }
 }
 
@@ -62,12 +62,21 @@ struct AIProfile: Codable, Equatable, Identifiable {
 struct AISettings: Codable, Equatable {
     var profiles: [AIProfile] = []
     var assignments: [String:UUID] = [:]
+    var writingPresets: [AIWritingPreset]? = nil
+    var writingAssignments: [String:UUID]? = nil
     var isValid: Bool {
         let ids = Set(profiles.map(\.id))
+        let writing = writingPresets ?? []
+        let writingIDs = Set(writing.map(\.id))
         return profiles.count<=100 && ids.count == profiles.count && profiles.allSatisfy(\.isValid) &&
-            assignments.allSatisfy { AIFeature(rawValue:$0.key) != nil && ids.contains($0.value) }
+            assignments.allSatisfy { AIFeature(rawValue:$0.key) != nil && ids.contains($0.value) } &&
+            writing.count<=100 && writingIDs.count == writing.count && writing.allSatisfy(\.isValid) &&
+            (writingAssignments ?? [:]).allSatisfy { AIFeature(rawValue:$0.key) != nil && writingIDs.contains($0.value) }
     }
     func profile(for feature:AIFeature) -> AIProfile? {
         profiles.first { $0.id == assignments[feature.rawValue] }
+    }
+    func writing(for feature: AIFeature) -> AIWritingPreset {
+        (writingPresets ?? []).first { $0.id == writingAssignments?[feature.rawValue] } ?? .standard
     }
 }
