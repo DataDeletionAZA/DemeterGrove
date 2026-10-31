@@ -35,6 +35,10 @@ struct AIEncouragementView:View {
     @State private var selected:Set<Int>=[]
     @State private var error=""
     @State private var working=false
+    @State private var batchNumber=0
+    @State private var batchTotal=0
+    @State private var receivedCharacters=0
+    @State private var batchStarted=Date()
     @State private var request:Task<Void,Never>?
     @State private var requestID=UUID()
     private var profile:AIProfile? {store.data.ai?.profile(for:feature)}
@@ -73,6 +77,13 @@ struct AIEncouragementView:View {
                 Text("请先在设置中为\(feature.title)选择一个 API 预设。").foregroundStyle(Palette.muted)
                 Button("打开设置") {close();store.selectedPage="设置";store.pet?.openTool("设置")}
             }
+            if working {
+                TimelineView(.periodic(from:batchStarted,by:1)) {context in
+                    let seconds=max(0,Int(context.date.timeIntervalSince(batchStarted)))
+                    Text((receivedCharacters>0 ? "正在生成 · 已收到 \(receivedCharacters) 字":"等待正文") + " · 第 \(batchNumber)/\(batchTotal) 批 · \(seconds) 秒")
+                        .font(.callout).foregroundStyle(Palette.goldLight).accessibilityIdentifier("generation-progress")
+                }
+            }
             if !error.isEmpty {Text(error).font(.callout).foregroundStyle(Palette.clay)}
             if !phrases.isEmpty {
                     VStack(spacing:10) {
@@ -110,6 +121,8 @@ struct AIEncouragementView:View {
         cancel();error="";working=true
         let id=requestID, target=count, chosenLength=length, extra=preferences
         let writing=store.data.ai?.writing(for:feature) ?? .standard
+        batchTotal=(target+chosenLength.batchSize-1)/chosenLength.batchSize
+        batchNumber=0;receivedCharacters=0
         request=Task { @MainActor in
             var generated:[String]=[]
             do {
@@ -119,7 +132,14 @@ struct AIEncouragementView:View {
                         error="预设已变化，已生成内容仍保留。";break
                     }
                     let amount=min(chosenLength.batchSize,target-generated.count)
-                    let batch=try await client.encouragement(profile:profile,feature:feature,subject:subject,preferences:extra,count:amount,length:chosenLength,writing:writing,previous:generated)
+                    batchNumber+=1;receivedCharacters=0;batchStarted=Date()
+                    let currentBatch=batchNumber
+                    let batch=try await client.encouragement(profile:profile,feature:feature,subject:subject,preferences:extra,count:amount,length:chosenLength,writing:writing,previous:generated,onTextCount:{count in
+                        Task { @MainActor in
+                            guard requestID == id,working,batchNumber == currentBatch else{return}
+                            receivedCharacters=max(receivedCharacters,count)
+                        }
+                    })
                     guard !Task.isCancelled,requestID==id else{return}
                     guard store.data.ai?.profile(for:feature)==profile,(store.data.ai?.writing(for:feature) ?? .standard)==writing else {
                         error="预设已变化，已生成内容仍保留。";break

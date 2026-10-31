@@ -142,7 +142,7 @@ private final class Stub:URLProtocol,@unchecked Sendable {
         let chatRequest=try client.generationRequest(profile:chat,key:"mock-key",feature:.habitEncouragement,subject:"喝水",tone:"平静",preferences:"")
         let chatBody=try JSONSerialization.jsonObject(with:chatRequest.httpBody!) as! [String:Any]
         check(chatRequest.url!.path == "/v1/chat/completions" && (chatBody["messages"] as? [[String:String]])?.count == 2,"chat serialization")
-        check(chatBody["stream"] as? Bool == false,"nonstream request")
+        check(chatBody["stream"] as? Bool == true,"streaming generation request")
         let multi:[String:Any]=["output":[["type":"reasoning","summary":[]],["type":"message","content":[["type":"output_text","text":"一"],["type":"refusal","refusal":"忽略"],["type":"output_text","text":"二"]]],["type":"message","content":[["type":"output_text","text":"三"]]]]]
         let all=try AIClient.output(from:JSONSerialization.data(withJSONObject:multi),format:.responses)
         check(all == "一\n二\n三","all response items and text content")
