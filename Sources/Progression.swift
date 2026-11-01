@@ -35,16 +35,16 @@ enum Upgrade: String, Codable, CaseIterable, Identifiable {
     }
     var limit: Int { self == .farmland || self == .storefront ? 2 : 3 }
     var icon: Int { switch self {case .soil,.farmland:return 3;case .watering:return 4;case .kitchen:return 5;case .rod:return 6;case .wand:return 7;case .shop,.storefront:return 9} }
-    func price(_ rank: Int) -> Int { (self == .farmland || self == .storefront ? 493 : 232) * (rank+1)*(rank+1) }
+    func price(_ rank: Int) -> Int { EconomyBalance.upgradePrice(self,rank:rank) }
     func level(_ rank:Int) -> Int { (self == .rod ? 3 : self == .wand ? 5 : 2) + rank*2 }
     var effect: String {
         switch self {
         case .soil:return "每级让每块地多收获 1 份食材"
         case .watering:return "每级让新播种作物的生长时间缩短 10%"
-        case .kitchen:return "每级让新制作料理的品质提高 5 点"
+        case .kitchen:return "每级让新制作料理的品质提高 5 点，新上架售价增加 1 铜纳特"
         case .rod:return "每级让钓鱼所需专注减少 2 分钟"
         case .wand:return "每级让探险多获得 1 份材料"
-        case .shop:return "每级让新上架料理的售价提高 10%"
+        case .shop:return "每级让新上架料理的售价增加 2 铜纳特"
         case .farmland:return "每次新增一片有 6 块地的农场"
         case .storefront:return "每次增加 2 个可同时售卖的陈列位"
         }
@@ -52,13 +52,13 @@ enum Upgrade: String, Codable, CaseIterable, Identifiable {
 }
 
 enum ClothingSlot: String, Codable, CaseIterable, Identifiable {
-    case outfit, top, bottom, outer, neck, wrist, socks, head, face, shoes
+    case outfit, top, bottom, outer, neck, wrist, socks, head, face, shoes, focusOutfit
     var id:String {rawValue}
-    var isAccessory:Bool { ![.outfit,.top,.bottom,.outer].contains(self) }
+    var isAccessory:Bool { ![.outfit,.top,.bottom,.outer,.focusOutfit].contains(self) }
     var name:String {
         switch self {
         case .outfit:return "整套";case .top:return "上衣";case .bottom:return "下装"
-        case .outer:return "外套"
+        case .outer:return "外套";case .focusOutfit:return "专注套装"
         case .neck:return "围巾";case .wrist:return "手饰";case .socks:return "袜子"
         case .head:return "头饰";case .face:return "面饰";case .shoes:return "鞋"
         }
@@ -104,7 +104,8 @@ struct Cosmetic: Identifiable {
         .init(id:"glasses",name:"细框眼镜",slot:.face,asset:"FaceGlasses",price:58,level:1),
         .init(id:"mask",name:"黑色口罩",slot:.face,asset:"FaceMask",price:58,level:1),
         .init(id:"blackShoes",name:"黑色皮鞋",slot:.shoes,asset:"ShoesBlack",price:87,level:1),
-        .init(id:"boots",name:"棕色短靴",slot:.shoes,asset:"ShoesBoots",price:116,level:2)
+        .init(id:"boots",name:"棕色短靴",slot:.shoes,asset:"ShoesBoots",price:116,level:2),
+        .init(id:"focusSuit",name:"书房常服",slot:.focusOutfit,asset:"FocusSuit",price:174,level:2)
     ]
 }
 
@@ -130,9 +131,9 @@ struct Potion: Identifiable {
     var price: Int
     var benefit: String
     static let all: [Potion] = [
-        .init(id:"dew",name:"丰沛露水",ingredient:"薄荷",material:"月光草",price:116,benefit:"使用后获得 6 滴露水"),
-        .init(id:"seed",name:"萌芽药剂",ingredient:"南瓜",material:"琥珀石",price:174,benefit:"使用后获得 3 袋种子"),
-        .init(id:"bloom",name:"繁盛药剂",ingredient:"草莓",material:"星砂",price:232,benefit:"使用后让当前已种作物增加 5 分钟生长进度")
+        .init(id:"dew",name:"丰沛露水",ingredient:"薄荷",material:"月光草",price:42,benefit:"使用后获得 6 滴露水"),
+        .init(id:"seed",name:"萌芽药剂",ingredient:"南瓜",material:"琥珀石",price:60,benefit:"使用后获得 3 袋种子"),
+        .init(id:"bloom",name:"繁盛药剂",ingredient:"草莓",material:"星砂",price:65,benefit:"使用后让当前已种作物增加 5 分钟生长进度")
     ]
 }
 
@@ -179,7 +180,7 @@ extension AppData {
     var consumedActions:Int { garden.economy.redeemedActions ?? garden.economy.redeemedKeys*1000 }
     var typingReward: Int { max(0,(totalActions-consumedActions)/10000) }
     var harvestYield: Int { 2 + garden.rank(.soil) }
-    func salePrice(_ dish:Dish) -> Int { dish.price*29*(10+garden.rank(.shop))/10 }
+    func salePrice(_ dish:Dish) -> Int { EconomyBalance.salePrice(dish,shopRank:garden.rank(.shop),kitchenRank:garden.rank(.kitchen)) }
     mutating func redeemTyping() -> Bool {
         let amount=typingReward
         guard amount>0 else{return false}
@@ -243,7 +244,7 @@ extension AppData {
     }
     func findPrice(_ item:String) -> Int {
         if let potion=Potion.all.first(where:{$0.id == item}) {return potion.price}
-        return ["银鳞鱼":58,"月光鱼":87,"金纹鱼":116,"月光草":29,"琥珀石":58,"星砂":87][item] ?? 0
+        return ["银鳞鱼":12,"月光鱼":20,"金纹鱼":30,"月光草":15,"琥珀石":25,"星砂":35][item] ?? 0
     }
     mutating func sellFind(_ item:String) -> Bool {
         let price=findPrice(item)

@@ -97,6 +97,8 @@ final class PetController {
     private var globalClicks: Any?
     private let toast = ToastController()
     private var toastSubscription: AnyCancellable?
+    private var petSpeechBubble: PetDialogueBubbleController?
+    private var petSpeechSubscription: AnyCancellable?
     private var menuSide: PetMenuSide?
     private var toolSide: PetMenuSide?
     private var inventoryPanel:NSPanel?
@@ -160,6 +162,11 @@ final class PetController {
             guard let self else { return }
             self.toast.show(message,anchor:{ [weak self] in self?.toastAnchor ?? .zero },cleared:{ [weak self] in self?.store.message = "" })
         }
+        petSpeechBubble = PetDialogueBubbleController(store: store, anchor: { [weak self] in
+            guard let self, self.panel.isVisible else { return nil }
+            return self.panel.frame
+        })
+        petSpeechSubscription = store.$petSpeech.sink { [weak self] speech in self?.petSpeechBubble?.show(speech) }
         inventoryObserver=NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:nil,queue:.main) { [weak self] notice in
             guard let self,let moved=notice.object as? NSWindow,moved === self.manager || moved === self.toolPanel else{return}
             self.positionInventory()

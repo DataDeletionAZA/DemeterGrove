@@ -202,6 +202,11 @@ private final class Stub:URLProtocol,@unchecked Sendable {
             racing.cancel()
             do {_ = try await racing.value;check(true,"completion settles once")} catch {check(error is CancellationError,"cancel race settles once")}
         }
+        let dialogueRequest = try client.generationRequest(profile:profile,key:"mock-key",feature:.petDialogue,subject:"点击桌宠 · 微笑",count:3,length:.long)
+        let dialogueBody = try JSONSerialization.jsonObject(with:dialogueRequest.httpBody!) as! [String:Any]
+        let dialogueInstructions = dialogueBody["instructions"] as! String
+        check(dialogueInstructions.contains("不超过160字") && !dialogueInstructions.contains("最多4000字"),"pet dialogue request keeps a short readable limit even with long length selected")
+        check(dialogueBody["stream"] as? Bool == true && dialogueBody["store"] as? Bool == false,"pet dialogue uses streaming without remote storage")
         try await reviewChecks(client:client,profile:profile)
         print("AI: \(checks) checks passed; mock transport only")
     }

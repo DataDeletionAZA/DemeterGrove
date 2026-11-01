@@ -31,7 +31,7 @@ struct GrowthPage: View {
                 Spacer()
                 Button("兑换 \(store.data.typingReward) 铜纳特") {
                     let value=store.data.typingReward
-                    if store.data.redeemTyping(){store.message="兑换了 \(value) 铜纳特。"}
+                    if store.commitGameChange({$0.redeemTyping()}){store.message="兑换了 \(value) 铜纳特。"}
                 }.disabled(store.data.typingReward == 0)
             }.padding(12).magicSurface(Palette.paper)
             LazyVGrid(columns:[GridItem(.adaptive(minimum:240))],spacing:10) {
@@ -43,7 +43,7 @@ struct GrowthPage: View {
                         if rank<item.limit {
                             Text("等级 \(item.level(rank)) · \(Money.text(item.price(rank)))").font(.caption).foregroundStyle(Palette.goldLight)
                             Button("升级\(item.name)") {
-                                if store.data.upgrade(item){store.message="\(item.name)已升至 \(rank+1) 级。"}
+                                if store.commitGameChange({$0.upgrade(item)}){store.message="\(item.name)已升至 \(rank+1) 级。"}
                             }.disabled(level.level<item.level(rank) || store.data.garden.coins<item.price(rank))
                         } else { Text("已完成全部升级").font(.caption).foregroundStyle(Palette.sage) }
                     }.frame(maxWidth:.infinity,minHeight:142,alignment:.topLeading).padding(12).magicSurface(Palette.paper)
@@ -55,19 +55,26 @@ struct GrowthPage: View {
 
 struct WardrobePage: View {
     @ObservedObject var store:GardenStore
-    @State private var slot:ClothingSlot = .outfit
+    @State private var slot:ClothingSlot = .top
+    @State private var preview="Stand"
+    @State private var showingBase=false
+    private var wardrobeItems:[Cosmetic] {ChibiWardrobe.availableItems}
+    private var categories:[ClothingSlot] {ClothingSlot.allCases.filter{category in wardrobeItems.contains{$0.slot == category}}}
     private var currentName:String {
-        Cosmetic.all.first{$0.id == store.data.garden.economy.worn(slot)}?.name ?? "未穿戴"
+        wardrobeItems.first{$0.id == store.data.garden.economy.worn(slot)}?.name ?? "未穿戴"
     }
     private var adjustedAccessory:Cosmetic? {
-        Cosmetic.all.first { $0.id == store.data.garden.economy.worn(slot) && $0.slot.isAccessory }
+        wardrobeItems.first { $0.id == store.data.garden.economy.worn(slot) && $0.slot.isAccessory }
     }
     private func adjustmentBinding(_ id:String,_ field:WritableKeyPath<WearAdjustment,Int>) -> Binding<Double> {
         Binding(get:{Double(store.data.garden.economy.adjustment(for:id)[keyPath:field])},set:{value in
-            var adjustment=store.data.garden.economy.adjustment(for:id)
-            adjustment[keyPath:field]=Int(value.rounded())
-            if store.data.garden.economy.adjustments == nil {store.data.garden.economy.adjustments=[:]}
-            store.data.garden.economy.adjustments?[id]=adjustment
+            store.commitGameChange {data in
+                var adjustment=data.garden.economy.adjustment(for:id)
+                adjustment[keyPath:field]=Int(value.rounded())
+                if data.garden.economy.adjustments == nil {data.garden.economy.adjustments=[:]}
+                data.garden.economy.adjustments?[id]=adjustment
+                return true
+            }
         })
     }
     private func adjustmentControl(_ title:String,value:Binding<Double>,range:ClosedRange<Double>,display:String) -> some View {
@@ -77,21 +84,21 @@ struct WardrobePage: View {
         }.font(.caption)
     }
     private var removalTitle:String {
-        ([ClothingSlot.outfit,.top,.bottom,.outer,.socks,.shoes].contains(slot) ? "脱下":"取下")+slot.name
+        ([ClothingSlot.outfit,.top,.bottom,.outer,.socks,.shoes,.focusOutfit].contains(slot) ? "脱下":"取下")+slot.name
     }
     private func wardrobePreview(horizontal:Bool)->some View {
         let layout=horizontal ? AnyLayout(HStackLayout(alignment:.center,spacing:24)):AnyLayout(VStackLayout(alignment:.leading,spacing:12))
         return layout {
-                ProfessorSprite(phase:store.petPhase,size:230,economy:store.data.garden.economy,idlePose:store.idlePose,expression:store.petExpression,basePhase:store.petBasePhase)
+                ProfessorSprite(phase:preview == "DragRight" ? 10:preview == "Focus" ? 30:preview == "Rest" ? 31:0,size:230,
+                                economy:showingBase ? Economy(outfit:"base"):store.data.garden.economy,idlePose:preview == "Sit" ? 1:0,
+                                expression:store.petExpression,expressionActive:store.petSpeech != nil)
                 VStack(alignment:.leading,spacing:10) {
                     Text("当前穿戴").font(.title2)
                     WalletView(coins:store.data.garden.coins)
                     Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
-                    Text("上衣和下装可分别搭配，配饰可单独穿脱。").font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
-                    Button("穿上黑色长袍") {_=store.data.wear("black",slot:.outfit)}
-                    Button("查看底模") {
-                        for category in ClothingSlot.allCases {_=store.data.wear("",slot:category)}
-                    }
+                    PixelSelect(selection:$preview,items:[("Stand","站立"),("Sit","坐地"),("DragRight","拖动"),("Focus","专注"),("Rest","休息")])
+                        .frame(width:130).accessibilityLabel("预览姿势")
+                    Button(showingBase ? "查看穿搭":"查看底模") {showingBase.toggle()}
                 }
         }
     }
@@ -103,11 +110,12 @@ struct WardrobePage: View {
             }.padding(12).magicSurface(Palette.paper)
             HStack(spacing:12) {
                 Text("分类").font(.headline)
-                PixelSelect(selection:$slot,items:ClothingSlot.allCases.map{($0,$0.name)}).frame(width:155).accessibilityLabel("衣物分类")
+                if !categories.isEmpty {PixelSelect(selection:$slot,items:categories.map{($0,$0.name)}).frame(width:155).accessibilityLabel("衣物分类")}
                 Spacer()
-                Button(removalTitle) {_=store.data.wear("",slot:slot)}.disabled(store.data.garden.economy.worn(slot).isEmpty)
+                if categories.contains(slot) {Button(removalTitle) {_=store.commitGameChange{$0.wear("",slot:slot)}}.disabled(store.data.garden.economy.worn(slot).isEmpty)}
             }
-            Text("当前\(slot.name)：\(currentName)").font(.caption).foregroundStyle(Palette.muted)
+            if categories.isEmpty {Text("暂无服饰").font(.caption).foregroundStyle(Palette.muted)}
+            else {Text("当前\(slot.name)：\(currentName)").font(.caption).foregroundStyle(Palette.muted)}
             if let item=adjustedAccessory {
                 let adjustment=store.data.garden.economy.adjustment(for:item.id)
                 DisclosureGroup("微调配饰") {
@@ -115,18 +123,18 @@ struct WardrobePage: View {
                         adjustmentControl("大小",value:adjustmentBinding(item.id,\.scale),range:75...125,display:"\(adjustment.scale)%")
                         adjustmentControl("左右",value:adjustmentBinding(item.id,\.x),range:-30...30,display:adjustment.x == 0 ? "居中":"\(adjustment.x < 0 ? "左":"右") \(abs(adjustment.x))")
                         adjustmentControl("上下",value:adjustmentBinding(item.id,\.y),range:-30...30,display:adjustment.y == 0 ? "默认":"\(adjustment.y < 0 ? "上":"下") \(abs(adjustment.y))")
-                        Button("恢复默认位置") {store.data.garden.economy.adjustments?.removeValue(forKey:item.id)}
+                        Button("恢复默认位置") {_=store.commitGameChange{$0.garden.economy.adjustments?.removeValue(forKey:item.id);return true}}
                             .disabled(adjustment == WearAdjustment())
                     }.padding(.top,10)
                 }.id(item.id).padding(12).magicSurface(Palette.paper)
             }
             LazyVGrid(columns:[GridItem(.adaptive(minimum:240))],spacing:10) {
-                ForEach(Cosmetic.all.filter{$0.slot == slot}) { item in
+                ForEach(wardrobeItems.filter{$0.slot == slot}) { item in
                     let owned=item.price == 0 || store.data.garden.economy.owned.contains(item.id)
                     let wearing=store.data.garden.economy.worn(slot) == item.id
                     VStack(alignment:.leading,spacing:8) {
                         HStack {
-                            if let asset=item.asset,let image=DollImages.thumbnails[asset] {
+                            if let asset=item.asset,let image=ChibiWardrobe.thumbnail(asset:asset) {
                                 Image(nsImage:image).resizable().interpolation(.none).scaledToFit().frame(width:62,height:62).accessibilityHidden(true)
                             }
                             else { GameSprite(sheet:"Equipment",index:item.sprite,size:62) }
@@ -135,17 +143,21 @@ struct WardrobePage: View {
                         if item.season != nil {Text("节日限定 · \(item.dates)").font(.caption).foregroundStyle(Palette.goldLight)}
                         if owned {
                             Text(item.price == 0 ? "免费":"已拥有").font(.caption).foregroundStyle(Palette.sage)
-                            Button(wearing ? "已穿戴":"穿戴\(item.name)"){_=store.data.wear(item.id,slot:item.slot)}.disabled(wearing)
+                            Button(wearing ? "已穿戴":"穿戴\(item.name)"){if store.commitGameChange({$0.wear(item.id,slot:item.slot)}) {showingBase=false}}.disabled(wearing)
                         } else {
                             Text(Money.text(item.price)).font(.caption)
                             Button(item.available(store.now) ? "购买\(item.name)":"尚未到售卖日期") {
-                                if store.data.buyCosmetic(item,at:store.now){_=store.data.wear(item.id,slot:item.slot)}
+                                if store.commitGameChange({$0.buyCosmetic(item,at:store.now) && $0.wear(item.id,slot:item.slot)}) {showingBase=false}
                             }.disabled(!item.available(store.now) || store.data.levelProgress.level<item.level || store.data.garden.coins<item.price)
                         }
                     }.frame(maxWidth:.infinity,minHeight:155,alignment:.topLeading).padding(12).magicSurface(Palette.paper)
                 }
             }
-        }
+        }.onAppear {if !categories.contains(slot),let first=categories.first {slot=first}}
+            .onChange(of:slot) {_,value in
+                if value == .focusOutfit {preview="Focus"}
+                else if preview == "Focus" || preview == "Rest" {preview="Stand"}
+            }
     }
 }
 
@@ -232,7 +244,7 @@ struct MapPage: View {
                 if rank<tool.limit {
                     Text("等级 \(tool.level(rank)) · \(Money.text(tool.price(rank)))").font(.caption).foregroundStyle(Palette.goldLight)
                     Button("升级钓竿") {
-                        if store.data.upgrade(tool) {store.message="钓竿已升至 \(rank+1) 级。"}
+                        if store.commitGameChange({$0.upgrade(tool)}) {store.message="钓竿已升至 \(rank+1) 级。"}
                     }.disabled(store.data.levelProgress.level<tool.level(rank) || store.data.garden.coins<tool.price(rank))
                 } else {Text("已完成全部升级").font(.caption).foregroundStyle(Palette.sage)}
             }
@@ -260,8 +272,12 @@ struct MapPage: View {
                                 GameSprite(sheet:"Equipment",index:potion != nil ? 11:key.contains("鱼") ? 8:10,size:30)
                                 Text("\(potion?.name ?? key) ×\(count)").font(.callout).fixedSize(horizontal:false,vertical:true)
                             }
-                            if let potion {Button("使用"){if store.data.usePotion(potion.id){store.message=potion.benefit}else{store.message="先在农场播种，再使用繁盛药剂。"}}.accessibilityLabel("使用\(potion.name)")}
-                            Button("出售 · \(Money.text(store.data.findPrice(key)))"){if store.data.sellFind(key){store.message="已出售\(potion?.name ?? key)。"}}.accessibilityLabel("出售\(potion?.name ?? key)")
+                            if let potion {Button("使用") {
+                                var usable=false
+                                if store.commitGameChange({usable=$0.usePotion(potion.id);return usable}) {store.message=potion.benefit}
+                                else if !usable {store.message="先在农场播种，再使用繁盛药剂。"}
+                            }.accessibilityLabel("使用\(potion.name)")}
+                            Button("出售 · \(Money.text(store.data.findPrice(key)))"){if store.commitGameChange({$0.sellFind(key)}){store.message="已出售\(potion?.name ?? key)。"}}.accessibilityLabel("出售\(potion?.name ?? key)")
                         }.padding(8).magicSurface(Palette.paper)
                     }
                 }
@@ -272,8 +288,9 @@ struct MapPage: View {
         guard unlocked else{return}
         if let trip {
             guard matching else{hint="\(SceneNavigation.title(trip.kind.rawValue))还未结束。";return}
-            if let result=store.data.collectJourney(){store.message=result;hint=""}
-            else {SceneNavigation.open("计时器",store:store)}
-        } else if store.data.embark(journey) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}
+            guard trip.progress(store.data.totalFocus)>=1 else {SceneNavigation.open("计时器",store:store);return}
+            var result:String?
+            if store.commitGameChange({result=$0.collectJourney();return result != nil}),let result {store.message=result;hint=""}
+        } else if store.commitGameChange({$0.embark(journey)}) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}
     }
 }

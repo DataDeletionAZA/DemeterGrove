@@ -13,6 +13,7 @@ cp Resources/AppIcon.icns "$destination/暮色小院.app/Contents/Resources/AppI
 cp Resources/PotionsProfessor.webp "$destination/暮色小院.app/Contents/Resources/PotionsProfessor.webp"
 cp -R Resources/Game "$destination/暮色小院.app/Contents/Resources/"
 cp -R Resources/Chibi "$destination/暮色小院.app/Contents/Resources/"
+cp -R Resources/ChibiWardrobe "$destination/暮色小院.app/Contents/Resources/"
 cp -R Resources/Doll "$destination/暮色小院.app/Contents/Resources/"
 codesign --force --sign "${DAYGARDEN_SIGNING_IDENTITY:--}" "$destination/暮色小院.app"
 codesign --verify --deep --strict "$destination/暮色小院.app"

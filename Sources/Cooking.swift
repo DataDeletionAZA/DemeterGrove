@@ -140,6 +140,19 @@ enum Ingredient: String, Codable, CaseIterable, Identifiable {
         }
     }
     var price: Int { switch self { case .cakeBase:return 8;case .bread:return 5;case .cookedRice,.noodles:return 4;case .silverFish:return 3;case .moonFish:return 4;case .goldFish:return 5;case .milk,.egg,.honey,.cocoa,.coffee:return 3;default:return 2 } }
+    var purchasePrice: Int {
+        switch self {
+        case .carrot,.cucumber,.cabbage,.mint,.sugar,.rice,.egg:return 6
+        case .wheat,.tomato,.potato,.corn,.tea,.cookedRice:return 8
+        case .mushroom,.lemon:return 10
+        case .pumpkin,.strawberry,.milk,.roastedTea:return 12
+        case .honey,.cocoa,.coffee:return 14
+        case .noodles,.silverFish:return 18
+        case .bread:return 24
+        case .moonFish:return 28
+        case .cakeBase,.goldFish:return 40
+        }
+    }
 }
 
 struct FoodBase: Identifiable, Hashable {

@@ -9,7 +9,11 @@ struct AIWritingPresetPicker: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text("表达预设").font(.callout)
-                PixelSelect(selection: Binding(get: { store.data.ai?.writingAssignments?[feature.rawValue] }, set: { id in
+                PixelSelect(selection: Binding(get: { feature == .petDialogue ? store.data.ai?.writingPresets?.first(where:{$0.id == store.data.petDialogue?.writingPresetID})?.id:store.data.ai?.writingAssignments?[feature.rawValue] }, set: { id in
+                    if feature == .petDialogue {
+                        error = store.setPetDialogueAIPresets(profileID:store.data.petDialogue?.aiProfileID,writingPresetID:id) ? "":"预设选择未能保存。"
+                        return
+                    }
                     let previous = store.data.ai
                     var next = previous ?? AISettings()
                     if next.writingAssignments == nil { next.writingAssignments = [:] }

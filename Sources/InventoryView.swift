@@ -52,7 +52,7 @@ struct InventoryView:View {
         case .material:GameSprite(sheet:"Equipment",index:10,size:48)
         case .item:GameSprite(sheet:"Equipment",index:entry.id == "water" ? 4:11,size:48)
         case .clothing(let asset):
-            if let asset,let image=DollImages.thumbnails[asset] {Image(nsImage:image).resizable().interpolation(.none).scaledToFit().frame(width:48,height:48)}
+            if let asset,let image=ChibiWardrobe.thumbnail(asset:asset) {Image(nsImage:image).resizable().interpolation(.none).scaledToFit().frame(width:48,height:48)}
             else {PixelIcon(name:"衣柜",size:48)}
         }
     }

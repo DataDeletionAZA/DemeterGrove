@@ -253,7 +253,7 @@ struct TimerControls: View {
                     }.buttonStyle(PixelButtonStyle(primary: true))
                     Button(run.kind == .rest ? "结束休息" : "结束并记录") { store.finishTimer() }.buttonStyle(PixelButtonStyle())
                 }
-                Text(run.kind == .rest ? "休息中" : "每 5 分钟专注 · 1 滴露水")
+                Text(run.kind == .rest ? "休息中" : "专注 1 分钟 · 2 铜纳特；5 分钟 · 1 滴露水")
                     .font(.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
             } else {
                 PixelTabs(selection: $kind, items: [(.pomodoro, "番茄钟"), (.stopwatch, "正计时"), (.countdown, "倒计时")])

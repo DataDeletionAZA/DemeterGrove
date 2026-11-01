@@ -22,6 +22,7 @@ struct AIEncouragementView:View {
     var subject:String
     var onAdd:([String])->Void
     var client=AIClient()
+    var onAddAccepted:(([String])->Bool)?=nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sceneViewport) private var viewport
     private var dialogSize: CGSize {
@@ -41,10 +42,10 @@ struct AIEncouragementView:View {
     @State private var batchStarted=Date()
     @State private var request:Task<Void,Never>?
     @State private var requestID=UUID()
-    private var profile:AIProfile? {store.data.ai?.profile(for:feature)}
+    private var profile:AIProfile? {store.aiProfile(for:feature)}
     private var chosen:[String] {
         phrases.indices.filter{selected.contains($0)}.map{phrases[$0].trimmingCharacters(in:.whitespacesAndNewlines)}
-            .filter{!$0.isEmpty && $0.count<=4000}
+            .filter{!$0.isEmpty && $0.count<=(feature == .petDialogue ? 160:4000)}
     }
     var body:some View {
         VStack(alignment:.leading,spacing:14) {
@@ -93,8 +94,8 @@ struct AIEncouragementView:View {
                                     if value {selected.insert(index)} else {selected.remove(index)}
                                 })).labelsHidden()
                                 VStack(alignment:.leading,spacing:4) {
-                                    TextField("激励语",text:$phrases[index],axis:.vertical).lineLimit(2...8).disabled(working)
-                                    if phrases[index].count>4000 {Text("最多4000字").font(.caption).foregroundStyle(Palette.clay)}
+                                    TextField(feature == .petDialogue ? "台词":"激励语",text:$phrases[index],axis:.vertical).lineLimit(2...8).disabled(working)
+                                    if phrases[index].count>(feature == .petDialogue ? 160:4000) {Text(feature == .petDialogue ? "最多160字":"最多4000字").font(.caption).foregroundStyle(Palette.clay)}
                                 }
                             }
                         }
@@ -105,7 +106,13 @@ struct AIEncouragementView:View {
             if !phrases.isEmpty {
                 HStack {
                     Spacer()
-                    Button("加入所选 \(chosen.count) 条") {let values=chosen;cancel();onAdd(values);dismiss()}
+                    Button("加入所选 \(chosen.count) 条") {
+                        let values=chosen
+                        if let accept=onAddAccepted {
+                            guard accept(values) else {error="未能保存，候选台词仍保留。";return}
+                        } else {onAdd(values)}
+                        cancel();dismiss()
+                    }
                         .buttonStyle(PixelButtonStyle(primary:true)).disabled(chosen.isEmpty || working)
                 }
             }
@@ -120,7 +127,7 @@ struct AIEncouragementView:View {
         guard (1...50).contains(count),preferences.count<=4000 else{return}
         cancel();error="";working=true
         let id=requestID, target=count, chosenLength=length, extra=preferences
-        let writing=store.data.ai?.writing(for:feature) ?? .standard
+        let writing=store.aiWriting(for:feature)
         batchTotal=(target+chosenLength.batchSize-1)/chosenLength.batchSize
         batchNumber=0;receivedCharacters=0
         request=Task { @MainActor in
@@ -128,7 +135,7 @@ struct AIEncouragementView:View {
             do {
                 while generated.count<target {
                     try Task.checkCancellation()
-                    guard store.data.ai?.profile(for:feature)==profile,(store.data.ai?.writing(for:feature) ?? .standard)==writing else {
+                    guard store.aiProfile(for:feature)==profile,(store.aiWriting(for:feature))==writing else {
                         error="预设已变化，已生成内容仍保留。";break
                     }
                     let amount=min(chosenLength.batchSize,target-generated.count)
@@ -141,7 +148,7 @@ struct AIEncouragementView:View {
                         }
                     })
                     guard !Task.isCancelled,requestID==id else{return}
-                    guard store.data.ai?.profile(for:feature)==profile,(store.data.ai?.writing(for:feature) ?? .standard)==writing else {
+                    guard store.aiProfile(for:feature)==profile,(store.aiWriting(for:feature))==writing else {
                         error="预设已变化，已生成内容仍保留。";break
                     }
                     guard batch.allSatisfy({!generated.contains($0)}) else{throw AIError.output}

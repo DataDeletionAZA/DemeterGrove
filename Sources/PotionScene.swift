@@ -86,7 +86,11 @@ struct PotionScene:View {
     }
     private func openPot() {
         if ready {
-            if let result=store.data.collectJourney(){store.message=result;hint=""}
+            var next=store.data
+            if let result=next.collectJourney(){
+                guard store.commitGameChange({$0=next;return true}) else {return}
+                store.message=result;hint="";store.triggerPetDialogue(.craft)
+            }
         } else {recipes=true}
     }
     private var recipeWindow:some View {

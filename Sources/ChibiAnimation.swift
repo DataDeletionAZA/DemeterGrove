@@ -16,6 +16,7 @@ struct ChibiPose {
     var basePhase = 0
     var idlePose = 0
     var expression = 0
+    var expressionActive = false
     var dragImpulse = 0.0
     var reduceMotion = false
     var dragAge: Double? = nil
@@ -43,7 +44,7 @@ struct ChibiPose {
         return [2.7, 7.4, 7.75, 13.1].contains { local >= $0 && local < $0 + 0.15 }
     }
     var imageName: String {
-        if reacting && body != .drag { return body.rawValue + "Expression" + String(phase == 23 ? 2 : max(0, min(3, expression))) }
+        if (expressionActive || reacting) && body != .drag { return body.rawValue + "Expression" + String(!expressionActive && phase == 23 ? 2 : max(0, min(3, expression))) }
         if blinking && (body == .stand || body == .sit || body == .focus) { return body.rawValue + "Blink" }
         if glance > 0 { return body.rawValue + "Gaze" }
         return body.rawValue
@@ -87,7 +88,9 @@ struct ChibiSprite: View, Animatable {
     var reduceMotion = false
     var idlePose = 0
     var expression = 0
+    var expressionActive = false
     var dragImpulse = 0.0
+    var economy = Economy()
     var dragAge: Double? = nil
     var facingRight = false
     var glances = false
@@ -99,9 +102,10 @@ struct ChibiSprite: View, Animatable {
 
     var body: some View {
         let pose = ChibiPose(phase: phase, time: time, elapsed: elapsed, basePhase: basePhase,
-                             idlePose: idlePose, expression: expression, dragImpulse: dragImpulse, reduceMotion: reduceMotion, dragAge: dragAge,glances:glances)
+                             idlePose: idlePose, expression: expression, expressionActive: expressionActive, dragImpulse: dragImpulse, reduceMotion: reduceMotion, dragAge: dragAge,glances:glances)
         Canvas { context, size in
-            guard let source = ChibiImages.images[pose.imageName] else { return }
+            guard let rawSource = ChibiImages.images[pose.imageName] else { return }
+            let source = ChibiWardrobe.frame(source: rawSource, imageName: pose.imageName, body: pose.body.rawValue, economy: economy)
             let image = context.resolve(Image(nsImage: source).interpolation(.none))
             let w = source.size.width, h = source.size.height
             let scale = min(size.width / 480, size.height / 535)

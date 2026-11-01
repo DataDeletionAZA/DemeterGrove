@@ -145,7 +145,11 @@ struct GameRoomView: View {
     private func workPlot(_ plot: Plot) {
         if let crop = plot.crop {
             let amount=store.data.harvestYield * (crop == .starlightCarrot ? 2:1)
-            if store.data.harvest(plot.id) { harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint="" }
+            var next=store.data
+            if next.harvest(plot.id) {
+                guard store.commitGameChange({$0=next;return true}) else {return}
+                store.triggerPetDialogue(.harvest)
+                harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint="" }
             else { hint = "\(crop.rawValue)还需记录 \(Int(ceil((1-plot.progress(store.data.totalFocus))*(plot.duration ?? crop.seconds)/60))) 分钟专注。" }
         } else if let selectedSeed { plant(selectedSeed,in:plot) }
         else { plantingPlot=plot }
@@ -282,7 +286,9 @@ struct GameRoomView: View {
     private func makeFood() {
         guard !cooking else { return }
         guard let dish=recipe else { hint="请为这些食材选择适合的做法。";return }
-        guard store.data.cook(dish) else { hint="食材不足";return }
+        guard store.data.canCook(dish) else {hint="食材不足";return}
+        guard store.commitGameChange({$0.cook(dish)}) else {return}
+        DispatchQueue.main.asyncAfter(deadline:.now()+3) {store.triggerPetDialogue(.craft)}
         cookingIngredients=selection.portions.map{$0.ingredient.rawValue};selection.clear();methodWindow=false
         lastDish=store.data.garden.recipes[dish.id] ?? dish;resultStock=store.data.garden.dishes[dish.id,default:0];dishName=dish.name;cookingStarted=Date();cookingUntil=cookingStarted.addingTimeInterval(3)
         hint=""
@@ -479,7 +485,7 @@ struct IngredientMarket: View {
         VStack(alignment:.leading,spacing:14) {
             HStack {Text("食材与种子铺").font(.title3);Spacer();Text("露水 \(store.data.garden.water) · \(Money.text(store.data.garden.coins))").font(.caption);Button("关闭"){dismiss()}}
             PixelTabs(selection:$section,items:[("种子","种子"),("食材","食材")])
-            Toggle(section == "种子" ? "用露水交换（每袋 3 滴）":"用露水交换（每份 1 滴）",isOn:$waterPayment)
+            Toggle("使用露水",isOn:$waterPayment)
             if section == "食材" {
                 PixelScrollView(.horizontal) {HStack {ForEach(IngredientCategory.allCases) {item in Button(item.rawValue){ingredientCategory=item}.buttonStyle(PixelButtonStyle(primary:ingredientCategory == item))}}}
             }
@@ -487,28 +493,28 @@ struct IngredientMarket: View {
                 LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:4),spacing:10) {
                     if section == "种子" {
                         ForEach(Crop.marketCrops) {crop in
-                            Button {if waterPayment {_ = store.data.exchangeSeed(crop)} else {_ = store.data.buySeeds(crop)}} label: {
+                            Button {store.commitGameChange {waterPayment ? $0.exchangeSeed(crop):$0.buySeeds(crop)}} label: {
                                 VStack(spacing:4) {
                                     IngredientArt(name:crop.rawValue,size:48)
                                     Text(crop.rawValue+"种子").font(.system(size:12))
                                     Text("库存 \(store.data.garden.cropSeeds[crop.rawValue,default:0]) 袋").font(.system(size:10)).foregroundStyle(Palette.muted)
-                                    Text(waterPayment ? "3 滴露水 / 袋":"4 银西可 / 3 袋").font(.system(size:10)).foregroundStyle(Palette.goldLight)
+                                    Text(waterPayment ? "\(EconomyBalance.seedWaterPrice(crop:crop)) 滴露水 / 袋":Money.text(EconomyBalance.seedPacketPrice(crop))+" / 3 袋").font(.system(size:10)).foregroundStyle(Palette.goldLight)
                                 }.frame(maxWidth:.infinity).padding(8).magicSurface(Palette.card)
-                            }.buttonStyle(.plain).disabled(waterPayment ? store.data.garden.water<3:store.data.garden.coins<116)
+                            }.buttonStyle(.plain).disabled(waterPayment ? store.data.garden.water<EconomyBalance.seedWaterPrice(crop:crop):store.data.garden.coins<EconomyBalance.seedPacketPrice(crop))
                         }
                     } else {
                         ForEach(Ingredient.allCases.filter{$0.category == ingredientCategory}) {ingredient in
-                            Button {_ = store.data.buyIngredient(ingredient,withWater:waterPayment)} label: {
+                            Button {store.commitGameChange {$0.buyIngredient(ingredient,withWater:waterPayment)}} label: {
                                 VStack(spacing:4) {
                                     IngredientArt(name:ingredient.rawValue,size:48)
                                     Text(ingredient.rawValue).font(.system(size:12))
                                     Text("库存 \(store.data.ingredientCount(ingredient))").font(.system(size:10)).foregroundStyle(Palette.muted)
-                                    Text(waterPayment ? "1 滴露水 / 份":"\(Money.text(ingredient.price*29)) / 份").font(.system(size:10)).foregroundStyle(Palette.goldLight)
+                                    Text(waterPayment ? "\(EconomyBalance.ingredientWaterPrice(ingredient)) 滴露水 / 份":"\(Money.text(ingredient.purchasePrice)) / 份").font(.system(size:10)).foregroundStyle(Palette.goldLight)
                                 }.frame(maxWidth:.infinity).padding(8).magicSurface(Palette.card)
-                            }.buttonStyle(.plain).disabled(waterPayment ? store.data.garden.water<1:store.data.garden.coins<ingredient.price*29)
+                            }.buttonStyle(.plain).disabled(waterPayment ? store.data.garden.water<EconomyBalance.ingredientWaterPrice(ingredient):store.data.garden.coins<ingredient.purchasePrice)
                         }
                     }
-                }
+                }.id(section + ingredientCategory.rawValue)
             }
         }.padding(20).frame(width:650,height:560).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
     }

@@ -27,6 +27,11 @@ final class GardenStore: ObservableObject {
     @Published var inputStatus = "计数未开启"
     @Published var petAnimationBegan=Date()
     @Published var petExpression = 0
+    @Published private(set) var petSpeech: PetSpeech? = nil
+    private var petDialoguePicker = PetDialoguePicker()
+    private var petSpeechElapsed: TimeInterval = 0
+    private var petSpeechUpdatedAt: Date? = nil
+    private var petSpeechHovered = false
     @Published var petDragImpulse: CGFloat = 0
     @Published var petDragUpdated = Date()
     @Published var notificationStatus = "尚未开启"
@@ -155,6 +160,7 @@ final class GardenStore: ObservableObject {
 
     func tick(_ date: Date) {
         updateClock(date)
+        advancePetSpeech(at: date)
         invalidateHabitReviews()
         guard !storageLocked else { return }
         if let run = data.timer, run.id != blockedFocusFinishID, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
@@ -495,6 +501,7 @@ final class GardenStore: ObservableObject {
         now = date
         blockedFocusFinishID = nil
         refreshTimerReminder()
+        triggerPetDialogue(kind == .rest ? .restStart : .focusStart, at: date)
         return true
     }
     @discardableResult
@@ -531,12 +538,13 @@ final class GardenStore: ObservableObject {
         now = date
         if run.kind != .rest, data.sessions.contains(where: { $0.id == run.id }) { pendingFocusReviewID = run.id }
         message = result.rest ? "休息结束，已记录休息时长。" : result.seconds == 0 ? "计时已结束，本次未累计有效时长。" :
-            "已记录 \(Int(result.seconds / 60)) 分 \(Int(result.seconds) % 60) 秒专注，获得 \(result.water) 滴露水。"
+            "已记录 \(Int(result.seconds / 60)) 分 \(Int(result.seconds) % 60) 秒专注，获得 \(EconomyBalance.focusReward(before: previous.totalFocus, after: data.totalFocus)) 铜纳特、\(result.water) 滴露水。"
         animatePet(PetMotion.jumping.rawValue, seconds: PetMotion.jumping.duration)
         if data.preferences.sound { NSSound(named: "Glass")?.play() }
         if run.kind == .pomodoro && canStartBreak { message += " 可以开始 \(data.preferences.breakMinutes) 分钟休息。" }
         if data.levelProgress.level > previousLevel { message += " 升到 \(data.levelProgress.level) 级了。" }
         refreshTimerReminder()
+        if result.seconds > 0 { triggerPetDialogue(result.rest ? .restEnd : .focusEnd, at: date) }
         return true
     }
     @discardableResult
@@ -604,9 +612,78 @@ final class GardenStore: ObservableObject {
         animateTyping()
     }
 
+    var petDialogueSettings: PetDialogueSettings { data.petDialogue ?? PetDialogueSettings() }
+    @discardableResult
+    func updatePetDialogue(_ settings: PetDialogueSettings) -> Bool {
+        guard !storageLocked, settings.isValid else { return false }
+        let previous = data.petDialogue
+        data.petDialogue = settings
+        guard save() else { data.petDialogue = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        if !settings.enabled { dismissPetSpeech() }
+        return true
+    }
+    @discardableResult
+    func setPetDialogueAIPresets(profileID: UUID?, writingPresetID: UUID?) -> Bool {
+        let profileID = profileID == data.petDialogue?.aiProfileID && aiProfile(for: .petDialogue) == nil ? nil : profileID
+        let writingPresetID = writingPresetID == data.petDialogue?.writingPresetID && !(data.ai?.writingPresets?.contains { $0.id == writingPresetID } ?? false) ? nil : writingPresetID
+        guard profileID.map({ id in data.ai?.profiles.contains { $0.id == id } == true }) ?? true,
+              writingPresetID.map({ id in data.ai?.writingPresets?.contains { $0.id == id } == true }) ?? true else { return false }
+        var next = petDialogueSettings; next.aiProfileID = profileID; next.writingPresetID = writingPresetID
+        return updatePetDialogue(next)
+    }
+    func aiProfile(for feature: AIFeature) -> AIProfile? {
+        if feature == .petDialogue { return data.ai?.profiles.first { $0.id == data.petDialogue?.aiProfileID } }
+        return data.ai?.profile(for: feature)
+    }
+    func aiWriting(for feature: AIFeature) -> AIWritingPreset {
+        guard feature == .petDialogue else { return data.ai?.writing(for: feature) ?? .standard }
+        var writing = data.ai?.writingPresets?.first { $0.id == data.petDialogue?.writingPresetID } ?? .standard
+        writing.templates[AIPromptPurpose.encouragement.rawValue] = petDialogueSettings.generationTemplate ?? PetDialogueSettings.defaultGenerationTemplate
+        return writing
+    }
+    @discardableResult
+    func commitGameChange(_ edit: (inout AppData) -> Bool) -> Bool {
+        guard !storageLocked else { return false }
+        let previous = data
+        var candidate = data
+        guard edit(&candidate) else { return false }
+        data = candidate
+        guard save() else {
+            data = previous; saveWork?.cancel(); saveStatus = "保存失败"
+            return false
+        }
+        return true
+    }
+
+    func triggerPetDialogue(_ event: PetDialogueEvent, at date: Date = Date()) {
+        guard let line = petDialoguePicker.choose(event: event, settings: petDialogueSettings, at: date) else { return }
+        previewPetDialogue(line, at: date)
+    }
+    func previewPetDialogue(_ line: PetDialogueLine, at date: Date = Date()) {
+        guard line.isValid else { return }
+        petSpeechElapsed = 0; petSpeechUpdatedAt = date; petSpeechHovered = false
+        petExpression = line.expression.rawValue
+        petSpeech = PetSpeech(line: line, beganAt: date)
+    }
+    func dismissPetSpeech(id: UUID? = nil) {
+        guard id == nil || petSpeech?.id == id else { return }
+        petSpeech = nil; petSpeechElapsed = 0; petSpeechUpdatedAt = nil; petSpeechHovered = false
+        petExpression = 0
+    }
+    func advancePetSpeech(at date: Date = Date()) {
+        guard let speech = petSpeech else { return }
+        if let last = petSpeechUpdatedAt, !petSpeechHovered { petSpeechElapsed += max(0, date.timeIntervalSince(last)) }
+        petSpeechUpdatedAt = date
+        if petSpeechElapsed >= speech.duration { dismissPetSpeech(id: speech.id) }
+    }
+    func setPetSpeechHovered(_ hovered: Bool, at date: Date = Date()) {
+        advancePetSpeech(at: date); petSpeechHovered = hovered
+    }
+    var petSpeechProgress: Double { petSpeech.map { min(1, petSpeechElapsed / $0.duration) } ?? 1 }
+
     func setPet(_ visible: Bool) {
         data.preferences.petVisible = visible
-        if visible { pet?.show() } else { pet?.hide() }
+        if visible { pet?.show() } else { dismissPetSpeech(); pet?.hide() }
     }
 
     func animateTyping() {
@@ -615,8 +692,8 @@ final class GardenStore: ObservableObject {
     }
 
     func clickPet() {
-        petExpression = (petExpression + 1) % 4
         animatePet(20, seconds: 0.65)
+        triggerPetDialogue(.click)
     }
 
     func dragPet(_ velocity:CGFloat) {
@@ -625,11 +702,11 @@ final class GardenStore: ObservableObject {
         petDragImpulse = velocity.isFinite ? min(1200, max(-1200, velocity)) : 0
         let next = petDragImpulse == 0 && [10,11].contains(tapPhase) ? tapPhase :
             (petDragImpulse >= 0 ? PetMotion.dragRight.rawValue : PetMotion.dragLeft.rawValue)
-        if ![10,11].contains(tapPhase) {petAnimationBegan=Date()}
+        if ![10,11].contains(tapPhase) { dismissPetSpeech(); petAnimationBegan=Date() }
         tapPhase=next
     }
 
-    func dropPet() {animatePet(21,seconds:0.55)}
+    func dropPet() { animatePet(21,seconds:0.55); triggerPetDialogue(.dragEnd) }
 
     func updatePetLook(point:CGPoint?,size:CGSize) {
         let direction=point.flatMap{PetLook.direction(point:$0,size:size)}
@@ -799,6 +876,7 @@ final class GardenStore: ObservableObject {
     }
 
     func shutdown() {
+        dismissPetSpeech()
         for id in Array(habitReviews.keys) { cancelHabitReview(id) }
         data.timer?.pause(at: Date())
         save()

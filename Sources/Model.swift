@@ -279,6 +279,7 @@ struct AppData: Codable {
     var taskOccurrenceReschedules: [TaskOccurrenceReschedule]? = nil
     var reminderAssignments: [ReminderAssignment]? = nil
     var ai: AISettings? = nil
+    var petDialogue: PetDialogueSettings? = nil
     var diaries: [String: Diary] = [:]
     var sessions: [FocusSession] = []
     var keys: [String: Int] = [:]
@@ -295,10 +296,12 @@ struct AppData: Codable {
         let seconds = run.elapsed(at: now)
         pomodoroBreakReady = run.kind == .pomodoro && seconds >= run.target
         guard seconds > 0, !sessions.contains(where: { $0.id == run.id }) else { return (0, 0, run.kind == .rest) }
-        let before = Int(totalFocus / 300)
+        let beforeFocus = totalFocus
+        let before = Int(beforeFocus / 300)
         sessions.append(run.record(endingAt: now))
         let water = Int(totalFocus / 300) - before
         garden.water += water
+        garden.coins += EconomyBalance.focusReward(before:beforeFocus,after:totalFocus)
         return (seconds, water, run.kind == .rest)
     }
 
@@ -368,26 +371,29 @@ struct AppData: Codable {
     }
 
     mutating func buySeeds(_ crop:Crop = .carrot) -> Bool {
-        guard crop != .starlightCarrot, garden.coins >= 116 else { return false }
-        garden.coins -= 116
+        let price = EconomyBalance.seedPacketPrice(crop)
+        guard crop != .starlightCarrot, garden.coins >= price else { return false }
+        garden.coins -= price
         garden.cropSeeds[crop.rawValue,default:0] += 3
         return true
     }
 
     mutating func exchangeSeed(_ crop:Crop = .carrot) -> Bool {
-        guard crop != .starlightCarrot, garden.water >= 3 else { return false }
-        garden.water -= 3
+        let price = EconomyBalance.seedWaterPrice(crop:crop)
+        guard crop != .starlightCarrot, garden.water >= price else { return false }
+        garden.water -= price
         garden.cropSeeds[crop.rawValue,default:0] += 1
         return true
     }
 
     mutating func buyIngredient(_ ingredient: Ingredient, withWater: Bool = false) -> Bool {
         if withWater {
-            guard garden.water >= 1 else { return false }
-            garden.water -= 1
+            let price = EconomyBalance.ingredientWaterPrice(ingredient)
+            guard garden.water >= price else { return false }
+            garden.water -= price
         } else {
-            guard garden.coins >= ingredient.price*29 else { return false }
-            garden.coins -= ingredient.price*29
+            guard garden.coins >= ingredient.purchasePrice else { return false }
+            garden.coins -= ingredient.purchasePrice
         }
         garden.ingredients[ingredient.rawValue, default: 0] += 1
         return true
@@ -399,6 +405,7 @@ struct AppData: Codable {
             date.timeIntervalSince1970.isFinite && (Date.distantPast...Date.distantFuture).contains(date)
         }
         try require(ai?.isValid ?? true)
+        try require(petDialogue?.isValid ?? true)
         try require(preferences.dayBoundary.isValid && (habitRewardNotBefore.map(validDate) ?? true))
         try require((1...4).contains(version))
         try require(validDate(savedAt))

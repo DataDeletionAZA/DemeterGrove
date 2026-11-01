@@ -1,10 +1,10 @@
 import Foundation
 
 enum AIFeature: String, Codable, CaseIterable, Identifiable {
-    case taskEncouragement, habitEncouragement, habitReview, focusReview
+    case taskEncouragement, habitEncouragement, habitReview, focusReview, petDialogue
     var id: String { rawValue }
     var title: String {
-        switch self { case .taskEncouragement:return "任务激励语";case .habitEncouragement:return "习惯激励语";case .habitReview:return "习惯审核";case .focusReview:return "专注评价" }
+        switch self { case .taskEncouragement:return "任务激励语";case .habitEncouragement:return "习惯激励语";case .habitReview:return "习惯审核";case .focusReview:return "专注评价";case .petDialogue:return "桌宠台词" }
     }
 }
 

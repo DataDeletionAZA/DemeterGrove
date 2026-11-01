@@ -55,7 +55,11 @@ struct AISettingsView:View {
             ForEach(AIFeature.allCases) {feature in
                 HStack {
                     Text(feature.title).frame(width:100,alignment:.leading)
-                    PixelSelect(selection:Binding(get:{settings.assignments[feature.rawValue]},set:{id in
+                    PixelSelect(selection:Binding(get:{feature == .petDialogue ? store.aiProfile(for:.petDialogue)?.id:settings.assignments[feature.rawValue]},set:{id in
+                        if feature == .petDialogue {
+                            if !store.setPetDialogueAIPresets(profileID:id,writingPresetID:store.data.petDialogue?.writingPresetID) {error=AIError.save.localizedDescription}
+                            return
+                        }
                         var next=settings;next.assignments[feature.rawValue]=id
                         if persist(next) {store.message="已更新\(feature.title)的预设"} else {error=AIError.save.localizedDescription}
                     }),items:[(nil as UUID?,"未分配")]+settings.profiles.map{(Optional($0.id),$0.name)})

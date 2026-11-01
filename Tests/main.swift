@@ -35,13 +35,13 @@ for seconds in [100.0, 200.0] {
     _ = data.finishTimer(at: start.addingTimeInterval(seconds))
 }
 assert(data.totalFocus == 900 && data.garden.water == 6)
-assert(data.collectSale() && data.garden.coins == 12*29)
+assert(data.collectSale() && data.garden.coins == 53)
 assert(!data.collectSale())
-assert(data.buySeeds() && data.garden.coins == 8*29)
+assert(data.buySeeds() && data.garden.coins == 35)
 var emptyGarden = AppData()
 emptyGarden.garden.seeds = 0
 emptyGarden.garden.coins = 0
-emptyGarden.garden.water = 3
+emptyGarden.garden.water = 1
 assert(emptyGarden.exchangeSeed() && emptyGarden.garden.seeds == 1)
 assert(!emptyGarden.exchangeSeed())
 let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: start)!
@@ -57,7 +57,7 @@ defer { try? FileManager.default.removeItem(at: folder) }
 let file = folder.appendingPathComponent("save.json")
 try SaveFile.write(data, to: file)
 let restored = try SaveFile.read(file)
-assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 8*29)
+assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 35)
 var invalid = data
 invalid.sessions.append(invalid.sessions[0])
 do { _ = try invalid.validated(); fatalError("重复结算应被拒绝") } catch DataIssue.invalid { }
@@ -89,7 +89,7 @@ let improved = Dish.develop(base: cakeBase, additions: ["薄荷":1,"蜂蜜":1], 
 assert(improved.quality > custom.quality)
 let waterBefore = cookingData.garden.water
 assert(cookingData.buyIngredient(.coffee, withWater:true))
-assert(cookingData.garden.water == waterBefore-1 && cookingData.garden.ingredients["咖啡豆"] == 1)
+assert(cookingData.garden.water == waterBefore-3 && cookingData.garden.ingredients["咖啡豆"] == 1)
 var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(AppData())) as! [String:Any]
 var legacyGarden = legacy["garden"] as! [String:Any]
 legacyGarden.removeValue(forKey:"recipes"); legacyGarden.removeValue(forKey:"crafts")
@@ -376,7 +376,7 @@ let emptyPlot = typed.garden.plots[0].id
 let waterAtPlant = typed.garden.water
 assert(!typed.plant(.carrot,in:emptyPlot) && typed.garden.water == waterAtPlant)
 assert(typed.plant(.lemon,in:emptyPlot) && typed.garden.cropSeeds["柠檬"] == 0 && typed.garden.cropSeeds["番茄"] == 2)
-typed.garden.coins = 116
+typed.garden.coins = 36
 assert(typed.buySeeds(.pumpkin) && typed.garden.cropSeeds["南瓜"] == 3 && typed.garden.cropSeeds["番茄"] == 2 && typed.garden.coins == 0)
 let tomatoSeeds = typed.garden.cropSeeds["番茄"]
 typed.garden.seeds += 3
@@ -400,7 +400,7 @@ assert(assembly.garden.dishes[rice.id] == nil && assembly.garden.isDiscovered(ri
 assert(assembly.cook(fried) && assembly.garden.ingredients["米饭"] == 0 && assembly.garden.ingredients["鸡蛋"] == 0)
 assert(assembly.garden.coins == moneyBeforeCraft && assembly.garden.dishes[fried.id] == 1 && assembly.garden.isDiscovered(fried))
 assert(!assembly.cook(fried) && assembly.garden.dishes[fried.id] == 1)
-assembly.garden.coins = Ingredient.cakeBase.price*29
+assembly.garden.coins = Ingredient.cakeBase.purchasePrice
 assert(assembly.buyIngredient(.cakeBase) && assembly.garden.ingredients["蛋糕胚"] == 1 && assembly.garden.coins == 0)
 assembly.garden.ingredients["草莓"] = 1;assembly.garden.ingredients["牛奶"] = 1
 let strawberryCake = Dish.allCases.first{$0.id == "草莓奶油蛋糕"}!

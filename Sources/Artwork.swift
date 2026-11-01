@@ -242,6 +242,7 @@ struct ProfessorSprite: View {
     var motionStart:Date?=nil
     var idlePose=0
     var expression=0
+    var expressionActive=false
     var dragImpulse=0.0
     var dragUpdated:Date?=nil
     var basePhase=0
@@ -255,7 +256,7 @@ struct ProfessorSprite: View {
             if ChibiImages.images["Stand"] != nil {
                 ChibiSprite(phase:phase,time:timeline.date.timeIntervalSince1970,
                             elapsed:timeline.date.timeIntervalSince(motionStart ?? began),basePhase:basePhase,
-                            reduceMotion:reduceMotion,idlePose:idlePose,expression:expression,dragImpulse:dragImpulse,
+                            reduceMotion:reduceMotion,idlePose:idlePose,expression:expression,expressionActive:expressionActive,dragImpulse:dragImpulse,economy:economy,
                             dragAge:dragUpdated.map {timeline.date.timeIntervalSince($0)},facingRight:facingRight,glances:glances,grounded:grounded)
                     .animation(reduceMotion ? nil:.easeOut(duration:0.14),value:dragImpulse)
             } else {Text("人物图片未载入").font(.caption).foregroundStyle(Palette.muted)}

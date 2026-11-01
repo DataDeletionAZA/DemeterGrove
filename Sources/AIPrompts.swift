@@ -19,7 +19,7 @@ enum AIPromptPurpose: String, CaseIterable, Codable {
         switch self { case .encouragement: return "激励语"; case .habitReview: return "习惯审核"; case .focusReview: return "专注评价" }
     }
     init(feature: AIFeature) {
-        switch feature { case .taskEncouragement, .habitEncouragement: self = .encouragement; case .habitReview: self = .habitReview; case .focusReview: self = .focusReview }
+        switch feature { case .taskEncouragement, .habitEncouragement, .petDialogue: self = .encouragement; case .habitReview: self = .habitReview; case .focusReview: self = .focusReview }
     }
     var tokens: [String] {
         let common = ["人物设定", "用户设定", "附加要求"]

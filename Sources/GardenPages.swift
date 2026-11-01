@@ -37,6 +37,7 @@ struct SettingsPage: View {
                     }
                 }
             }
+            PetDialogueSettingsView(store: store)
             }
             if section == "通用" {
             Card(title: "操作计数", icon: "keyboard") {
