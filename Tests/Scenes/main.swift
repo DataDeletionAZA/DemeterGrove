@@ -89,6 +89,30 @@ assert(ShopCustomerPose(progress:0).behindCounter)
 assert(!ShopCustomerPose(progress:1).behindCounter)
 print("PASS: fixed parent routes, alchemy aliases, bounded dialog and customer feet/depth")
 
+var navigation = SceneNavigation.Context()
+for route in ["任务", "待办", "四象限", "习惯", "日程", "日记", "计时器", "专注"] {
+    navigation.enter(route,from:"书房")
+    assert(navigation.parent(of:route) == "书房")
+    assert(navigation.parent(of:"书房") == nil)
+    navigation.enter("书房")
+    assert(navigation.parent(of:route) == nil)
+    navigation.enter(route)
+    assert(navigation.parent(of:route) == nil)
+}
+for source in ["菜单", "首页", "厨房", "商店"] {
+    navigation.enter("任务",from:source)
+    assert(navigation.parent(of:"任务") == nil)
+}
+navigation.enter("习惯",from:"书房")
+assert(navigation.parent(of:"任务") == nil)
+navigation.enter("任务")
+assert(navigation.parent(of:"习惯") == nil)
+for route in ["成长", "农场", "户外地图"] + SceneNavigation.wilds {
+    navigation.enter(route,from:"书房")
+    assert(navigation.parent(of:route) == SceneNavigation.parent(of:route))
+}
+print("PASS: study content entry context, aliases, direct-entry reset and fixed parent preservation")
+
 for viewportWidth:CGFloat in [240,460,1000,1800,2600] {
     let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth)
     for viewportHeight:CGFloat in [240,420,680,1080] {

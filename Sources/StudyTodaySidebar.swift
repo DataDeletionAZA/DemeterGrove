@@ -13,7 +13,7 @@ struct StudyTodaySidebar: View {
         GeometryReader {geo in
             ZStack {
                 if let image=GameImages.backgrounds["Parchment"] {
-                    Image(nsImage:image).resizable().interpolation(.none).frame(width:geo.size.width,height:geo.size.height)
+                    Image(nsImage:image).resizable().interpolation(.none).frame(width:geo.size.width+16,height:geo.size.height)
                 }
                 PixelScrollView {
                 VStack(alignment:.leading,spacing:14) {
@@ -55,7 +55,7 @@ struct StudyTodaySidebar: View {
     }
     private func section<Content:View>(_ title:String,route:String,@ViewBuilder content:()->Content)->some View {
         VStack(alignment:.leading,spacing:7) {
-            Button {SceneNavigation.open(route,store:store)} label: {
+            Button {SceneNavigation.open(route,store:store,from:"书房")} label: {
                 HStack {Text(title).font(.system(size:13,weight:.semibold));Spacer();Text("›")}
                     .contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("打开\(title)")
@@ -64,7 +64,7 @@ struct StudyTodaySidebar: View {
         }
     }
     private func entry(_ title:String,route:String,symbol:String)->some View {
-        Button {SceneNavigation.open(route,store:store)} label: {
+        Button {SceneNavigation.open(route,store:store,from:"书房")} label: {
             HStack(alignment:.top,spacing:5) {
                 Image(systemName:symbol).font(.system(size:10)).frame(width:12).padding(.top,2)
                 Text(title).fixedSize(horizontal:false,vertical:true)

@@ -395,23 +395,26 @@ struct GameRoomView: View {
         VStack(alignment:.leading,spacing:8) {
             Text("料理柜").font(.headline).foregroundStyle(Palette.goldLight)
             Text(choice.map{"已选："+$0.name} ?? "选择一份料理").font(.system(size:11)).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
-            Button(choice.map{"上架 · \(Money.text(store.data.salePrice($0)))"} ?? "上架所选",action:stockChoice)
-                .frame(maxWidth:.infinity).disabled(choice == nil || emptySlots == 0)
-            Button("一键上架 \(stockableCount) 份",action:stockAvailable).frame(maxWidth:.infinity).disabled(stockableCount == 0)
+            HStack(spacing:6) {
+                Button(action:stockChoice) { Text(choice == nil ? "上架":"上架 ×1份").lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity) }
+                    .disabled(choice == nil || emptySlots == 0).accessibilityLabel("上架所选料理")
+                Button(action:stockAvailable) { Text("一键上架").lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity) }
+                    .disabled(stockableCount == 0).accessibilityLabel("一键上架")
+            }
             Text("空位 \(emptySlots) · 可上架 \(stockableCount) 份").font(.system(size:10)).foregroundStyle(Palette.muted)
             GeometryReader {geo in
                 PixelScrollView {
                     let columns=Array(repeating:GridItem(.flexible(minimum:0,maximum:150)),count:SceneSizing.stockColumns(width:max(1,geo.size.width-16)))
                     LazyVGrid(columns:columns,alignment:.leading,spacing:8) {
                         ForEach(availableDishes) {dish in
-                            Button{shopChoice=dish.id;hint=""} label:{
+                            Button{shopChoice = shopChoice == dish.id ? nil:dish.id;hint=""} label:{
                                 VStack(spacing:5) {
                                     GameSprite(sheet:"Foods",index:dish.sprite,size:42)
                                     Text(dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
                                     Text("×\(store.data.garden.dishes[dish.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
                                 }.frame(maxWidth:.infinity).padding(6).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
                                     .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
-                            }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)")
+                            }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)").accessibilityAddTraits(choice?.id == dish.id ? [.isSelected]:[])
                         }
                     }
                     if availableDishes.isEmpty {Text("还没有可上架的成品").font(.caption).foregroundStyle(Palette.muted)}

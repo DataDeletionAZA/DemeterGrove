@@ -36,7 +36,7 @@ struct SceneCanvas<Stage:View,Sidebar:View>:View {
                 HStack(spacing:SceneSizing.gap) {
                     stage(size).frame(width:size.width,height:size.height)
                         .frame(width:area.width,height:area.height)
-                    if hasSidebar {sidebar().frame(width:side,height:geo.size.height)}
+                    if hasSidebar {sidebar().environment(\.compactSceneControls,true).frame(width:side,height:geo.size.height)}
                 }
             }
         }.frame(maxWidth:.infinity,alignment:.leading)
@@ -50,9 +50,13 @@ extension SceneCanvas where Sidebar == EmptyView {
 }
 
 extension SceneNavigation {
-    static func open(_ route:String,store:GardenStore) {
+    static func open(_ route:String,store:GardenStore,from source:String?=nil) {
         let route=canonical(route)
-        if let pet=store.pet {pet.openTool(route)} else {store.selectedPage=route == "计时器" ? "专注":route}
+        if let pet=store.pet {pet.openTool(route,from:source)}
+        else {
+            store.sceneNavigation.enter(route,from:source)
+            store.selectedPage=route == "计时器" ? "专注":route
+        }
     }
 }
 

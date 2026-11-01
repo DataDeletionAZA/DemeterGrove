@@ -67,6 +67,10 @@ enum Recurrence {
         let key = CalendarDates.key(date, calendar: calendar)
         return revisions?.filter { $0.effectiveFrom <= key }.max { $0.effectiveFrom < $1.effectiveFrom }
     }
+    static func nextRevision(_ revisions: [ScheduleRevision]?, after date: Date, calendar: Calendar) -> ScheduleRevision? {
+        let key = CalendarDates.key(date, calendar: calendar)
+        return revisions?.filter { $0.effectiveFrom > key }.min { $0.effectiveFrom < $1.effectiveFrom }
+    }
     static func valid(_ revisions: [ScheduleRevision]?) -> Bool {
         guard let revisions else { return true }
         return !revisions.isEmpty && Set(revisions.map(\.id)).count == revisions.count && Set(revisions.map(\.effectiveFrom)).count == revisions.count && revisions.allSatisfy(\.isValid)

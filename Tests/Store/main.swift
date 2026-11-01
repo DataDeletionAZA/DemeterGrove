@@ -137,6 +137,64 @@ enum HabitStoreChecks {
         print("PASS: following today crosses custom rollover; past selections and month browsing stay; returning today restores follow; settings preserve day labels, counters, balances and historical selection with persistent reward guard")
         try await HabitReviewChecks.run(store, clock: reviewClock)
         try FocusStoreChecks.run(store)
+        try HabitScheduleChecks.run(store)
+    }
+}
+
+private enum HabitScheduleChecks {
+    @MainActor static func run(_ store: GardenStore) throws {
+        store.data = AppData()
+        store.data.preferences.sound = false
+        store.data.preferences.dayTimeZoneID = "Asia/Shanghai"
+        store.data.preferences.dayRolloverMinutes = 240
+        let calendar = store.calendar
+        func day(_ value: Int, hour: Int = 12) -> Date { calendar.date(from: DateComponents(year: 2030, month: 1, day: value, hour: hour))! }
+        store.now = day(4)
+        let weekly = ScheduleRevision(effectiveFrom: "2030-01-01", anchor: "2030-01-01", rule: RepeatRule(unit: .week, weekdays: [2, 3, 4, 5, 6, 7]))
+        var habit = Habit(title: "日常练习", days: ["2030-01-01", "2030-01-03", "2030-01-04"], scheduleRevisions: [weekly])
+        habit.checkIns = ["2030-01-04": HabitCheckIn(text: "练习记录", image: nil, submittedAt: day(4, hour: 10), status: .approved, reviewedAt: day(4, hour: 11), feedback: "已记录")]
+        habit.messageLibrary = ReminderTextLibrary(texts: ["甲", "乙"])
+        store.data.habitProgress = HabitProgress(days: habit.days, rewardedDays: habit.days)
+        store.data.garden.coins = 321
+        store.data.habits = [habit]
+        assert(store.save())
+        let progress = store.data.habitProgress
+        let balance = store.data.garden.coins
+        let records = store.data.habits[0].checkIns
+        habit = store.data.habits[0]
+        habit.scheduleRevisions = Recurrence.revised(habit.scheduleRevisions, rule: .workRest(active: 14, rest: 1), anchor: day(4), effective: day(4), calendar: calendar)
+        assert(store.upsert(habit))
+        let updated = store.data.habits[0]
+        assert(Recurrence.revision(updated.scheduleRevisions, on: day(4), calendar: calendar)?.rule == .workRest(active: 14, rest: 1))
+        assert(Recurrence.revision(updated.scheduleRevisions, on: day(3), calendar: calendar) == weekly)
+        assert(updated.isScheduled(on: day(17), calendar: calendar) && !updated.isScheduled(on: day(18), calendar: calendar) && updated.isScheduled(on: day(19), calendar: calendar))
+        assert(updated.days == habit.days && updated.checkIns == records && store.data.habitProgress == progress && store.data.garden.coins == balance)
+        let reopened = try SaveFile.read(store.file)
+        assert(Recurrence.revision(reopened.habits[0].scheduleRevisions, on: day(4), calendar: calendar)?.rule == .workRest(active: 14, rest: 1))
+        assert(reopened.habits[0].days == updated.days && reopened.habits[0].checkIns == records && reopened.habitProgress == progress && reopened.garden.coins == balance)
+        var staleEditor = updated
+        staleEditor.days = ["2030-01-01"]; staleEditor.checkIns = nil; staleEditor.title = "调整后的练习"
+        var consumed = store.data.habits[0].messageLibrary!
+        _ = consumed.draw(); store.data.habits[0].messageLibrary = consumed
+        assert(store.upsert(staleEditor))
+        assert(store.data.habits[0].days == updated.days && store.data.habits[0].checkIns == records && store.data.habitProgress == progress && store.data.garden.coins == balance)
+        assert(store.data.habits[0].messageLibrary?.used == consumed.used && store.data.habits[0].messageLibrary?.lastID == consumed.lastID)
+        var editAgain = updated
+        editAgain.scheduleRevisions = Recurrence.revised(updated.scheduleRevisions, rule: .workRest(active: 13, rest: 2), anchor: day(4), effective: day(4), calendar: calendar)
+        assert(store.upsert(editAgain))
+        assert(store.data.habits[0].scheduleRevisions?.count == 2 && Recurrence.revision(store.data.habits[0].scheduleRevisions, on: day(3), calendar: calendar) == weekly)
+        var damageHistory = store.data.habits[0]
+        damageHistory.scheduleRevisions![0].rule = .workRest(active: 3, rest: 1)
+        assert(!store.upsert(damageHistory))
+        var pending = store.data.habits[0]
+        pending.scheduleRevisions = Recurrence.revised(pending.scheduleRevisions, rule: .workRest(active: 14, rest: 1), anchor: day(5), effective: day(5), calendar: calendar)
+        assert(store.upsert(pending))
+        assert(Recurrence.nextRevision(store.data.habits[0].scheduleRevisions, after: day(4), calendar: calendar)?.effectiveFrom == "2030-01-05")
+        pending = store.data.habits[0]
+        pending.scheduleRevisions = Recurrence.revised(pending.scheduleRevisions, rule: .workRest(active: 14, rest: 1), anchor: day(4), effective: day(4), calendar: calendar)
+        assert(store.upsert(pending) && Recurrence.nextRevision(store.data.habits[0].scheduleRevisions, after: day(4), calendar: calendar) == nil)
+        assert(store.data.habits[0].days == updated.days && store.data.habits[0].checkIns == records && store.data.habitProgress == progress && store.data.garden.coins == balance)
+        print("PASS: habit cycle edits begin today, allow repeated same-day edits and explicit pending-rule activation, preserve historical schedules, approved check-ins and rewards, and reopen with the saved cycle")
     }
 }
 

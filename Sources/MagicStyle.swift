@@ -37,12 +37,21 @@ extension View {
     }
 }
 
+private struct CompactSceneControlsKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var compactSceneControls: Bool {
+        get { self[CompactSceneControlsKey.self] }
+        set { self[CompactSceneControlsKey.self] = newValue }
+    }
+}
+
 struct PixelButtonStyle: ButtonStyle {
     var primary = false
+    @Environment(\.compactSceneControls) private var compact
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 13)).foregroundStyle(primary ? Palette.goldLight : Palette.ink)
-            .padding(.horizontal, 12).padding(.vertical, 9)
+        configuration.label.font(.system(size: compact ? 12 : 13)).foregroundStyle(primary ? Palette.goldLight : Palette.ink)
+            .padding(.horizontal, compact ? 10 : 12).padding(.vertical, compact ? 7 : 9)
             .background(PixelFrame(step: 2).fill(configuration.isPressed ? Palette.paper : primary ? Palette.moss : Palette.control))
             .overlay(PixelFrame(step: 2).strokeBorder(primary ? Palette.gold : Palette.line, lineWidth: 1))
             .overlay(alignment: .bottom) { Rectangle().fill(.black.opacity(configuration.isPressed ? 0 : 0.35)).frame(height: 2).padding(.horizontal, 4) }

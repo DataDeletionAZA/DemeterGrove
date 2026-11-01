@@ -75,11 +75,11 @@ struct StudyScene: View {
                 let w = size.width, h = size.height
                 ZStack {
                     RoomBackdrop(name: "Study").frame(width: w, height: h).clipped()
-                    SceneTarget(object: .taskMemo, sceneSize: size, label: "任务", action: {SceneNavigation.open("任务",store:store)})
-                    SceneTarget(object: .calendar, sceneSize: size, label: "日程", action: {SceneNavigation.open("日程",store:store)})
-                    SceneTarget(object: .diary, sceneSize: size, label: "日记", action: {SceneNavigation.open("日记",store:store)})
-                    SceneTarget(object: .hourglass, sceneSize: size, label: "专注", action: {SceneNavigation.open("专注",store:store)})
-                    SceneTarget(object: .habitBook, sceneSize: size, label: "习惯", action: {SceneNavigation.open("习惯",store:store)})
+                    SceneTarget(object: .taskMemo, sceneSize: size, label: "任务", action: {SceneNavigation.open("任务",store:store,from:"书房")})
+                    SceneTarget(object: .calendar, sceneSize: size, label: "日程", action: {SceneNavigation.open("日程",store:store,from:"书房")})
+                    SceneTarget(object: .diary, sceneSize: size, label: "日记", action: {SceneNavigation.open("日记",store:store,from:"书房")})
+                    SceneTarget(object: .hourglass, sceneSize: size, label: "专注", action: {SceneNavigation.open("专注",store:store,from:"书房")})
+                    SceneTarget(object: .habitBook, sceneSize: size, label: "习惯", action: {SceneNavigation.open("习惯",store:store,from:"书房")})
                     SceneParticles()
                     SceneArrows(store:store,scene:"书房")
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))

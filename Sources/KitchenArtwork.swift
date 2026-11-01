@@ -22,10 +22,11 @@ struct SeedCrateArt: View {
 struct IngredientCategoryDropdown: View {
     @Binding var selection:IngredientCategory
     @State private var expanded=false
+    @Environment(\.compactSceneControls) private var compact
     var body:some View {
         Button {expanded.toggle()} label: {
             HStack(spacing:3) {Text(selection.rawValue).font(.system(size:11));Spacer(minLength:0);Text(expanded ? "▴":"▾").font(.caption)}
-                .padding(8).frame(maxWidth:.infinity).background(Palette.card,in:PixelFrame()).overlay(PixelFrame().stroke(Palette.line,lineWidth:1))
+                .padding(.horizontal,8).padding(.vertical,compact ? 6:8).frame(maxWidth:.infinity).background(Palette.card,in:PixelFrame()).overlay(PixelFrame().stroke(Palette.line,lineWidth:1))
         }.buttonStyle(.plain).accessibilityLabel("食材分类，\(selection.rawValue)")
             .overlay(alignment:.topLeading) {
                 if expanded {
@@ -36,7 +37,7 @@ struct IngredientCategoryDropdown: View {
                                     .font(.system(size:11)).padding(9).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                         }
-                    }.magicSurface(Palette.card,strong:true).offset(y:35)
+                    }.magicSurface(Palette.card,strong:true).offset(y:compact ? 31:35)
                 }
             }.onKeyPress(.escape) {expanded=false;return .handled}.zIndex(20)
     }

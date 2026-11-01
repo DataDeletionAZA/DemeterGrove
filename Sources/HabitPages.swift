@@ -201,12 +201,18 @@ struct HabitRow: View {
     private var completed: Bool { habit.days.contains(key) }
     private var entry: HabitCheckIn? { habit.checkIns?[key] }
     private var today: Bool { store.calendar.isDate(date, inSameDayAs: store.today) && habit.archivedAt == nil }
+    private var pendingSchedule: ScheduleRevision? { today ? Recurrence.nextRevision(habit.scheduleRevisions, after: date, calendar: store.calendar) : nil }
     var body: some View {
         HStack {
             Image(systemName: completed ? "checkmark.circle.fill" : "leaf").foregroundStyle(Palette.sage)
             VStack(alignment: .leading, spacing: 5) {
                 Text(habit.title + (habit.archivedAt == nil ? "" : " · 已归档")).lineLimit(2)
-                if let rule = Recurrence.revision(habit.scheduleRevisions, on: date, calendar: store.calendar)?.rule { Text(rule.summary).font(.caption).foregroundStyle(Palette.muted) }
+                if let pending = pendingSchedule, let rule = pending.rule {
+                    Text(pending.effectiveFrom + " 起：" + rule.summary).font(.caption).foregroundStyle(Palette.goldLight)
+                }
+                if let rule = Recurrence.revision(habit.scheduleRevisions, on: date, calendar: store.calendar)?.rule {
+                    Text((pendingSchedule == nil ? "" : "当前：") + rule.summary).font(.caption).foregroundStyle(Palette.muted)
+                }
                 if habit.archivedAt == nil, let minutes = habit.reminderMinutes { Label(String(format: "%02d:%02d 提醒", minutes / 60, minutes % 60), systemImage: "bell").font(.system(size: 10)).foregroundStyle(Palette.muted) }
             }
             Spacer()
@@ -231,7 +237,8 @@ struct HabitEditor: View {
     @State private var repeatRule: RepeatRule
     @State private var anchor: Date
     @State private var library: ReminderTextLibrary
-    private var effective: Date { store.data.habits.contains(where: { $0.id == habit.id }) ? store.calendar.date(byAdding: .day, value: 1, to: store.today)! : store.today }
+    private var effective: Date { store.today }
+    private var savedPending: ScheduleRevision? { Recurrence.nextRevision(habit.scheduleRevisions, after: store.today, calendar: store.calendar) }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sceneViewport) private var viewport
     init(store: GardenStore, habit: Habit) {
@@ -243,7 +250,8 @@ struct HabitEditor: View {
         _reminderMinute = State(initialValue: minutes % 60)
         let revision = habit.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
         _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.today)]))
-        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.today)
+        let pending = revision.map { $0.effectiveFrom > store.todayKey } ?? false
+        _anchor = State(initialValue: pending ? store.today : revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.today)
         _library = State(initialValue: habit.messageLibrary ?? ReminderTextLibrary(texts: [habit.encouragement ?? ""]))
     }
     var body: some View {
@@ -251,7 +259,12 @@ struct HabitEditor: View {
             Text(store.data.habits.contains { $0.id == habit.id } ? "编辑习惯" : "添加习惯").font(.title2)
             PixelScrollView { VStack(alignment: .leading, spacing: 16) {
             TextField("习惯名称", text: $habit.title).textFieldStyle(PixelTextFieldStyle())
+            if let pending = savedPending, let rule = pending.rule {
+                Text("已保存待生效：" + pending.effectiveFrom + " 起，" + rule.summary).font(.caption).foregroundStyle(Palette.muted)
+            }
+            Text("本次保存从今天（" + store.todayKey + "）生效。").font(.caption).foregroundStyle(Palette.goldLight)
             RepeatScheduleEditor(enabled: $repeating, rule: $repeatRule, anchor: $anchor, calendar: store.calendar, effective: effective, allowsOff: false)
+                .onChange(of: repeatRule.unit) { old, unit in if old != unit { anchor = effective } }
             Toggle("提醒", isOn: $reminding)
             if reminding {
                 HStack {
@@ -275,7 +288,7 @@ struct HabitEditor: View {
                 Button("保存") {
                     habit.reminderMinutes = reminding ? reminderHour * 60 + reminderMinute : nil
                     let old = habit.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
-                    if old?.rule != repeatRule || old?.anchor != CalendarDates.key(anchor, calendar: store.calendar) {
+                    if old?.rule != repeatRule || old?.anchor != CalendarDates.key(anchor, calendar: store.calendar) || (old.map { $0.effectiveFrom > store.todayKey } ?? false) {
                         habit.scheduleRevisions = Recurrence.revised(habit.scheduleRevisions, rule: repeatRule, anchor: anchor, effective: effective, calendar: store.calendar)
                     }
                     library.normalize(); habit.messageLibrary = library; habit.encouragement = nil

@@ -12,6 +12,7 @@ final class GardenStore: ObservableObject {
     @Published private(set) var saveStatus = "已保存"
     @Published var storageLocked = false
     @Published var selectedPage = "首页"
+    @Published var sceneNavigation = SceneNavigation.Context()
     @Published var journalDate = Date() { didSet { journalFollowsToday = calendar.isDate(journalDate, inSameDayAs: today) } }
     private var journalFollowsToday = true
     func stopFollowingJournalToday() { journalFollowsToday = false }
@@ -257,10 +258,10 @@ final class GardenStore: ObservableObject {
     var reminderCoverageText: String {
         reminderScheduledThrough.map { "预排至 " + $0.formatted(.dateTime.year().month().day()) + "；应用运行时自动续排，退出后仅保留已排提醒。" } ?? "应用运行时滚动预排未来 30 天提醒；系统实际排入结果会单独核对。"
     }
-    private func scheduleChangeIsValid(old: [ScheduleRevision]?, new: [ScheduleRevision]?) -> Bool {
+    private func scheduleChangeIsValid(old: [ScheduleRevision]?, new: [ScheduleRevision]?, preservingToday: Bool = true) -> Bool {
         guard Recurrence.valid(new) else { return false }
         let today = todayKey
-        let past = (old ?? []).filter { $0.effectiveFrom <= today }
+        let past = (old ?? []).filter { $0.effectiveFrom < today || (preservingToday && $0.effectiveFrom == today) }
         return past.allSatisfy { new?.contains($0) == true } && (new ?? []).allSatisfy { $0.effectiveFrom >= today || past.contains($0) }
     }
 
@@ -335,6 +336,7 @@ final class GardenStore: ObservableObject {
         habit.encouragement = habit.encouragement?.trimmingCharacters(in: .whitespacesAndNewlines)
         var library = habit.messageLibrary ?? ReminderTextLibrary(texts: [habit.encouragement ?? ""]); library.normalize(); habit.messageLibrary = library
         let old = data.habits.first { $0.id == habit.id }
+        if let old { habit.days = old.days; habit.checkIns = old.checkIns }
         if let current = old?.messageLibrary {
             library.used = current.used.intersection(Set(library.phrases.map(\.id)))
             library.lastID = current.lastID.flatMap { id in library.phrases.contains { $0.id == id } ? id : nil }
@@ -344,7 +346,7 @@ final class GardenStore: ObservableObject {
             let day = todayKey
             habit.scheduleRevisions = [ScheduleRevision(effectiveFrom: day, anchor: day, rule: RepeatRule(), firstWeekday: calendar.firstWeekday)]
         }
-        guard !storageLocked, habit.isValid, scheduleChangeIsValid(old: old?.scheduleRevisions, new: habit.scheduleRevisions) else { return false }
+        guard !storageLocked, habit.isValid, scheduleChangeIsValid(old: old?.scheduleRevisions, new: habit.scheduleRevisions, preservingToday: false) else { return false }
         if old != nil { cancelHabitReview(habit.id) }
         let previous = data
         if let i = data.habits.firstIndex(where: { $0.id == habit.id }) { data.habits[i] = habit }

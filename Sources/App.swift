@@ -17,7 +17,7 @@ struct RootView: View {
         let level="等级 \(store.data.levelProgress.level)"
         return route == "商店" ? level+" · 栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)":level
     }
-    private var backLabel:String {SceneNavigation.parent(of:store.selectedPage).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
+    private var backLabel:String {store.sceneNavigation.parent(of:store.selectedPage).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
     var body: some View {
         HStack(spacing: 0) {
             if sidebarShown {
@@ -31,7 +31,7 @@ struct RootView: View {
                 PixelScrollView {
                 VStack(spacing: 7) {
                 ForEach(pages, id: \.0) { page in
-                    Button { store.selectedPage = page.0 } label: {
+                    Button { SceneNavigation.open(page.0,store:store) } label: {
                         HStack(spacing: 13) {
                             PixelIcon(name: page.0, size: 23)
                             Text(page.0).fontWeight(sidebarPage == page.0 ? .semibold : .regular)
@@ -60,7 +60,7 @@ struct RootView: View {
                         .buttonStyle(.plain).help(sidebarShown ? "收起侧栏" : "展开侧栏").accessibilityLabel(sidebarShown ? "收起侧栏" : "展开侧栏")
                     Button {
                         if let pet=store.pet {pet.back()}
-                        else {store.selectedPage=SceneNavigation.parent(of:store.selectedPage) ?? "菜单"}
+                        else {SceneNavigation.open(store.sceneNavigation.parent(of:store.selectedPage) ?? "菜单",store:store)}
                     } label: {Image(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle())}
                         .buttonStyle(.plain).help(backLabel).accessibilityLabel(backLabel)
                     VStack(alignment: .leading, spacing: 7) {

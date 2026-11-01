@@ -28,6 +28,13 @@ for offset in 0..<28 {
 }
 let spring = revision(RepeatRule(every:2),anchor:date(2026,3,7))
 assert(spring.occurs(on:date(2026,3,9),calendar:calendar))
+let oldWeekly = revision(RepeatRule(unit: .week, weekdays: [2, 3, 4, 5, 6, 7]))
+let cycleFromTomorrow = Recurrence.revised([oldWeekly], rule: .workRest(active: 14, rest: 1), anchor: date(2030,1,5), effective: date(2030,1,5), calendar: calendar)
+assert(Recurrence.revision(cycleFromTomorrow, on: date(2030,1,4), calendar: calendar) == oldWeekly)
+assert(Recurrence.nextRevision(cycleFromTomorrow, after: date(2030,1,4), calendar: calendar)?.rule == .workRest(active: 14, rest: 1))
+assert(Recurrence.nextRevision(cycleFromTomorrow, after: date(2030,1,4), calendar: calendar)?.effectiveFrom == "2030-01-05")
+assert(Recurrence.revision(cycleFromTomorrow, on: date(2030,1,5), calendar: calendar)?.rule == .workRest(active: 14, rest: 1))
+assert(Recurrence.nextRevision(cycleFromTomorrow, after: date(2030,1,5), calendar: calendar) == nil)
 var data = AppData()
 var task = GardenTask(title:"整理",scheduleRevisions:[everyThree])
 data.tasks = [task]

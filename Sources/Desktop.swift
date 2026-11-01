@@ -164,7 +164,12 @@ final class PetController {
         }
         petSpeechBubble = PetDialogueBubbleController(store: store, anchor: { [weak self] in
             guard let self, self.panel.isVisible else { return nil }
-            return self.panel.frame
+            let pose = ChibiPose(phase:self.store.petPhase,time:0,elapsed:2,basePhase:self.store.petBasePhase,idlePose:self.store.idlePose)
+            let size = ChibiImages.images[pose.body.rawValue]?.size ?? CGSize(width:280,height:431)
+            let scale = min(200.0/480,225.0/535)
+            return NSRect(x:self.panel.frame.midX-size.width*scale/2,
+                          y:self.panel.frame.maxY-225+(self.store.petDocked ? 0:14),
+                          width:size.width*scale,height:size.height*scale)
         })
         petSpeechSubscription = store.$petSpeech.sink { [weak self] speech in self?.petSpeechBubble?.show(speech) }
         inventoryObserver=NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:nil,queue:.main) { [weak self] notice in
@@ -261,7 +266,7 @@ final class PetController {
     private func dismissFloating() { closeMenu(); closeTool() }
     func back() {
         let route=managerIsOpen ? store.selectedPage:store.activeTool
-        if let parent=SceneNavigation.parent(of:route) {openTool(parent)}
+        if let parent=store.sceneNavigation.parent(of:route) {openTool(parent)}
         else {manager?.orderOut(nil);closeTool();showMenu()}
     }
     func toggleMenu() {
@@ -277,8 +282,9 @@ final class PetController {
         NSApp.activate(ignoringOtherApps: true)
         menuPanel.makeKeyAndOrderFront(nil)
     }
-    func openTool(_ name: String) {
+    func openTool(_ name: String, from source: String? = nil) {
         let name=SceneNavigation.canonical(name)
+        store.sceneNavigation.enter(name,from:source)
         if managerIsOpen {
             store.selectedPage = ["待办":"任务", "计时器":"专注"][name] ?? name
             openManager()
@@ -401,7 +407,7 @@ struct DesktopPet: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true,grounded:store.petDocked).frame(width:200,height:225)
+                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,expressionActive:store.petSpeech != nil,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true,grounded:store.petDocked).frame(width:200,height:225)
                 PetDragSurface(click:click,drag:drag,drop:drop,move:move,look:{point,size in store.updatePetLook(point:point,size:size)})
             }.frame(width:200,height:225)
             if !store.petDocked {

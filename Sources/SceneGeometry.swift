@@ -29,6 +29,18 @@ struct SceneSizing {
 }
 
 enum SceneNavigation {
+    struct Context: Equatable {
+        private var studyRoute: String?
+        init() {}
+        mutating func enter(_ route: String, from source: String? = nil) {
+            let route = SceneNavigation.canonical(route)
+            studyRoute = source.map(SceneNavigation.canonical) == "书房" && ["任务", "习惯", "日程", "日记", "计时器"].contains(route) ? route : nil
+        }
+        func parent(of route: String) -> String? {
+            let route = SceneNavigation.canonical(route)
+            return studyRoute == route ? "书房" : SceneNavigation.parent(of: route)
+        }
+    }
     static let rooms=["书房","农场","厨房","商店","炼金室"]
     static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue]
     static func canonical(_ route:String)->String {
