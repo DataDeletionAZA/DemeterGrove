@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct HabitsPage: View {
     @ObservedObject var store: GardenStore
     @State private var date = Date()
+    @State private var followingToday = true
     @State private var display: CalendarDisplay = .week
     @State private var adding = false
     @State private var deleting: Habit?
@@ -14,6 +15,9 @@ struct HabitsPage: View {
     @State private var archiveError = ""
     private var visibleHabits: [Habit] { store.data.habits.filter { showingArchived ? $0.archivedAt != nil : $0.archivedAt == nil } }
     private var total: Int { store.data.habitDays.count }
+    private var daySelection: Binding<Date> { Binding(get: { date }, set: { value in
+        date = value; followingToday = store.calendar.isDate(value, inSameDayAs: store.today)
+    }) }
     var body: some View {
         VStack(spacing: 20) {
             Card(title: "") {
@@ -24,14 +28,14 @@ struct HabitsPage: View {
                     Button("添加习惯", systemImage: "plus") { adding = true }.buttonStyle(PixelButtonStyle(primary: true))
                 }
                 if display == .week {
-                    HabitWeekBoard(store: store, selection: $date)
+                    HabitWeekBoard(store: store, selection: daySelection, onBrowse: { followingToday = false })
                 } else {
-                    PixelCalendar(selection: $date, display: .month, maximum: store.now, compact: true, markers: { day in
-                        let key = dayKey(day)
+                    PixelCalendar(selection: daySelection, display: .month, maximum: store.today, compact: true, markers: { day in
+                        let key = CalendarDates.key(day, calendar: store.calendar)
                         if store.data.habitDays.contains(key) { return [Palette.sage] }
                         if store.data.habits.contains(where: { $0.checkIns?[key]?.status == .pending }) { return [Palette.goldLight] }
                         return []
-                    })
+                    }, onBrowse: { followingToday = false })
                 }
                 Text("累计签到 \(total) 天").font(.headline).foregroundStyle(Palette.goldLight).frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 12) {
@@ -44,8 +48,8 @@ struct HabitsPage: View {
                     }
                 }.padding(.vertical, 8)
             }
-            Card(title: date.formatted(.dateTime.month().day().weekday(.wide)), icon: "checkmark.circle") {
-                if !store.calendar.isDate(date, inSameDayAs: store.now) { Text("历史记录").font(.caption).foregroundStyle(Palette.muted) }
+            Card(title: CalendarDates.key(date, calendar: store.calendar), icon: "checkmark.circle") {
+                if !store.calendar.isDate(date, inSameDayAs: store.today) { Text("历史记录").font(.caption).foregroundStyle(Palette.muted) }
                 HStack {
                     PixelTabs(selection: $showingArchived, items: [(false, "进行中"), (true, "已归档")]).frame(width: 190)
                     Spacer()
@@ -65,8 +69,8 @@ struct HabitsPage: View {
                             Text("近 14 天").font(.system(size: 10)).foregroundStyle(Palette.muted)
                             ForEach((0..<14).reversed(), id: \.self) { offset in
                                 let day = store.calendar.date(byAdding: .day, value: -offset, to: date)!
-                                Rectangle().fill(habit.days.contains(dayKey(day)) ? Palette.sage : Palette.line.opacity(0.7)).frame(height: 10)
-                                    .help("\(dayKey(day))：\(habit.days.contains(dayKey(day)) ? "已完成" : "未完成")")
+                                Rectangle().fill(habit.days.contains(CalendarDates.key(day, calendar: store.calendar)) ? Palette.sage : Palette.line.opacity(0.7)).frame(height: 10)
+                                    .help("\(CalendarDates.key(day, calendar: store.calendar))：\(habit.days.contains(CalendarDates.key(day, calendar: store.calendar)) ? "已完成" : "未完成")")
                             }
                         }
                     }.padding(.vertical, 7)
@@ -75,6 +79,18 @@ struct HabitsPage: View {
             }
         }
         .environment(\.calendar, store.calendar)
+        .environment(\.dayBoundary, store.dayBoundary)
+        .environment(\.timeZone, store.calendar.timeZone)
+        .onAppear { if followingToday { date = store.today } }
+        .onChange(of: store.todayKey) { _, _ in if followingToday { date = store.today } }
+        .onChange(of: store.calendar.timeZone.identifier) { old, _ in
+            if followingToday { date = store.today }
+            else {
+                var oldCalendar = store.calendar; oldCalendar.timeZone = TimeZone(identifier: old) ?? .current
+                let key = CalendarDates.key(date, calendar: oldCalendar)
+                if let selected = Recurrence.date(key, calendar: store.calendar) { date = selected }
+            }
+        }
         .sheet(isPresented: $adding) { HabitEditor(store: store, habit: Habit(title: "")) }
         .sheet(item: $editing) { habit in HabitEditor(store: store, habit: habit) }
         .alert("归档这个习惯？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -90,6 +106,7 @@ struct HabitsPage: View {
 struct HabitWeekBoard: View {
     @ObservedObject var store: GardenStore
     @Binding var selection: Date
+    var onBrowse: () -> Void = {}
     @Environment(\.sceneViewport) private var viewport
     private var days: [Date] { CalendarDates.days(in: selection, week: true, calendar: store.calendar).compactMap { $0 } }
     private var cardWidth: CGFloat { max(158, (viewport.width - 108) / 7) }
@@ -103,28 +120,28 @@ struct HabitWeekBoard: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text(days.first!.formatted(.dateTime.year().month().day()) + " — " + days.last!.formatted(.dateTime.month().day())).font(.callout).foregroundStyle(Palette.goldLight)
+                Text(CalendarDates.key(days.first!, calendar: store.calendar) + " — " + CalendarDates.key(days.last!, calendar: store.calendar)).font(.callout).foregroundStyle(Palette.goldLight)
                 Spacer(minLength: 6)
                 Button { move(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一周")
                 Button { move(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一周")
-                    .disabled(store.calendar.date(byAdding: .day, value: 7, to: days.first!)! > store.calendar.startOfDay(for: store.now))
+                    .disabled(store.calendar.date(byAdding: .day, value: 7, to: days.first!)! > store.today)
             }
-            HStack { Button("回到今天") { selection = store.now }.buttonStyle(PixelButtonStyle()).disabled(store.calendar.isDate(selection, inSameDayAs: store.now)); Spacer() }
+            HStack { Button("回到今天") { selection = store.today }.buttonStyle(PixelButtonStyle()).disabled(store.calendar.isDate(selection, inSameDayAs: store.today)); Spacer() }
             ScrollViewReader { reader in
                 PixelScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(days, id: \.self) { day in
-                            HabitDayCard(habits: boardHabits, day: day, today: store.now, calendar: store.calendar, selected: store.calendar.isDate(day, inSameDayAs: selection)) { selection = day }
-                                .frame(width: cardWidth, height: boardHeight).id(dayKey(day))
+                            HabitDayCard(habits: boardHabits, day: day, today: store.today, calendar: store.calendar, selected: store.calendar.isDate(day, inSameDayAs: selection)) { selection = day }
+                                .frame(width: cardWidth, height: boardHeight).id(CalendarDates.key(day, calendar: store.calendar))
                         }
                     }.padding(.bottom, 8)
                 }.frame(height: boardHeight + 12)
-                    .onAppear { reader.scrollTo(dayKey(selection), anchor: .center) }
-                    .onChange(of: selection) { _, value in reader.scrollTo(dayKey(value), anchor: .center) }
+                    .onAppear { reader.scrollTo(CalendarDates.key(selection, calendar: store.calendar), anchor: .center) }
+                    .onChange(of: selection) { _, value in reader.scrollTo(CalendarDates.key(value, calendar: store.calendar), anchor: .center) }
             }
         }
     }
-    private func move(_ amount: Int) { selection = store.calendar.date(byAdding: .day, value: amount * 7, to: selection)! }
+    private func move(_ amount: Int) { selection = store.calendar.date(byAdding: .day, value: amount * 7, to: selection)!; onBrowse() }
 }
 
 struct HabitDayCard: View {
@@ -141,12 +158,12 @@ struct HabitDayCard: View {
         Button(action: choose) {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.system(size: 13, weight: .medium))
+                    Text(["日", "一", "二", "三", "四", "五", "六"][calendar.component(.weekday, from: day)-1]).font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 3)
                     if calendar.isDate(day, inSameDayAs: today) { Text("今天").font(.system(size: 10)).foregroundStyle(Palette.goldLight) }
                 }
                 HStack(alignment: .firstTextBaseline) {
-                    Text(day.formatted(.dateTime.day())).font(.system(size: 25, weight: .medium))
+                    Text(String(calendar.component(.day, from: day))).font(.system(size: 25, weight: .medium))
                     Spacer(minLength: 3)
                     Text("\(completed) 完成 · \(planned) 计划").font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
@@ -165,7 +182,7 @@ struct HabitDayCard: View {
                 Spacer(minLength: 0)
             }.padding(5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }.buttonStyle(PixelButtonStyle(primary: selected)).disabled(future).opacity(future ? 0.55 : 1)
-            .accessibilityLabel(day.formatted(date: .complete, time: .omitted)).accessibilityValue((["已完成 \(completed) / \(habits.count) 项"] + habits.map { $0.title + "：" + HabitDayState.value(for: $0, on: day, today: today, calendar: calendar).rawValue }).joined(separator: "，"))
+            .accessibilityLabel(CalendarDates.key(day, calendar: calendar)).accessibilityValue((["已完成 \(completed) / \(habits.count) 项"] + habits.map { $0.title + "：" + HabitDayState.value(for: $0, on: day, today: today, calendar: calendar).rawValue }).joined(separator: "，"))
     }
     private func symbol(_ state: HabitDayState) -> String {
         switch state { case .completed: return "checkmark.circle.fill"; case .pending: return "clock"; case .needsMore: return "exclamationmark.circle"; case .empty, .upcoming, .rest, .notStarted, .archived: return "circle" }
@@ -180,10 +197,10 @@ struct HabitRow: View {
     var habit: Habit
     var date: Date
     @State private var checkingIn = false
-    private var key: String { dayKey(date) }
+    private var key: String { CalendarDates.key(date, calendar: store.calendar) }
     private var completed: Bool { habit.days.contains(key) }
     private var entry: HabitCheckIn? { habit.checkIns?[key] }
-    private var today: Bool { store.calendar.isDate(date, inSameDayAs: store.now) && habit.archivedAt == nil }
+    private var today: Bool { store.calendar.isDate(date, inSameDayAs: store.today) && habit.archivedAt == nil }
     var body: some View {
         HStack {
             Image(systemName: completed ? "checkmark.circle.fill" : "leaf").foregroundStyle(Palette.sage)
@@ -194,7 +211,7 @@ struct HabitRow: View {
             }
             Spacer()
             Text("累计 \(habit.days.count) 天").font(.caption).foregroundStyle(Palette.muted)
-            Button(habit.archivedAt != nil ? "历史记录" : store.reviewingHabits.contains(habit.id) && today ? "审核中" : completed ? "已完成" : (entry?.status.title ?? (today ? (habit.isScheduled(on: date, calendar: store.calendar) ? "打卡" : "额外打卡") : HabitDayState.value(for: habit, on: date, today: store.now, calendar: store.calendar).rawValue))) { checkingIn = true }
+            Button(habit.archivedAt != nil ? "历史记录" : store.reviewingHabits.contains(habit.id) && today ? "审核中" : completed ? "已完成" : (entry?.status.title ?? (today ? (habit.isScheduled(on: date, calendar: store.calendar) ? "打卡" : "额外打卡") : HabitDayState.value(for: habit, on: date, today: store.today, calendar: store.calendar).rawValue))) { checkingIn = true }
                 .buttonStyle(PixelButtonStyle(primary: today && !completed)).accessibilityLabel((habit.archivedAt == nil ? "打卡：" : "历史记录：") + habit.title).accessibilityValue(completed ? "已完成" : (entry?.status.title ?? "未打卡")).disabled(habit.archivedAt == nil && !today && entry == nil)
         }.sheet(isPresented: $checkingIn) {
             if habit.archivedAt != nil { HabitHistoryView(store: store, habitID: habit.id) }
@@ -214,7 +231,7 @@ struct HabitEditor: View {
     @State private var repeatRule: RepeatRule
     @State private var anchor: Date
     @State private var library: ReminderTextLibrary
-    private var effective: Date { store.data.habits.contains(where: { $0.id == habit.id }) ? store.calendar.date(byAdding: .day, value: 1, to: store.now)! : store.now }
+    private var effective: Date { store.data.habits.contains(where: { $0.id == habit.id }) ? store.calendar.date(byAdding: .day, value: 1, to: store.today)! : store.today }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sceneViewport) private var viewport
     init(store: GardenStore, habit: Habit) {
@@ -225,8 +242,8 @@ struct HabitEditor: View {
         _reminderHour = State(initialValue: minutes / 60)
         _reminderMinute = State(initialValue: minutes % 60)
         let revision = habit.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
-        _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.now)]))
-        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.now)
+        _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.today)]))
+        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.today)
         _library = State(initialValue: habit.messageLibrary ?? ReminderTextLibrary(texts: [habit.encouragement ?? ""]))
     }
     var body: some View {
@@ -283,9 +300,9 @@ struct HabitEvidenceEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sceneViewport) private var viewport
     private var habit: Habit? { store.data.habits.first { $0.id == habitID } }
-    private var entry: HabitCheckIn? { habit?.checkIns?[dayKey(date)] }
-    private var isToday: Bool { store.calendar.isDate(date, inSameDayAs: store.now) }
-    private var editable: Bool { isToday && habit != nil && habit?.archivedAt == nil && habit?.days.contains(dayKey(date)) != true }
+    private var entry: HabitCheckIn? { habit?.checkIns?[CalendarDates.key(date, calendar: store.calendar)] }
+    private var isToday: Bool { store.calendar.isDate(date, inSameDayAs: store.today) }
+    private var editable: Bool { isToday && habit != nil && habit?.archivedAt == nil && habit?.days.contains(CalendarDates.key(date, calendar: store.calendar)) != true }
     private var reviewing: Bool { editable && store.reviewingHabits.contains(habitID) }
     private var profile: AIProfile? { store.data.ai?.profile(for: .habitReview) }
     private var changed: Bool { entry?.text != text.trimmingCharacters(in: .whitespacesAndNewlines) || entry?.image != image }
@@ -298,13 +315,13 @@ struct HabitEvidenceEditor: View {
     var body: some View {
         PixelScrollView { VStack(alignment: .leading, spacing: 17) {
             Text(habit?.title ?? "习惯打卡").font(.title2)
-            Text(date.formatted(.dateTime.year().month().day())).font(.caption).foregroundStyle(Palette.muted)
+            Text(CalendarDates.key(date, calendar: store.calendar)).font(.caption).foregroundStyle(Palette.muted)
             if reviewing { Label("审核中", systemImage: "hourglass").foregroundStyle(Palette.goldLight) }
             else if let entry { Text("状态：\(entry.status.title)").foregroundStyle(Palette.goldLight) }
             if habit?.archivedAt != nil { Text("已归档 · 历史材料").font(.caption).foregroundStyle(Palette.muted) }
             if let entry {
-                Text("提交：" + entry.submittedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted)
-                if let reviewedAt = entry.reviewedAt { Text("审核：" + reviewedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted) }
+                Text("提交：" + store.dayBoundary.timestamp(entry.submittedAt)).font(.caption).foregroundStyle(Palette.muted)
+                if let reviewedAt = entry.reviewedAt { Text("审核：" + store.dayBoundary.timestamp(reviewedAt)).font(.caption).foregroundStyle(Palette.muted) }
             }
             if let feedback = entry?.feedback, !feedback.isEmpty { Text(feedback).font(.callout).textSelection(.enabled) }
             Text("打卡材料").font(.callout)
@@ -411,7 +428,7 @@ struct HabitHistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(habit?.title ?? "习惯历史").font(.title2)
-            if let archivedAt = habit?.archivedAt { Text("归档于 " + archivedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted) }
+            if let archivedAt = habit?.archivedAt { Text("归档于 " + store.dayBoundary.timestamp(archivedAt)).font(.caption).foregroundStyle(Palette.muted) }
             PixelScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if days.isEmpty { EmptyNote(text: "暂无历史记录") }

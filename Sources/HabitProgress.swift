@@ -45,8 +45,8 @@ func validDayKey(_ key: String) -> Bool {
     let parts = key.split(separator: "-", omittingEmptySubsequences: false)
     guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
           let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]), year > 0,
-          let date = Calendar.current.date(from: DateComponents(year: year, month: month, day: day)) else { return false }
-    return dayKey(date) == key
+          let date = Calendar(identifier: .gregorian).date(from: DateComponents(year: year, month: month, day: day)) else { return false }
+    return CalendarDates.key(date, calendar: Calendar(identifier: .gregorian)) == key
 }
 
 extension Habit {
@@ -72,8 +72,8 @@ extension AppData {
         habits.reduce(into: habitProgress?.days ?? []) { $0.formUnion($1.days) }
     }
     mutating func submitHabitEvidence(_ id: UUID, date: Date, text: String, image: Data?, now: Date = Date()) -> Bool {
-        guard Calendar.current.isDate(date, inSameDayAs: now), let i = habits.firstIndex(where: { $0.id == id }) else { return false }
-        let key = dayKey(now)
+        guard preferences.dayBoundary.calendar.isDate(date, inSameDayAs: preferences.dayBoundary.day(for: now)), let i = habits.firstIndex(where: { $0.id == id }) else { return false }
+        let key = preferences.dayBoundary.key(for: now)
         guard habits[i].archivedAt == nil, !habits[i].days.contains(key) else { return false }
         let entry = HabitCheckIn(text: text.trimmingCharacters(in: .whitespacesAndNewlines), image: image, submittedAt: now)
         guard entry.isValid else { return false }
@@ -82,17 +82,17 @@ extension AppData {
         return true
     }
     mutating func cancelHabitSubmission(_ id: UUID, date: Date, now: Date = Date()) -> Bool {
-        guard Calendar.current.isDate(date, inSameDayAs: now),
+        guard preferences.dayBoundary.calendar.isDate(date, inSameDayAs: preferences.dayBoundary.day(for: now)),
               let i = habits.firstIndex(where: { $0.id == id }),
-              habits[i].archivedAt == nil, habits[i].checkIns?[dayKey(now)]?.status == .pending else { return false }
-        habits[i].checkIns?.removeValue(forKey: dayKey(now))
+              habits[i].archivedAt == nil, habits[i].checkIns?[preferences.dayBoundary.key(for: now)]?.status == .pending else { return false }
+        habits[i].checkIns?.removeValue(forKey: preferences.dayBoundary.key(for: now))
         return true
     }
     mutating func applyHabitReview(_ id: UUID, day: String, approved: Bool, feedback: String, now: Date = Date()) -> HabitReward? {
-        guard day == dayKey(now), feedback.count <= 1000,
+        guard day == preferences.dayBoundary.key(for: now), feedback.count <= 1000,
               let i = habits.firstIndex(where: { $0.id == id }),
               habits[i].archivedAt == nil, var entry = habits[i].checkIns?[day], entry.isValid,
-              entry.status == .pending, Calendar.current.isDate(entry.submittedAt, inSameDayAs: now), now >= entry.submittedAt else { return nil }
+              entry.status == .pending, preferences.dayBoundary.key(for: entry.submittedAt) == day, now >= entry.submittedAt else { return nil }
         entry.status = approved ? .approved : .rejected
         entry.reviewedAt = now
         entry.feedback = feedback
@@ -103,12 +103,12 @@ extension AppData {
         progress.days.formUnion(habitDays)
         habits[i].days.insert(day)
         progress.days.insert(day)
-        guard !progress.rewardedDays.contains(day), before < progress.days.count else {
+        guard !progress.rewardedDays.contains(day), before < progress.days.count, habitRewardNotBefore.map({ now >= $0 }) ?? true else {
             habitProgress = progress
             return HabitReward(coins: 0, milestones: [])
         }
         progress.rewardedDays.insert(day)
-        let milestones = HabitProgress.milestones.filter { before < $0 && progress.days.count >= $0 && !progress.milestones.contains($0) && !progress.pastMilestones.contains($0) }
+        let milestones = HabitProgress.milestones.filter { progress.days.count >= $0 && !progress.milestones.contains($0) && !progress.pastMilestones.contains($0) }
         progress.milestones.formUnion(milestones)
         for milestone in milestones {
             switch milestone {

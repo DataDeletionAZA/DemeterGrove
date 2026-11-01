@@ -36,7 +36,7 @@ struct FocusReviewButton: View {
         request = Task { @MainActor in
             defer { if store.focusReviewRequests[sessionID] == id { store.focusReviewRequests[sessionID] = nil } }
             do {
-                let feedback = try await client.reviewFocus(profile: profile, record: snapshot.aiReviewRecord, writing: writing)
+                let feedback = try await client.reviewFocus(profile: profile, record: snapshot.aiReviewRecord(boundary: store.dayBoundary), writing: writing)
                 guard !Task.isCancelled, id == requestID else { return }
                 guard session == snapshot, store.data.ai?.profile(for: .focusReview) == profile,
                       (store.data.ai?.writing(for: .focusReview) ?? .standard) == writing else {
@@ -53,11 +53,11 @@ struct FocusReviewButton: View {
 }
 
 extension FocusSession {
-    var aiReviewRecord: String {
+    func aiReviewRecord(boundary: DayBoundary) -> String {
         let values: [String: Any] = [
             "名称": title, "类型": kind.rawValue,
-            "开始时间": beganAt?.formatted(date: .complete, time: .standard) ?? "未知",
-            "结束时间": endedAt?.formatted(date: .complete, time: .standard) ?? "未知",
+            "开始时间": beganAt.map { boundary.timestamp($0) } ?? "未知",
+            "结束时间": endedAt.map { boundary.timestamp($0) } ?? "未知",
             "专注秒数": kind == .rest ? 0 : seconds,
             "休息秒数": kind == .rest ? seconds : 0,
             "暂停次数": pauseCount.map(String.init) ?? "未知",

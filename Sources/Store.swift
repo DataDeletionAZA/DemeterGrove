@@ -6,13 +6,15 @@ import UniformTypeIdentifiers
 
 final class GardenStore: ObservableObject {
     @Published var data: AppData { didSet { invalidateHabitReviews(); scheduleSave() } }
-    @Published var now = Date()
+    @Published var now = Date() { didSet { if journalFollowsToday && journalDate != today { journalDate = today } } }
     @Published var message = ""
     @Published var error = ""
     @Published private(set) var saveStatus = "已保存"
     @Published var storageLocked = false
     @Published var selectedPage = "首页"
-    @Published var journalDate = Date()
+    @Published var journalDate = Date() { didSet { journalFollowsToday = calendar.isDate(journalDate, inSameDayAs: today) } }
+    private var journalFollowsToday = true
+    func stopFollowingJournalToday() { journalFollowsToday = false }
     @Published var activeTool = "任务"
     @Published var focusDraftMinutes = 25
     @Published var pendingFocusReviewID: UUID? = nil
@@ -34,6 +36,7 @@ final class GardenStore: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var lastCheckpoint = Date()
     private var lastReminderRefresh = Date.distantPast
+    private var observedDayBoundary: DayBoundary? = nil
     private var reminderGeneration = 0
     private var reminderRefreshActive = false
     private var reminderRefreshNeeded = false
@@ -96,7 +99,9 @@ final class GardenStore: ObservableObject {
             self.error = "无法打开存档文件夹：\(error.localizedDescription)"
             storageLocked = true
         }
-        data.migrateRecurrences(at: now, calendar: calendar)
+        data.migrateRecurrences(at: today, calendar: calendar)
+        journalDate = today
+        observedDayBoundary = fixedDayBoundary
         focusDraftMinutes = data.preferences.focusMinutes
         clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] date in self?.tick(date) }
         let workspace = NSWorkspace.shared.notificationCenter
@@ -110,13 +115,13 @@ final class GardenStore: ObservableObject {
         for name in [Notification.Name.NSSystemTimeZoneDidChange, Notification.Name.NSCalendarDayChanged] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 guard let self else { return }
-                self.now = Date()
+                self.updateClock(Date())
                 if self.data.preferences.notifications { self.refreshReminders() }
             })
         }
         observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
-            self.now = Date()
+            self.updateClock(Date())
             if self.data.preferences.notifications { self.refreshReminders() }
         })
     }
@@ -149,7 +154,7 @@ final class GardenStore: ObservableObject {
     }
 
     func tick(_ date: Date) {
-        now = date
+        updateClock(date)
         invalidateHabitReviews()
         guard !storageLocked else { return }
         if let run = data.timer, run.id != blockedFocusFinishID, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
@@ -165,16 +170,50 @@ final class GardenStore: ObservableObject {
         }
     }
 
-    var calendar: Calendar {
-        var value = Calendar.current
-        value.firstWeekday = data.preferences.weekStartsOn ?? 2
-        return value
+    private var fixedDayBoundary: DayBoundary { DayBoundary(timeZoneID: calendar.timeZone.identifier, rolloverMinutes: dayBoundary.rolloverMinutes, firstWeekday: calendar.firstWeekday) }
+    private func updateClock(_ date: Date) {
+        let current = fixedDayBoundary
+        if let old = observedDayBoundary, old != current {
+            let key = old.key(for: date)
+            let follow = journalFollowsToday
+            let selectedKey = CalendarDates.key(journalDate, calendar: old.calendar)
+            if !storageLocked, data.habits.contains(where: { $0.days.contains(key) }) || data.habitProgress?.rewardedDays.contains(key) == true {
+                data.habitRewardNotBefore = max(data.habitRewardNotBefore ?? date, old.interval(forDay: old.day(for: date)).end)
+            }
+            if !follow, let selected = Recurrence.date(selectedKey, calendar: calendar) { journalDate = selected; journalFollowsToday = false }
+        }
+        observedDayBoundary = current
+        now = date
     }
-
-    var todaySessions: [FocusSession] { data.sessions.filter { $0.kind != .rest && $0.focusSeconds(in: calendar.dateInterval(of: .day, for: now)!) > 0 } }
-    var todayMinutes: Int { Int(data.focusSeconds(in: calendar.dateInterval(of: .day, for: now)!) / 60) }
-    var todayKeys: Int { data.keys[dayKey(now), default: 0] }
-    var todayClicks: Int { data.mouseClicks?[dayKey(now)] ?? 0 }
+    var dayBoundary: DayBoundary { data.preferences.dayBoundary }
+    var calendar: Calendar { dayBoundary.calendar }
+    var today: Date { dayBoundary.day(for: now) }
+    var todayKey: String { dayBoundary.key(for: now) }
+    var todayInterval: DateInterval { dayBoundary.interval(forDay: today) }
+    var todaySessions: [FocusSession] { data.sessions.filter { $0.kind != .rest && $0.focusSeconds(in: todayInterval) > 0 } }
+    var todayMinutes: Int { Int(data.focusSeconds(in: todayInterval) / 60) }
+    var todayKeys: Int { data.keys[todayKey, default: 0] }
+    var todayClicks: Int { data.mouseClicks?[todayKey] ?? 0 }
+    @discardableResult
+    func updateDaySettings(timeZoneID: String?, rolloverMinutes: Int) -> Bool {
+        let next = DayBoundary(timeZoneID: timeZoneID, rolloverMinutes: rolloverMinutes, firstWeekday: calendar.firstWeekday)
+        guard !storageLocked, next.isValid else { return false }
+        guard next != dayBoundary else { return true }
+        let previous = data
+        let follow = journalFollowsToday
+        let selectedKey = CalendarDates.key(journalDate, calendar: calendar)
+        if data.habitProgress?.rewardedDays.contains(todayKey) == true || data.habits.contains(where: { $0.days.contains(todayKey) }) {
+            data.habitRewardNotBefore = max(data.habitRewardNotBefore ?? now, todayInterval.end)
+        }
+        data.preferences.dayTimeZoneID = timeZoneID
+        data.preferences.dayRolloverMinutes = rolloverMinutes
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
+        observedDayBoundary = fixedDayBoundary
+        if follow { journalDate = today }
+        else if let selected = Recurrence.date(selectedKey, calendar: calendar) { journalDate = selected; journalFollowsToday = false }
+        refreshReminders()
+        return true
+    }
     var todayActions: Int { todayKeys + todayClicks }
     func openJournal(date: Date) {
         journalDate = date
@@ -192,8 +231,8 @@ final class GardenStore: ObservableObject {
     }
     var petPhase:Int { tapPhase != 0 && tapPhase != 31 ? tapPhase : petBasePhase }
     var todayTaskOccurrences: [TaskOccurrence] {
-        taskOccurrences(from: now, through: now).filter { occurrence in
-            occurrence.completedAt == nil && (occurrence.scheduledDay != nil || (occurrence.task.due.map { calendar.startOfDay(for: $0) <= calendar.startOfDay(for: now) } ?? true))
+        taskOccurrences(from: today, through: today).filter { occurrence in
+            occurrence.completedAt == nil && (occurrence.scheduledDay != nil || (occurrence.task.due.map { calendar.startOfDay(for: $0) <= today } ?? true))
         }
     }
     var todayTasks: [GardenTask] { todayTaskOccurrences.map(\.task) }
@@ -206,15 +245,15 @@ final class GardenStore: ObservableObject {
     }
     var allTaskOccurrences: [TaskOccurrence] {
         let firstKey = (data.tasks.compactMap { $0.scheduleRevisions?.map(\.effectiveFrom).min() } + (data.taskOccurrenceReschedules ?? []).map(\.rescheduledDay)).min()
-        let first = firstKey.flatMap { Recurrence.date($0, calendar: calendar) } ?? now
-        return taskOccurrences(from: min(first, now), through: now)
+        let first = firstKey.flatMap { Recurrence.date($0, calendar: calendar) } ?? today
+        return taskOccurrences(from: min(first, today), through: today)
     }
     var reminderCoverageText: String {
         reminderScheduledThrough.map { "预排至 " + $0.formatted(.dateTime.year().month().day()) + "；应用运行时自动续排，退出后仅保留已排提醒。" } ?? "应用运行时滚动预排未来 30 天提醒；系统实际排入结果会单独核对。"
     }
     private func scheduleChangeIsValid(old: [ScheduleRevision]?, new: [ScheduleRevision]?) -> Bool {
         guard Recurrence.valid(new) else { return false }
-        let today = CalendarDates.key(now, calendar: calendar)
+        let today = todayKey
         let past = (old ?? []).filter { $0.effectiveFrom <= today }
         return past.allSatisfy { new?.contains($0) == true } && (new ?? []).allSatisfy { $0.effectiveFrom >= today || past.contains($0) }
     }
@@ -243,7 +282,7 @@ final class GardenStore: ObservableObject {
     }
     @discardableResult
     func toggleTask(_ id: UUID) -> Bool {
-        guard let occurrence = taskOccurrences(from: now, through: now).first(where: { $0.task.id == id }) else { return false }
+        guard let occurrence = taskOccurrences(from: today, through: today).first(where: { $0.task.id == id }) else { return false }
         return toggleTaskOccurrence(occurrence)
     }
     @discardableResult
@@ -251,7 +290,7 @@ final class GardenStore: ObservableObject {
         guard !storageLocked, let i = data.tasks.firstIndex(where: { $0.id == occurrence.task.id }) else { return false }
         let previous = data
         if let day = occurrence.scheduledDay {
-            guard let displayDay = occurrence.displayDay, displayDay <= CalendarDates.key(now, calendar: calendar), let date = Recurrence.date(displayDay, calendar: calendar),
+            guard let displayDay = occurrence.displayDay, displayDay <= todayKey, let date = Recurrence.date(displayDay, calendar: calendar),
                   data.taskOccurrences(from: date, through: date, calendar: calendar).contains(where: { $0.id == occurrence.id }) else { return false }
             if data.recurringTaskCompletions == nil { data.recurringTaskCompletions = [] }
             if data.recurringTaskCompletions!.contains(where: { $0.id == occurrence.id }) { data.recurringTaskCompletions!.removeAll { $0.id == occurrence.id } }
@@ -296,7 +335,7 @@ final class GardenStore: ObservableObject {
             habit.messageLibrary = library
         }
         if habit.scheduleRevisions == nil {
-            let day = CalendarDates.key(now, calendar: calendar)
+            let day = todayKey
             habit.scheduleRevisions = [ScheduleRevision(effectiveFrom: day, anchor: day, rule: RepeatRule(), firstWeekday: calendar.firstWeekday)]
         }
         guard !storageLocked, habit.isValid, scheduleChangeIsValid(old: old?.scheduleRevisions, new: habit.scheduleRevisions) else { return false }
@@ -354,7 +393,7 @@ final class GardenStore: ObservableObject {
 
     private func habitReviewIsCurrent(_ snapshot: HabitReviewSnapshot) -> Bool {
         let date = reviewClock()
-        guard !storageLocked, snapshot.day == dayKey(date), date >= snapshot.evidence.submittedAt,
+        guard !storageLocked, snapshot.day == dayBoundary.key(for: date), date >= snapshot.evidence.submittedAt,
               let habit = data.habits.first(where: { $0.id == snapshot.id }),
               habit.title == snapshot.title, habit.archivedAt == nil, !habit.days.contains(snapshot.day),
               habit.checkIns?[snapshot.day] == snapshot.evidence,
@@ -383,11 +422,11 @@ final class GardenStore: ObservableObject {
         guard !reviewingHabits.contains(id) else { return false }
         guard !Task.isCancelled else { return false }
         let current = reviewClock()
-        let day = dayKey(current)
-        guard !storageLocked, Calendar.current.isDate(date, inSameDayAs: current),
+        let day = dayBoundary.key(for: current)
+        guard !storageLocked, calendar.isDate(date, inSameDayAs: dayBoundary.day(for: current)),
               let habit = data.habits.first(where: { $0.id == id }), habit.archivedAt == nil, !habit.days.contains(day),
               let evidence = habit.checkIns?[day], evidence.isValid, evidence.status == .pending,
-              Calendar.current.isDate(evidence.submittedAt, inSameDayAs: current), current >= evidence.submittedAt else {
+              dayBoundary.key(for: evidence.submittedAt) == day, current >= evidence.submittedAt else {
             reviewErrors[id] = "仅能审核今天已提交、尚未通过的材料。"
             return false
         }
@@ -556,7 +595,7 @@ final class GardenStore: ObservableObject {
 
     func recordInput(_ kind: KeyCounter.Input, at date: Date = Date()) {
         guard !storageLocked else { return }
-        let key = dayKey(date)
+        let key = dayBoundary.key(for: date)
         if kind == .keyboard { data.keys[key, default: 0] = min(1_000_000_000, data.keys[key, default: 0]+1) }
         else {
             if data.mouseClicks == nil { data.mouseClicks = [:] }
@@ -718,7 +757,7 @@ final class GardenStore: ObservableObject {
         save()
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "暮色小院-\(dayKey()).json"
+        panel.nameFieldStringValue = "暮色小院-\(todayKey).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         var snapshot = data
         snapshot.savedAt = Date()
@@ -771,10 +810,10 @@ final class GardenStore: ObservableObject {
         data.tasks = [GardenTask(title: "读完这一章", important: true, urgent: false, due: Date()),
                       GardenTask(title: "整理明天的安排", important: true, urgent: true, due: Date()),
                       GardenTask(title: "给窗台的植物浇水", important: false, urgent: false)]
-        data.habits = [Habit(title: "读书二十分钟"), Habit(title: "出门走一走", days: [dayKey()]), Habit(title: "写一小段日记")]
+        data.habits = [Habit(title: "读书二十分钟"), Habit(title: "出门走一走", days: [todayKey]), Habit(title: "写一小段日记")]
         data.events = [Appointment(title: "留给自己的阅读时间", start: Date().addingTimeInterval(3600), end: Date().addingTimeInterval(7200))]
         data.sessions = [FocusSession(id: UUID(), title: "阅读", kind: .pomodoro, date: Date(), seconds: 1500)]
-        data.keys[dayKey()] = 1286
+        data.keys[todayKey] = 1286
         data.garden.plots[0].crop = .carrot
         data.garden.plots[1].crop = .tomato
         data.garden.plots[1].plantedAt = 900

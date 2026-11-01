@@ -1,18 +1,24 @@
 import Foundation
 
 struct SceneSizing {
-    static let headerHeight:CGFloat=72
+    static let headerHeight:CGFloat=80
     static let sectionGap:CGFloat=12
-    static let verticalReserve:CGFloat=180
+    static let verticalReserve:CGFloat=120
     static let gap:CGFloat=12
     static let scrollGutter:CGFloat=16
     static func canvasWidth(viewportWidth:CGFloat,availableWidth:CGFloat?=nil)->CGFloat {
         max(1,min(viewportWidth-scrollGutter,availableWidth ?? viewportWidth))
     }
-    static func sidebar(width:CGFloat)->CGFloat {min(340,max(144,width*0.26))}
-    static func height(width:CGFloat,viewportHeight:CGFloat)->CGFloat {
-        max(1,min(max(1,width-sidebar(width:width)-gap)/1.5,max(120,viewportHeight-verticalReserve)))
+    static func sidebar(width:CGFloat)->CGFloat {min(460,max(144,width*0.26))}
+    static func height(width:CGFloat,viewportHeight:CGFloat,hasSidebar:Bool=true)->CGFloat {
+        let stageWidth=max(1,width-(hasSidebar ? sidebar(width:width)+gap:0))
+        return max(1,min(stageWidth/1.5,max(1,viewportHeight-verticalReserve)))
     }
+    static func initialWindow(available:CGSize)->CGSize {
+        let scale=max(0.001,min(1,available.width/1000,available.height/680))
+        return CGSize(width:1000*scale,height:680*scale)
+    }
+    static func stockColumns(width:CGFloat)->Int {max(1,min(4,Int((width+8)/104)))}
     static func dialog(preferred:CGSize,viewport:CGSize)->CGSize {
         CGSize(width:min(preferred.width,max(280,viewport.width-12)),height:min(preferred.height,max(240,viewport.height-12)))
     }
@@ -28,7 +34,7 @@ enum SceneNavigation {
     static func canonical(_ route:String)->String {
         ["地图":"首页","小院":"首页","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务"][route] ?? route
     }
-    static func parent(of route:String)->String? {wilds.contains(canonical(route)) ? "首页":nil}
+    static func parent(of route:String)->String? {let route=canonical(route);return wilds.contains(route) ? "户外地图":route == "户外地图" ? "首页":nil}
     static func neighbors(of scene:String)->(String,String)? {
         let scene=canonical(scene)
         let group=rooms.contains(scene) ? rooms:wilds

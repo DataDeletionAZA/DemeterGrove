@@ -11,9 +11,10 @@ struct HabitDayRecord: Identifiable {
 struct DailyRecords {
     var date: Date
     var calendar: Calendar
+    var rolloverMinutes = 0
+    private var boundary: DayBoundary { DayBoundary(timeZoneID: calendar.timeZone.identifier, rolloverMinutes: rolloverMinutes, firstWeekday: calendar.firstWeekday) }
     var interval: DateInterval {
-        let start = calendar.startOfDay(for: date)
-        return DateInterval(start: start, end: calendar.date(byAdding: .day, value: 1, to: start)!)
+        boundary.interval(forDay: date)
     }
     var key: String { CalendarDates.key(date, calendar: calendar) }
     func events(in data: AppData) -> [Appointment] {
@@ -25,7 +26,7 @@ struct DailyRecords {
         data.taskOccurrences(from: date, through: date, calendar: calendar).filter { occurrence in
             if let scheduled = occurrence.displayDay { return scheduled == key }
             if let due = occurrence.task.due { return calendar.isDate(due, inSameDayAs: date) }
-            return occurrence.completedAt.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+            return occurrence.completedAt.map { boundary.key(for: $0) == key } ?? false
         }
     }
     func habits(in data: AppData) -> [HabitDayRecord] {

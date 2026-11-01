@@ -4,11 +4,17 @@ import Charts
 struct StatsPage: View {
     @ObservedObject var store: GardenStore
     @State private var range: StatsRange = .week
-    @State private var weekDate = Date()
-    @State private var monthDate = Date()
-    @State private var yearDate = Date()
+    @State private var weekDate:Date
+    @State private var monthDate:Date
+    @State private var yearDate:Date
+    init(store:GardenStore) {
+        self.store=store
+        _weekDate=State(initialValue:store.today)
+        _monthDate=State(initialValue:store.today)
+        _yearDate=State(initialValue:store.today)
+    }
     private var date: Date { range == .week ? weekDate : (range == .month ? monthDate : yearDate) }
-    private var period: StatsPeriod { StatsPeriod(date: date, range: range, calendar: store.calendar) }
+    private var period: StatsPeriod { StatsPeriod(date: date, range: range, calendar: store.calendar, rolloverMinutes: store.dayBoundary.rolloverMinutes) }
     private var current: Bool { period.contains(store.now) }
     private var year: Int { store.calendar.component(.year, from: date) }
     private var month: Int { store.calendar.component(.month, from: monthDate) }
@@ -24,9 +30,14 @@ struct StatsPage: View {
     private var periodName: String { (current ? "本" : "这一") + range.rawValue }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            PixelTabs(selection: $range, items: [(.week, "周"), (.month, "月"), (.year, "年")]).frame(width: 220)
+            PixelTabs(selection: $range, items: [(.week, "周"), (.month, "月"), (.year, "年")]).frame(maxWidth:220).frame(maxWidth:.infinity)
             periodContent.id(range)
-        }
+        }.frame(maxWidth:960).frame(maxWidth:.infinity)
+            .onChange(of:store.today) {previous,current in
+                if store.calendar.isDate(weekDate,inSameDayAs:previous) {weekDate=current}
+                if store.calendar.isDate(monthDate,inSameDayAs:previous) {monthDate=current}
+                if store.calendar.isDate(yearDate,inSameDayAs:previous) {yearDate=current}
+            }
     }
     private var periodContent: some View {
         let summary = StatsSummary(data: store.data, period: period)
@@ -123,7 +134,7 @@ struct StatsPage: View {
     }
     private func openDay(_ day: Date) { store.journalDate = day; store.selectedPage = "日程"; store.pet?.openTool("日程") }
     private func resetDate() {
-        switch range { case .week: weekDate = store.now; case .month: monthDate = store.now; case .year: yearDate = store.now }
+        switch range { case .week: weekDate = store.today; case .month: monthDate = store.today; case .year: yearDate = store.today }
     }
     private func shift(_ amount: Int) {
         switch range { case .week: weekDate = period.shifted(amount); case .month: monthDate = period.shifted(amount); case .year: yearDate = period.shifted(amount) }

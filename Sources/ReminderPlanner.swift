@@ -58,18 +58,21 @@ struct ReminderAssignment: Codable, Equatable, Identifiable {
 
 extension AppData {
     mutating func planReminders(at now: Date, calendar: Calendar, horizonDays: Int = 30) -> [ReminderAssignment] {
-        migrateRecurrences(at: now, calendar: calendar)
+        let boundary = DayBoundary(timeZoneID: calendar.timeZone.identifier, rolloverMinutes: preferences.dayBoundary.rolloverMinutes, firstWeekday: calendar.firstWeekday)
+        let today = boundary.day(for: now)
+        migrateRecurrences(at: today, calendar: calendar)
         let old = reminderAssignments ?? []
         for item in old.filter({ $0.fireAt <= now && $0.registered }).sorted(by: { $0.fireAt < $1.fireAt }) {
             guard let phraseID = item.phraseID else { continue }
             if item.isHabit, let i = habits.firstIndex(where: { $0.id == item.ownerID }) { _ = habits[i].messageLibrary?.reserve(phraseID) }
             if !item.isHabit, let i = tasks.firstIndex(where: { $0.id == item.ownerID }) { _ = tasks[i].messageLibrary?.reserve(phraseID) }
         }
-        let last = calendar.date(byAdding: .day, value: max(1, horizonDays)-1, to: now)!
-        let days = Recurrence.days(from: now, through: last, calendar: calendar)
+        let last = calendar.date(byAdding: .day, value: max(1, horizonDays)-1, to: today)!
+        let days = Recurrence.days(from: today, through: last, calendar: calendar)
         var events: [ReminderAssignment] = []
         func event(id: String, ownerID: UUID, habit: Bool, day: Date, minutes: Int, title: String) -> ReminderAssignment? {
-            guard let fire = calendar.date(bySettingHour: minutes/60, minute: minutes%60, second: 0, of: day), fire > now else { return nil }
+            let fire = boundary.time(onDay: day, minutes: minutes)
+            guard fire > now else { return nil }
             return ReminderAssignment(id: id, ownerID: ownerID, isHabit: habit, fireAt: fire, title: title, text: "")
         }
         for habit in habits where habit.archivedAt == nil {
@@ -78,10 +81,10 @@ extension AppData {
                 if let value = event(id: "habit-"+habit.id.uuidString+"-"+CalendarDates.key(day, calendar: calendar), ownerID: habit.id, habit: true, day: day, minutes: minutes, title: "习惯提醒："+habit.title) { events.append(value) }
             }
         }
-        for occurrence in taskOccurrences(from: now, through: last, calendar: calendar) where occurrence.completedAt == nil {
+        for occurrence in taskOccurrences(from: today, through: last, calendar: calendar) where occurrence.completedAt == nil {
             guard let minutes = occurrence.task.reminderMinutes else { continue }
             let day = occurrence.displayDay.flatMap { Recurrence.date($0, calendar: calendar) } ?? occurrence.task.due
-            guard let day, calendar.startOfDay(for: day) >= calendar.startOfDay(for: now), calendar.startOfDay(for: day) <= calendar.startOfDay(for: last) else { continue }
+            guard let day, calendar.startOfDay(for: day) >= today, calendar.startOfDay(for: day) <= calendar.startOfDay(for: last) else { continue }
             if let value = event(id: "task-"+occurrence.id, ownerID: occurrence.task.id, habit: false, day: day, minutes: minutes, title: "任务提醒："+occurrence.task.title) { events.append(value) }
         }
         let previous = Dictionary(uniqueKeysWithValues: old.filter { $0.fireAt > now }.map { ($0.id, $0) })

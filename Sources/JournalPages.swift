@@ -6,7 +6,7 @@ struct SchedulePage: View {
     @State private var category = "全部记录"
     @State private var status = "全部状态"
     private var selected: Date { store.journalDate }
-    private var records: DailyRecords { DailyRecords(date: selected, calendar: store.calendar) }
+    private var records: DailyRecords { DailyRecords(date: selected, calendar: store.calendar, rolloverMinutes: store.dayBoundary.rolloverMinutes) }
     private var events: [Appointment] { records.events(in: store.data).filter { matches($0.end <= store.now ? "已完成" : "待处理") } }
     private var tasks: [TaskOccurrence] { records.tasks(in: store.data).filter { matches($0.completedAt == nil ? "待处理" : "已完成") } }
     private var habits: [HabitDayRecord] { records.habits(in: store.data).filter { matches($0.completed ? "已完成" : ($0.entry?.status.title ?? "待处理")) } }
@@ -16,7 +16,7 @@ struct SchedulePage: View {
     var body: some View {
         VStack(spacing: 20) {
             Card(title: "") {
-                PixelCalendar(selection: $store.journalDate, markers: markers)
+                PixelCalendar(selection: $store.journalDate, markers: markers, onBrowse: store.stopFollowingJournalToday)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 14) { legend }
                     VStack(alignment: .leading, spacing: 6) { legend }
@@ -56,12 +56,12 @@ struct SchedulePage: View {
                 }
                 if shows("日记") && matches("已完成") { diaryCard }
             }
-        }.environment(\.calendar, store.calendar)
+        }.environment(\.calendar, store.calendar).environment(\.dayBoundary, store.dayBoundary).environment(\.timeZone, store.calendar.timeZone)
         .sheet(isPresented: $adding) {
-            EventEditor(store: store, event: Appointment(title: "", start: selected, end: selected.addingTimeInterval(3600)))
+            EventEditor(store: store, event: Appointment(title: "", start: records.interval.start, end: records.interval.start.addingTimeInterval(3600)))
         }
     }
-    private var dayTitle: some View { Text(selected.formatted(.dateTime.year().month().day().weekday(.wide))).fontWeight(.semibold) }
+    private var dayTitle: some View { Text(CalendarDates.key(selected, calendar: store.calendar)).fontWeight(.semibold) }
     private var addButton: some View { Button("添加日程", systemImage: "plus") { adding = true }.buttonStyle(PixelButtonStyle(primary: true)) }
     @ViewBuilder private var legend: some View {
         Label("日程", systemImage: "square.fill").foregroundStyle(Palette.clay)
@@ -71,7 +71,7 @@ struct SchedulePage: View {
         Label("计时", systemImage: "square.fill").foregroundStyle(Color.blue.opacity(0.8))
     }
     private func markers(_ day: Date) -> [Color] {
-        let item = DailyRecords(date: day, calendar: store.calendar)
+        let item = DailyRecords(date: day, calendar: store.calendar, rolloverMinutes: store.dayBoundary.rolloverMinutes)
         var marks: [Color] = []
         if !item.events(in: store.data).isEmpty { marks.append(Palette.clay) }
         if !item.tasks(in: store.data).isEmpty { marks.append(Palette.sage) }
@@ -98,7 +98,7 @@ struct SchedulePage: View {
                     Text(entry.text).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
                 } else { Text("这一天还没有记录").foregroundStyle(Palette.muted); Spacer() }
                 Button(entry?.text.isEmpty == false ? "打开日记" : "写日记") { store.openJournal(date: selected) }
-                    .buttonStyle(PixelButtonStyle()).disabled(store.calendar.startOfDay(for: selected) > store.calendar.startOfDay(for: store.now))
+                    .buttonStyle(PixelButtonStyle()).disabled(store.calendar.startOfDay(for: selected) > store.today)
             }
         }
     }
@@ -120,8 +120,8 @@ struct HabitRecordRow: View {
             if let entry = record.entry {
                 if !entry.text.isEmpty { Text(entry.text).lineLimit(3).font(.callout) }
                 if let image = entry.image, let picture = NSImage(data: image) { Image(nsImage: picture).resizable().scaledToFit().frame(maxWidth: 160, maxHeight: 100) }
-                Text("提交：" + entry.submittedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted)
-                if let reviewedAt = entry.reviewedAt { Text("审核：" + reviewedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted) }
+                Text("提交：" + store.dayBoundary.timestamp(entry.submittedAt)).font(.caption).foregroundStyle(Palette.muted)
+                if let reviewedAt = entry.reviewedAt { Text("审核：" + store.dayBoundary.timestamp(reviewedAt)).font(.caption).foregroundStyle(Palette.muted) }
                 if let feedback = entry.feedback, !feedback.isEmpty { Text("反馈：" + feedback).lineLimit(3).font(.callout) }
             } else { Text("已完成 · 无材料记录").font(.caption).foregroundStyle(Palette.muted) }
         }.padding(.vertical, 8)
@@ -146,18 +146,18 @@ struct SessionRecordRow: View {
                 Button("回看") { showing = true }.buttonStyle(PixelButtonStyle()).accessibilityLabel("回看计时：" + session.title)
             }
             if let start = session.beganAt, let end = session.endedAt {
-                Text(start.formatted(date: .numeric, time: .shortened) + " — " + end.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted)
-            } else { Text("结束：" + session.date.formatted(date: .numeric, time: .shortened) + " · 起止时间未记录").font(.caption).foregroundStyle(Palette.muted) }
+                Text(store.dayBoundary.timestamp(start) + " — " + store.dayBoundary.timestamp(end)).font(.caption).foregroundStyle(Palette.muted)
+            } else { Text("结束：" + store.dayBoundary.timestamp(session.date) + " · 起止时间未记录").font(.caption).foregroundStyle(Palette.muted) }
             if let segments = session.segments {
                 ForEach(Array(segments.filter { $0.beganAt < day.end && $0.endedAt > day.start }.enumerated()), id: \.offset) { _, segment in
-                    Text((session.kind == .rest ? "休息 · " : "专注 · ") + max(segment.beganAt, day.start).formatted(date: .omitted, time: .shortened) + " — " + min(segment.endedAt, day.end).formatted(date: .omitted, time: .shortened)).font(.caption).foregroundStyle(Palette.sage)
+                    Text((session.kind == .rest ? "休息 · " : "专注 · ") + store.dayBoundary.timestamp(max(segment.beganAt, day.start)) + " — " + store.dayBoundary.timestamp(min(segment.endedAt, day.end))).font(.caption).foregroundStyle(Palette.sage)
                 }
             }
             ForEach(Array(pauses.enumerated()), id: \.offset) { _, pause in
-                Text("暂停 · " + max(pause.beganAt, day.start).formatted(date: .omitted, time: .shortened) + " — " + min(pause.endedAt, day.end).formatted(date: .omitted, time: .shortened)).font(.caption).foregroundStyle(Palette.muted)
+                Text("暂停 · " + store.dayBoundary.timestamp(max(pause.beganAt, day.start)) + " — " + store.dayBoundary.timestamp(min(pause.endedAt, day.end))).font(.caption).foregroundStyle(Palette.muted)
             }
             if let mood = session.mood, !mood.isEmpty { Text("心情：" + mood).font(.caption).foregroundStyle(Palette.muted) }
-            if let reviewedAt = session.aiReviewedAt { Text("评价：" + reviewedAt.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(Palette.muted) }
+            if let reviewedAt = session.aiReviewedAt { Text("评价：" + store.dayBoundary.timestamp(reviewedAt)).font(.caption).foregroundStyle(Palette.muted) }
             if let notes = session.notes, !notes.isEmpty { Text(notes).lineLimit(3).font(.callout) }
             if let feedback = session.aiFeedback, !feedback.isEmpty { Text("反馈：" + feedback).lineLimit(3).font(.callout) }
         }.padding(.vertical, 8)
@@ -176,7 +176,7 @@ struct EventRow: View {
             Button { editing = true } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(event.title).fontWeight(.medium)
-                    Text("\(event.start.formatted(.dateTime.hour().minute())) — \(event.end.formatted(.dateTime.month().day().hour().minute()))")
+                    Text(store.dayBoundary.timestamp(event.start) + " — " + store.dayBoundary.timestamp(event.end))
                         .font(.caption).foregroundStyle(Palette.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(.plain).help("编辑日程")
@@ -223,8 +223,8 @@ struct DiaryPage: View {
     @ObservedObject var store: GardenStore
     @State private var display: CalendarDisplay = .month
     private var date: Date { store.journalDate }
-    private var key: String { dayKey(date) }
-    private var editableDate: Bool { Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) }
+    private var key: String { CalendarDates.key(date, calendar: store.calendar) }
+    private var editableDate: Bool { store.calendar.startOfDay(for: date) <= store.today }
     private var diary: Diary { store.data.diaries[key] ?? Diary() }
     private var diaryBinding: Binding<Diary> {
         let entryKey = key
@@ -248,8 +248,9 @@ struct DiaryPage: View {
                 calendarCard
                 entryCard
             }
-        }.onAppear {
-            if !editableDate { store.journalDate = Date() }
+        }.environment(\.calendar, store.calendar).environment(\.dayBoundary, store.dayBoundary).environment(\.timeZone, store.calendar.timeZone)
+        .onAppear {
+            if !editableDate { store.journalDate = store.today }
         }
     }
     private var calendarCard: some View {
@@ -259,16 +260,16 @@ struct DiaryPage: View {
                 Spacer()
                 PixelTabs(selection: $display, items: [(.month, "月"), (.week, "周")]).frame(width: 110)
             }
-            PixelCalendar(selection: $store.journalDate, display: display, maximum: Date(), compact: true, markers: { day in
-                guard let entry = store.data.diaries[dayKey(day)], !entry.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+            PixelCalendar(selection: $store.journalDate, display: display, maximum: store.today, compact: true, markers: { day in
+                guard let entry = store.data.diaries[CalendarDates.key(day, calendar: store.calendar)], !entry.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
                 return [Palette.goldLight]
-            })
+            }, onBrowse: store.stopFollowingJournalToday)
         }
     }
     private var entryCard: some View {
         Card(title: "") {
             HStack {
-                Text(date.formatted(.dateTime.year().month().day().weekday(.wide))).font(.headline).foregroundStyle(Palette.goldLight)
+                Text(CalendarDates.key(date, calendar: store.calendar)).font(.headline).foregroundStyle(Palette.goldLight)
                 Spacer()
                 DiaryMoodPicker(diary: diaryBinding, saved: store.data.diaries.sorted { $0.key > $1.key }.map(\.value)).id(key).disabled(!editableDate)
             }
@@ -277,7 +278,7 @@ struct DiaryPage: View {
                 .frame(minHeight: 300).padding(8).background(Palette.card)
                 .overlay(alignment: .topLeading) {
                     if diary.text.isEmpty {
-                        Text(Calendar.current.isDateInToday(date) ? "今日还没有记录" : "这一天还没有记录")
+                        Text(store.calendar.isDate(date, inSameDayAs: store.today) ? "今日还没有记录" : "这一天还没有记录")
                             .font(.system(size: 16)).foregroundStyle(Palette.muted.opacity(0.7)).padding(.horizontal, 14).padding(.top, 9).allowsHitTesting(false)
                     }
                 }

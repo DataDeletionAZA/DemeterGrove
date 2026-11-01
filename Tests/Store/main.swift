@@ -94,6 +94,47 @@ enum HabitStoreChecks {
         try FileManager.default.moveItem(at: backup, to: store.file)
         assert(store.removeTask(repeating.id) && store.taskCompletionRecords == savedRecords)
         print("PASS: Store current versus missed recurring tasks, actual completion timestamps, restart persistence, historical schedule protection, completion/delete rollback and retained deleted-series history")
+        store.data = AppData()
+        let iso = ISO8601DateFormatter()
+        store.data.preferences.dayTimeZoneID = "Asia/Shanghai"
+        store.data.preferences.dayRolloverMinutes = 240
+        store.now = iso.date(from: "2030-01-02T19:59:59Z")!
+        store.journalDate = store.today
+        store.tick(iso.date(from: "2030-01-02T20:00:00Z")!)
+        assert(CalendarDates.key(store.journalDate, calendar: store.calendar) == "2030-01-03")
+        let historical = Recurrence.date("2030-01-01", calendar: store.calendar)!
+        store.journalDate = historical
+        store.tick(iso.date(from: "2030-01-03T20:00:00Z")!)
+        assert(store.journalDate == historical)
+        store.journalDate = store.today
+        store.stopFollowingJournalToday()
+        let browsing = store.journalDate
+        store.tick(iso.date(from: "2030-01-04T20:00:00Z")!)
+        assert(store.journalDate == browsing)
+        store.journalDate = store.today
+        store.tick(iso.date(from: "2030-01-05T20:00:00Z")!)
+        assert(store.journalDate == store.today)
+        store.recordInput(.keyboard, at: iso.date(from: "2030-01-05T19:00:00Z")!)
+        assert(store.data.keys["2030-01-05"] == 1)
+        let completed = Habit(title: "已完成", days: [store.todayKey])
+        store.data.habits = [completed]
+        store.data.diaries["2029-12-31"] = Diary(text: "保留旧日记")
+        let settingsDays = store.data.habits[0].days
+        let settingsKeys = store.data.keys
+        let settingsCoins = store.data.garden.coins
+        let oldEnd = store.todayInterval.end
+        store.journalDate = Recurrence.date("2030-01-01", calendar: store.calendar)!
+        assert(store.updateDaySettings(timeZoneID: "America/New_York", rolloverMinutes: 0))
+        assert(CalendarDates.key(store.journalDate, calendar: store.calendar) == "2030-01-01")
+        assert(store.data.habits[0].days == settingsDays && store.data.keys == settingsKeys && store.data.garden.coins == settingsCoins)
+        assert(store.data.diaries["2029-12-31"]?.text == "保留旧日记" && store.data.habitRewardNotBefore == oldEnd)
+        assert(!store.updateDaySettings(timeZoneID: "invalid", rolloverMinutes: 0))
+        assert(!store.updateDaySettings(timeZoneID: nil, rolloverMinutes: 1440))
+        let settingsRoundtrip = try SaveFile.read(store.file)
+        assert(settingsRoundtrip.preferences.dayTimeZoneID == "America/New_York" && settingsRoundtrip.habitRewardNotBefore == oldEnd)
+        store.data = AppData()
+        store.now = Date()
+        print("PASS: following today crosses custom rollover; past selections and month browsing stay; returning today restores follow; settings preserve day labels, counters, balances and historical selection with persistent reward guard")
         try await HabitReviewChecks.run(store, clock: reviewClock)
         try FocusStoreChecks.run(store)
     }

@@ -69,7 +69,8 @@ assert(SceneNavigation.canonical("小院") == "首页")
 assert(SceneNavigation.canonical("熬制魔药") == "炼金室")
 assert(SceneNavigation.title("熬制魔药") == "炼金室")
 for room in SceneNavigation.rooms+["任务","习惯","日记","日程","计时器","首页"] {assert(SceneNavigation.parent(of:room) == nil)}
-for route in SceneNavigation.wilds {assert(SceneNavigation.parent(of:route) == "首页")}
+for route in SceneNavigation.wilds {assert(SceneNavigation.parent(of:route) == "户外地图")}
+assert(SceneNavigation.parent(of:"户外地图") == "首页")
 assert(!SceneNavigation.wilds.contains("熬制魔药"))
 for width:CGFloat in [320,460,760,1200] {
     for height:CGFloat in [280,360,420,800] {
@@ -87,3 +88,28 @@ for progress in stride(from:0.0,through:1.0,by:0.02) {
 assert(ShopCustomerPose(progress:0).behindCounter)
 assert(!ShopCustomerPose(progress:1).behindCounter)
 print("PASS: fixed parent routes, alchemy aliases, bounded dialog and customer feet/depth")
+
+for viewportWidth:CGFloat in [240,460,1000,1800,2600] {
+    let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth)
+    for viewportHeight:CGFloat in [240,420,680,1080] {
+        let fullHeight=SceneSizing.height(width:width,viewportHeight:viewportHeight,hasSidebar:false)
+        let fullFit=SceneSizing.fitted(in:CGSize(width:width,height:fullHeight))
+        assert(fullFit.width<=width && fullFit.height<=fullHeight)
+        assert(fullHeight>=SceneSizing.height(width:width,viewportHeight:viewportHeight))
+    }
+}
+assert(SceneSizing.stockColumns(width:80) == 1)
+assert(SceneSizing.stockColumns(width:230) == 2)
+assert(SceneSizing.stockColumns(width:330) == 3)
+assert(SceneSizing.stockColumns(width:440) == 4)
+assert(SceneSizing.stockColumns(width:1000) == 4)
+print("PASS: full-width courtyard bounds and one-to-four stock columns")
+
+for available in [CGSize(width:1400,height:900),CGSize(width:600,height:800),CGSize(width:1200,height:420)] {
+    let window=SceneSizing.initialWindow(available:available)
+    assert(window.width<=available.width && window.height<=available.height)
+    assert(abs(window.width/window.height-1000.0/680.0)<0.0001)
+}
+let initialWindow=SceneSizing.initialWindow(available:CGSize(width:1400,height:900))
+assert(initialWindow.width == 1000 && initialWindow.height == 680)
+print("PASS: initial scene window retains landscape ratio within available screen space")

@@ -9,8 +9,15 @@ struct RootView: View {
                          ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
     private var sidebarPage:String {
         let route=SceneNavigation.canonical(store.selectedPage)
-        return route == "首页" || SceneNavigation.wilds.contains(route) ? "地图":route
+        return route == "首页" || route == "户外地图" || SceneNavigation.wilds.contains(route) ? "地图":route
     }
+    private var sceneMetadata:String {
+        let route=SceneNavigation.canonical(store.selectedPage)
+        guard SceneNavigation.rooms.contains(route) || ["首页","户外地图"].contains(route) else{return ""}
+        let level="等级 \(store.data.levelProgress.level)"
+        return route == "商店" ? level+" · 栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)":level
+    }
+    private var backLabel:String {SceneNavigation.parent(of:store.selectedPage).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
     var body: some View {
         HStack(spacing: 0) {
             if sidebarShown {
@@ -26,7 +33,7 @@ struct RootView: View {
                 ForEach(pages, id: \.0) { page in
                     Button { store.selectedPage = page.0 } label: {
                         HStack(spacing: 13) {
-                            PixelIcon(name: page.1, size: 23)
+                            PixelIcon(name: page.0, size: 23)
                             Text(page.0).fontWeight(sidebarPage == page.0 ? .semibold : .regular)
                             Spacer()
                             if page.0 == "任务", !store.todayTasks.isEmpty {
@@ -54,14 +61,14 @@ struct RootView: View {
                     Button {
                         if let pet=store.pet {pet.back()}
                         else {store.selectedPage=SceneNavigation.parent(of:store.selectedPage) ?? "菜单"}
-                    } label: {Image(systemName:"chevron.left")}
-                        .buttonStyle(.plain).help(SceneNavigation.parent(of:store.selectedPage) == nil ? "返回菜单":"回到小院")
-                        .accessibilityLabel(SceneNavigation.parent(of:store.selectedPage) == nil ? "返回菜单":"回到小院")
+                    } label: {Image(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle())}
+                        .buttonStyle(.plain).help(backLabel).accessibilityLabel(backLabel)
                     VStack(alignment: .leading, spacing: 7) {
                         Text(SceneNavigation.title(store.selectedPage)).font(.system(size: 23, weight: .semibold, design: .default))
                     }
+                    if !sceneMetadata.isEmpty {Text(sceneMetadata).font(.caption).foregroundStyle(Palette.goldLight)}
                     Spacer()
-                    Text(store.now.formatted(.dateTime.year().month().day().weekday(.wide)))
+                    Text(store.dayBoundary.dateText(store.today))
                         .font(.caption).foregroundStyle(Palette.muted)
                 }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 20)
                 if !store.error.isEmpty {
@@ -85,6 +92,7 @@ struct RootView: View {
                         case "商店": FarmPage(store: store, section: "商店")
                         case "成长": GrowthPage(store: store)
                         case "地图":HomeScene(store:store)
+                        case "户外地图":WorldMapScene(store:store)
                         case "湖畔钓鱼":MapPage(store:store,journey:.fishing)
                         case "林间冒险": MapPage(store: store, journey: .adventure)
                         case "炼金室", "熬制魔药": MapPage(store: store, journey: .potions)
@@ -99,7 +107,9 @@ struct RootView: View {
                 }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
-        }.frame(minWidth: 560, minHeight: 400).environment(\.calendar,store.calendar).foregroundStyle(Palette.ink).tint(Palette.sage)
+        }.frame(minWidth: 560, minHeight: 400).environment(\.calendar,store.calendar)
+            .environment(\.dayBoundary,store.dayBoundary).environment(\.timeZone,store.calendar.timeZone)
+            .foregroundStyle(Palette.ink).tint(Palette.sage)
             .magicControls().environment(\.locale, Locale(identifier: "zh_CN"))
             .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:560,height:400))}
             .sheet(isPresented:Binding(get:{store.pendingFocusReviewID != nil && store.pet?.managerIsOpen == true},set:{if !$0 {store.pendingFocusReviewID=nil}})) {

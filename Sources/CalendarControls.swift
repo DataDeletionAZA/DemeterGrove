@@ -1,16 +1,27 @@
 import SwiftUI
 
+private struct DayBoundaryEnvironmentKey: EnvironmentKey { static let defaultValue = DayBoundary() }
+extension EnvironmentValues {
+    var dayBoundary: DayBoundary {
+        get { self[DayBoundaryEnvironmentKey.self] }
+        set { self[DayBoundaryEnvironmentKey.self] = newValue }
+    }
+}
+
 enum CalendarDisplay: String, CaseIterable { case month = "月", week = "周" }
 
 struct PixelCalendar: View {
     @Binding var selection: Date
     @Environment(\.calendar) private var calendar
+    @Environment(\.dayBoundary) private var dayBoundary
     var display: CalendarDisplay = .month
     var minimum: Date? = nil
     var maximum: Date? = nil
     var compact = false
     var markers: (Date) -> [Color] = { _ in [] }
     var onSelect: () -> Void = {}
+    var onBrowse: () -> Void = {}
+    private var today: Date { dayBoundary.day(for: Date()) }
     @State private var visible = Date()
     private var week: Bool { display == .week }
     private var cells: [Date?] { CalendarDates.days(in: visible, week: week, calendar:calendar) }
@@ -18,9 +29,9 @@ struct PixelCalendar: View {
         if week {
             let first = CalendarDates.weekStart(visible, calendar:calendar)
             let last = calendar.date(byAdding: .day, value: 6, to: first)!
-            return first.formatted(.dateTime.year().month().day()) + " — " + last.formatted(.dateTime.month().day())
+            return CalendarDates.key(first, calendar: calendar) + " — " + CalendarDates.key(last, calendar: calendar)
         }
-        return visible.formatted(.dateTime.year().month(.wide))
+        return String(format: "%04d年%d月", calendar.component(.year, from: visible), calendar.component(.month, from: visible))
     }
     var body: some View {
         VStack(spacing: compact ? 10 : 14) {
@@ -31,8 +42,8 @@ struct PixelCalendar: View {
                 Button { move(1) } label: { Image(systemName: "chevron.right") }.help(week ? "下一周" : "下个月").disabled(!canMove(1))
             }
             HStack {
-                Button("回到今天") { visible = Date(); choose(Date()) }
-                    .disabled(!allowed(Date()) || (calendar.isDateInToday(selection) && cells.compactMap { $0 }.contains { calendar.isDateInToday($0) }))
+                Button("回到今天") { visible = today; choose(today) }
+                    .disabled(!allowed(today) || (calendar.isDate(selection, inSameDayAs: today) && cells.compactMap { $0 }.contains { calendar.isDate($0, inSameDayAs: today) }))
                 Spacer()
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 5) {
@@ -53,23 +64,23 @@ struct PixelCalendar: View {
         let active = calendar.isDate(day, inSameDayAs: selection)
         return Button { choose(day) } label: {
             VStack(spacing: 4) {
-                Text("\(calendar.component(.day, from: day))").font(.system(size: compact ? 12 : 14, weight: calendar.isDateInToday(day) ? .bold : .regular))
+                Text("\(calendar.component(.day, from: day))").font(.system(size: compact ? 12 : 14, weight: calendar.isDate(day, inSameDayAs: today) ? .bold : .regular))
                 HStack(spacing: 3) {
                     ForEach(Array(markers(day).prefix(5).enumerated()), id: \.offset) { _, color in Rectangle().fill(color).frame(width: 4, height: 3) }
                 }.frame(height: 4)
             }.frame(maxWidth: .infinity).frame(height: compact ? 36 : 52)
                 .background(PixelFrame(step: 1).fill(active ? Palette.moss : Palette.control.opacity(0.55)))
-                .overlay(PixelFrame(step: 1).strokeBorder(active ? Palette.gold : calendar.isDateInToday(day) ? Palette.gold.opacity(0.5) : Palette.line.opacity(0.5), lineWidth: 1))
+                .overlay(PixelFrame(step: 1).strokeBorder(active ? Palette.gold : calendar.isDate(day, inSameDayAs: today) ? Palette.gold.opacity(0.5) : Palette.line.opacity(0.5), lineWidth: 1))
                 .foregroundStyle(active ? Palette.goldLight : Palette.ink).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(!allowed(day)).opacity(allowed(day) ? 1 : 0.3)
-            .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+            .accessibilityLabel(CalendarDates.key(day, calendar: calendar))
             .accessibilityValue(markers(day).isEmpty ? "" : "有记录")
             .accessibilityAddTraits(active ? [.isSelected] : [])
     }
-    private func allowed(_ day: Date) -> Bool { CalendarDates.allowed(day, minimum: minimum, maximum: maximum) }
+    private func allowed(_ day: Date) -> Bool { CalendarDates.allowed(day, minimum: minimum, maximum: maximum, calendar: calendar) }
     private func choose(_ day: Date) {
         guard allowed(day) else { return }
-        selection = CalendarDates.replacingDay(of: selection, with: day)
+        selection = CalendarDates.replacingDay(of: selection, with: day, calendar: calendar)
         onSelect()
     }
     private func target(_ step: Int) -> Date {
@@ -79,10 +90,11 @@ struct PixelCalendar: View {
     private func canMove(_ step: Int) -> Bool {
         CalendarDates.days(in: target(step), week: week, calendar:calendar).compactMap { $0 }.contains(where: allowed)
     }
-    private func move(_ step: Int) { visible = target(step) }
+    private func move(_ step: Int) { visible = target(step); onBrowse() }
 }
 
 struct PixelDatePicker: View {
+    @Environment(\.calendar) private var calendar
     var title: String
     @Binding var selection: Date
     var minimum: Date? = nil
@@ -94,7 +106,7 @@ struct PixelDatePicker: View {
             Button { showing.toggle() } label: {
                 HStack(spacing: 9) {
                     PixelIcon(name: "calendar", size: 19)
-                    Text(selection.formatted(.dateTime.year().month().day())).monospacedDigit()
+                    Text(CalendarDates.key(selection, calendar: calendar)).monospacedDigit()
                     Image(systemName: "chevron.down").font(.system(size: 9))
                 }
             }.buttonStyle(PixelButtonStyle()).accessibilityLabel(title.isEmpty ? "选择日期" : title)
@@ -107,12 +119,13 @@ struct PixelDatePicker: View {
 }
 
 struct PixelDateTimePicker: View {
+    @Environment(\.calendar) private var calendar
     var title: String
     @Binding var selection: Date
     @State private var showingTime = false
     @State private var choosingHour = true
     private var timeText: String {
-        String(format: "%02d:%02d", Calendar.current.component(.hour, from: selection), Calendar.current.component(.minute, from: selection))
+        String(format: "%02d:%02d", calendar.component(.hour, from: selection), calendar.component(.minute, from: selection))
     }
     var body: some View {
         HStack {
@@ -126,7 +139,7 @@ struct PixelDateTimePicker: View {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 6), spacing: 4) {
                             ForEach(0..<(choosingHour ? 24 : 60), id: \.self) { value in
                                 Button(String(format: "%02d", value)) { setTime(value) }
-                                    .buttonStyle(PixelButtonStyle(primary: Calendar.current.component(choosingHour ? .hour : .minute, from: selection) == value))
+                                    .buttonStyle(PixelButtonStyle(primary: calendar.component(choosingHour ? .hour : .minute, from: selection) == value))
                             }
                         }
                         Button("完成") { showingTime = false }.buttonStyle(PixelButtonStyle(primary: true))
@@ -135,9 +148,9 @@ struct PixelDateTimePicker: View {
         }
     }
     private func setTime(_ value: Int) {
-        let hour = choosingHour ? value : Calendar.current.component(.hour, from: selection)
-        let minute = choosingHour ? Calendar.current.component(.minute, from: selection) : value
-        if let date = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: selection) { selection = date }
+        let hour = choosingHour ? value : calendar.component(.hour, from: selection)
+        let minute = choosingHour ? calendar.component(.minute, from: selection) : value
+        if let date = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: selection) { selection = date }
         if choosingHour { choosingHour = false }
     }
 }

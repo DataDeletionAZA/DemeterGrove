@@ -41,7 +41,7 @@ struct FocusSessionEditor: View {
             if let session {
                 PixelScrollView {
                     VStack(alignment: .leading, spacing: 17) {
-                        FocusRecordDetails(session: session)
+                        FocusRecordDetails(session: session, boundary: store.dayBoundary)
                         TextField("本次名称", text: $title).textFieldStyle(PixelTextFieldStyle()).accessibilityLabel("本次名称")
                         Text("感想").font(.headline)
                         TextEditor(text: $notes).frame(minHeight: 95, maxHeight: 140).scrollContentBackground(.hidden).padding(8).magicSurface(Palette.card).accessibilityLabel("专注感想")
@@ -59,7 +59,7 @@ struct FocusSessionEditor: View {
                             Text("专注回顾").font(.headline)
                             Text(feedback).textSelection(.enabled)
                             if let date = session.aiReviewedAt {
-                                Text(date.formatted(date: .abbreviated, time: .shortened) + (session.aiFeedbackIsEarlierVersion ? " · 基于此前记录" : "")).font(.caption).foregroundStyle(Palette.muted)
+                                Text(store.dayBoundary.timestamp(date) + (session.aiFeedbackIsEarlierVersion ? " · 基于此前记录" : "")).font(.caption).foregroundStyle(Palette.muted)
                             }
                         }
                         if session.kind != .rest {
@@ -77,7 +77,7 @@ struct FocusSessionEditor: View {
                 }
             } else { Text("找不到这段记录。").foregroundStyle(Palette.muted) }
         }.padding(24).frame(width: dialogSize.width, height: dialogSize.height)
-            .magicSurface(Palette.paper, strong: true).magicControls().environment(\.calendar, store.calendar)
+            .magicSurface(Palette.paper, strong: true).magicControls().environment(\.calendar, store.calendar).environment(\.dayBoundary, store.dayBoundary).environment(\.timeZone, store.calendar.timeZone)
             .onAppear { load() }
     }
     private func load() {
@@ -85,7 +85,7 @@ struct FocusSessionEditor: View {
         loaded = true; title = session.title; notes = session.notes ?? ""
         recordingMood = session.mood != nil
         mood = Diary(mood: session.mood ?? "平静", moodSymbol: session.moodSymbol, moodImage: session.moodImage)
-        rescheduleDate = occurrence?.displayDay.flatMap { Recurrence.date($0, calendar: store.calendar) } ?? store.now
+        rescheduleDate = occurrence?.displayDay.flatMap { Recurrence.date($0, calendar: store.calendar) } ?? store.today
     }
     private func save(closeAfter: Bool = true) {
         guard store.updateFocusSession(sessionID, title: title, notes: notes, mood: recordingMood ? mood.mood : nil,
@@ -105,9 +105,10 @@ struct FocusSessionEditor: View {
 
 struct FocusRecordDetails: View {
     var session: FocusSession
+    var boundary: DayBoundary
     @State private var showingSegments = false
     @State private var showingPauses = false
-    private func dateText(_ date: Date?) -> String { date?.formatted(date: .abbreviated, time: .standard) ?? "未知" }
+    private func dateText(_ date: Date?) -> String { date.map { boundary.timestamp($0) } ?? "未知" }
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack { Text(session.kind.rawValue); Spacer(); Text(clockText(session.seconds)).monospacedDigit().fixedSize().foregroundStyle(Palette.goldLight) }
@@ -132,7 +133,7 @@ struct FocusRecordDetails: View {
     }
     private func intervalRow(_ interval: FocusInterval) -> some View {
         HStack {
-            Text(interval.beganAt.formatted(date: .abbreviated, time: .standard) + " — " + interval.endedAt.formatted(date: .abbreviated, time: .standard))
+            Text(boundary.timestamp(interval.beganAt) + " — " + boundary.timestamp(interval.endedAt))
             Spacer(); Text(clockText(interval.seconds)).monospacedDigit().fixedSize()
         }.font(.caption).padding(.vertical, 3)
     }

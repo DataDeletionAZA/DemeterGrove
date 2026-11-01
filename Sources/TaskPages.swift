@@ -64,7 +64,7 @@ struct TaskRow: View {
     init(store: GardenStore, occurrence: TaskOccurrence) { self.store = store; self.occurrence = occurrence }
     init(store: GardenStore, task: GardenTask) {
         self.store = store
-        self.occurrence = store.taskOccurrences(from: store.now, through: store.now).first { $0.task.id == task.id } ?? TaskOccurrence(task: task, completedAt: task.completedAt)
+        self.occurrence = store.taskOccurrences(from: store.today, through: store.today).first { $0.task.id == task.id } ?? TaskOccurrence(task: task, completedAt: task.completedAt)
     }
     @State private var editing = false
     @State private var deleting = false
@@ -83,8 +83,8 @@ struct TaskRow: View {
                         Circle().fill(quadrantColors[task.quadrant]).frame(width: 5, height: 5)
                         Text(task.categoryName)
                         Text(quadrantTitles[task.quadrant])
-                        if let day = occurrence.displayDay { Text("计划 " + day).foregroundStyle(day < CalendarDates.key(store.now, calendar: store.calendar) && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
-                        else if let due = task.due { Text("截止 " + due.formatted(.dateTime.month().day())).foregroundStyle(due < store.calendar.startOfDay(for: store.now) && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
+                        if let day = occurrence.displayDay { Text("计划 " + day).foregroundStyle(day < store.todayKey && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
+                        else if let due = task.due { Text("截止 " + CalendarDates.key(due, calendar: store.calendar)).foregroundStyle(due < store.today && occurrence.completedAt == nil ? Palette.clay : Palette.muted) }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(.plain).help("编辑任务")
@@ -126,7 +126,7 @@ struct TaskEditor: View {
     @State private var reminding: Bool
     @State private var reminderHour: Int
     @State private var reminderMinute: Int
-    private var effective: Date { store.data.tasks.contains(where: { $0.id == task.id && $0.scheduleRevisions != nil }) ? store.calendar.date(byAdding: .day, value: 1, to: store.now)! : store.now }
+    private var effective: Date { store.data.tasks.contains(where: { $0.id == task.id && $0.scheduleRevisions != nil }) ? store.calendar.date(byAdding: .day, value: 1, to: store.today)! : store.today }
     var onSave: ((GardenTask) -> Void)?
     @Environment(\.dismiss) private var dismiss
     init(store: GardenStore, task: GardenTask, onSave: ((GardenTask) -> Void)? = nil) {
@@ -137,11 +137,11 @@ struct TaskEditor: View {
         _customCategory = State(initialValue: presets.contains(task.categoryName) ? "" : task.categoryName)
         _task = State(initialValue: task)
         _hasDate = State(initialValue: task.due != nil)
-        _due = State(initialValue: task.due ?? store.now)
+        _due = State(initialValue: task.due ?? store.today)
         let revision = task.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }
         _repeating = State(initialValue: revision?.rule != nil)
-        _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.now)]))
-        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.now)
+        _repeatRule = State(initialValue: revision?.rule ?? RepeatRule(weekdays: [store.calendar.component(.weekday, from: store.today)]))
+        _anchor = State(initialValue: revision.flatMap { Recurrence.date($0.anchor, calendar: store.calendar) } ?? store.today)
         _library = State(initialValue: task.messageLibrary ?? ReminderTextLibrary())
         _reminding = State(initialValue: task.reminderMinutes != nil)
         _reminderHour = State(initialValue: (task.reminderMinutes ?? 20*60)/60)
@@ -209,10 +209,10 @@ struct FocusPage: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(session.title)
-                            Text("\(session.kind.rawValue) · \(session.date.formatted(.dateTime.hour().minute())) 结束").font(.caption).foregroundStyle(Palette.muted)
+                            Text("\(session.kind.rawValue) · \(store.dayBoundary.timestamp(session.date)) 结束").font(.caption).foregroundStyle(Palette.muted)
                         }
                         Spacer()
-                        Text(clockText(session.focusSeconds(in: store.calendar.dateInterval(of: .day, for: store.now)!))).monospacedDigit()
+                        Text(clockText(session.focusSeconds(in: store.todayInterval))).monospacedDigit()
                     }.padding(.vertical, 6)
                 }
             }
@@ -323,7 +323,7 @@ struct FocusTaskPicker: View {
             }
             Button("自由专注") { choose(nil, "自由专注") }.buttonStyle(PixelButtonStyle())
         }.padding(26).frame(width: 470).magicSurface(Palette.paper, strong: true).magicControls()
-            .sheet(isPresented: $creating) { TaskEditor(store: store, task: GardenTask(title: "", category: "待办")) { task in choose(store.taskOccurrences(from: store.now, through: store.now).first { $0.task.id == task.id } ?? TaskOccurrence(task: task, completedAt: task.completedAt), task.title) } }
+            .sheet(isPresented: $creating) { TaskEditor(store: store, task: GardenTask(title: "", category: "待办")) { task in choose(store.taskOccurrences(from: store.today, through: store.today).first { $0.task.id == task.id } ?? TaskOccurrence(task: task, completedAt: task.completedAt), task.title) } }
     }
 }
 

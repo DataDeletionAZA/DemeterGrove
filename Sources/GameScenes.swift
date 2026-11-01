@@ -32,6 +32,7 @@ struct GameRoomView: View {
     @State private var resultStock=0
     @State private var customerArrivedAt=Date()
     @State private var shopChoice: String?
+    @State private var inventory = false
     private var recipe: Dish? {
         if var saved = loadedDish, saved.ingredients == additions, saved.method == method, saved.category == category {
             saved.quality=min(95,saved.quality-saved.kitchenBonus+2);saved.kitchenBonus=0;return saved
@@ -42,7 +43,7 @@ struct GameRoomView: View {
         return result
     }
     private var availableDishes: [Dish] { store.data.garden.menu.filter { store.data.garden.dishes[$0.id, default: 0] > 0 } }
-    private var choice: Dish? { availableDishes.first { $0.id == shopChoice } ?? availableDishes.first }
+    private var choice: Dish? { availableDishes.first { $0.id == shopChoice } }
     private var visibleResult:Dish? {
         guard let dish=lastDish else{return nil}
         return dish.outputIngredient != nil || store.data.garden.dishes[dish.id,default:0]>=resultStock ? dish:nil
@@ -64,30 +65,18 @@ struct GameRoomView: View {
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
-                HStack(spacing: 18) {
-                    resource(8, "种子", store.data.garden.seeds)
-                    resource(9, "露水", store.data.garden.water)
+                HStack(spacing:18) {
+                    resource(8,"种子",store.data.garden.seeds)
+                    resource(9,"露水",store.data.garden.water)
                     WalletView(coins:store.data.garden.coins)
-                    Spacer()
-                    if room == "厨房" { Button("配方册") { book = true } }
-                    if room == "商店" {Button("采买"){market=true}}
-                    InventoryButton(store:store)
-
-                }
-                HStack {
-                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
-                    if room == "农场", store.data.garden.plots.count>6 {
-                        PixelTabs(selection:$field,items:(0..<(store.data.garden.plots.count/6)).map{($0,"田地 \($0+1)")})
-                    }
-                    Spacer()
-                    Button("成长与升级") { store.pet?.openTool("成长") }
-                    if room == "商店" {
-                        Text("栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)")
-                            .font(.caption).foregroundStyle(Palette.goldLight)
+                    Spacer(minLength:0)
+                    if room == "农场",store.data.garden.plots.count>6 {
+                        PixelSelect(selection:$field,items:(0..<(store.data.garden.plots.count/6)).map{($0,"田地 \($0+1)")}).frame(width:100)
                     }
                 }
+                SceneToolbar(items:toolbarItems)
             }
-            SceneCanvas(hasSidebar:room == "厨房" || room == "商店") { size in
+            SceneCanvas(hasSidebar:true) { size in
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h)
@@ -99,9 +88,8 @@ struct GameRoomView: View {
                     SceneParticles()
                     SceneArrows(store:store,scene:room)
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
-            } sidebar: {if room == "商店" {stockTray} else {pantry}}
+            } sidebar: {if room == "商店" {stockTray} else if room == "农场" {seedShelf} else {pantry}}
             Text(roomStatus).font(.system(size: 12)).foregroundStyle(Palette.goldLight).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal:false,vertical:true)
-            if room == "农场" { seedTray }
             if room == "厨房", let dish = visibleResult, !cooking { resultCard(dish) }
         }
         .sheet(item:$plantingPlot) { plot in seedSelection(plot) }
@@ -109,10 +97,19 @@ struct GameRoomView: View {
         .sheet(isPresented:$methodWindow) { methodSelection }
         .sheet(isPresented: $book) { recipeBook }
         .sheet(isPresented: $market) { IngredientMarket(store: store) }
+        .sheet(isPresented:$inventory) {InventoryView(store:store)}
         .onChange(of:store.data.garden.orders.first?.id) {_,_ in customerArrivedAt=Date()}
         .onChange(of:store.data.garden.dishes) {previous,current in
             if let dish=lastDish,dish.outputIngredient == nil,current[dish.id,default:0]<previous[dish.id,default:0] {lastDish=nil}
         }
+    }
+    private var toolbarItems:[SceneToolbarItem] {
+        var items=[SceneToolbarItem("成长"){SceneNavigation.open("成长",store:store)},
+                   SceneToolbarItem("库存"){if let pet=store.pet {pet.openInventory()} else {inventory=true}}]
+        if room == "厨房" {items.append(SceneToolbarItem("配方册"){book=true})}
+        if room == "商店" {items.append(SceneToolbarItem("采买"){market=true})}
+        if room == "农场" {items.append(SceneToolbarItem("种子柜"){seedCabinet=true})}
+        return items
     }
     private func resource(_ index: Int, _ name: String, _ count: Int) -> some View {
         HStack(spacing: 3) { GameSprite(index:index,size:28); Text("\(count)").monospacedDigit().font(.system(size:13,weight:.medium)) }.help("\(name) \(count)").accessibilityLabel("\(name) \(count)")
@@ -154,11 +151,31 @@ struct GameRoomView: View {
         else { plantingPlot=plot }
     }
     private var ownedSeeds:[Crop] { Crop.allCases.filter{store.data.garden.cropSeeds[$0.rawValue,default:0]>0} }
-    private var seedTray: some View {
-        HStack {
-            Button("种子柜 · \(ownedSeeds.count) 种 · \(store.data.garden.seeds) 袋") {seedCabinet=true}.buttonStyle(.plain).font(.caption)
-            Spacer()
+    private var seedShelf:some View {
+        VStack(alignment:.leading,spacing:9) {
+            HStack {Text("种子柜").font(.headline).foregroundStyle(Palette.goldLight);Spacer(minLength:0);Text("\(store.data.garden.seeds) 袋").font(.caption)}
+            PixelScrollView {
+                seedCards(plot:nil)
+            }
             if selectedSeed != nil {Button("取消播种"){selectedSeed=nil;hint=""}}
+            if ownedSeeds.isEmpty {Text("种子柜空空的").font(.caption).foregroundStyle(Palette.muted)}
+        }.padding(10).magicSurface(Palette.paper)
+    }
+    private func seedCards(plot:Plot?)->some View {
+        LazyVGrid(columns:[GridItem(.adaptive(minimum:68,maximum:110))],spacing:8) {
+            ForEach(ownedSeeds) {crop in
+                Button {
+                    if let plot {plant(crop,in:plot)}
+                    else {selectedSeed=crop;seedCabinet=false;hint=""}
+                } label: {
+                    VStack(spacing:4) {
+                        IngredientArt(name:crop.rawValue,size:40)
+                        Text(crop.rawValue).font(.system(size:11)).lineLimit(1)
+                        Text("×\(store.data.garden.cropSeeds[crop.rawValue,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
+                    }.frame(maxWidth:.infinity).padding(6).magicSurface(selectedSeed == crop ? Palette.card:Palette.paper)
+                        .overlay(PixelFrame().stroke(selectedSeed == crop ? Palette.gold:Palette.line,lineWidth:1))
+                }.buttonStyle(.plain).disabled(plot != nil && store.data.garden.water<1).accessibilityLabel("选择\(crop.rawValue)种子")
+            }
         }
     }
     private func plant(_ crop:Crop,in plot:Plot) {
@@ -174,21 +191,7 @@ struct GameRoomView: View {
             Text("露水 \(store.data.garden.water) · 播种消耗 1 袋种子、1 滴露水").font(.caption).foregroundStyle(Palette.muted)
             if ownedSeeds.isEmpty {Text("种子柜空空的").padding(.vertical,20)}
             PixelScrollView {
-                LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:3),spacing:10) {
-                    ForEach(ownedSeeds) {crop in
-                        Button {
-                            if let plot {plant(crop,in:plot)}
-                            else {selectedSeed=crop;seedCabinet=false;hint=""}
-                        } label: {
-                            VStack(spacing:5) {
-                                IngredientArt(name:crop.rawValue,size:42)
-                                Text(crop.rawValue).font(.system(size:12))
-                                Text("种子 ×\(store.data.garden.cropSeeds[crop.rawValue,default:0])").font(.caption)
-                                Text("\(Int(crop.seconds*(1-Double(store.data.garden.rank(.watering))*0.10)/60)) 分钟专注").font(.system(size:10)).foregroundStyle(Palette.muted)
-                            }.frame(maxWidth:.infinity).padding(8).magicSurface(Palette.card)
-                        }.buttonStyle(.plain).disabled(plot != nil && store.data.garden.water<1)
-                    }
-                }
+                seedCards(plot:plot)
             }
         }.padding(20).frame(width:460,height:370).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
     }
@@ -311,7 +314,7 @@ struct GameRoomView: View {
         let customer=orders.first.map{ShopCustomerPose(progress:$0.ready(store.data.totalFocus) ? 1:store.now.timeIntervalSince(customerArrivedAt)/6)}
         if let customer,customer.behindCounter {customerSprite(customer,w:w,h:h)}
         let counter=SceneObject.shopCounter
-        ObjectButton(label:"柜台，上架选中的料理",action:stockChoice,embeddedInBackdrop:true,caption:"上架料理") {
+        ObjectButton(label:"柜台，查看陈列状态",action:{hint="在售 \(orders.count) · 空位 \(max(0,store.data.garden.capacity-orders.count))"},embeddedInBackdrop:true,caption:"料理陈列") {
             SceneObjectArtwork(object:counter,sceneSize:CGSize(width:w,height:h))
         }.frame(width:w*counter.target.width,height:h*counter.target.height).position(x:w*counter.target.x,y:h*counter.target.y)
         ForEach(0..<store.data.garden.capacity,id:\.self) {slot in
@@ -319,7 +322,7 @@ struct GameRoomView: View {
             let x=store.data.garden.capacity == 1 ? 0.25:0.14+Double(slot)*0.34/Double(store.data.garden.capacity-1)
             ObjectButton(label:order.map{"查看在售料理：\($0.dish.name)"} ?? "第 \(slot+1) 个陈列位，上架料理",action:{
                 if let order {hint="\(order.dish.name) · \(order.ready(store.data.totalFocus) ? "待收款":"在售") · \(Money.text(order.price))"}
-                else {stockChoice()}
+                else {hint="从料理柜选择成品，再点击上架。"}
             }) {
                 ZStack {
                     Color.white.opacity(0.001)
@@ -335,8 +338,7 @@ struct GameRoomView: View {
         if !ready.isEmpty {
             let amount=ready.reduce(0){$0+$1.price}
             ObjectButton(label:"收取 \(Money.text(amount))",action:{
-                for order in ready {_=store.data.collectSale(order.id)}
-                soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
+                collect(ready)
             }) {GameSprite(index:10,size:w*0.09)}.position(x:w*0.68,y:h*0.50)
         }
         if let soldAt {SceneParticles(burst:soldAt).frame(width:w*0.25,height:h*0.35).position(x:w*0.68,y:h*0.50)}
@@ -348,11 +350,19 @@ struct GameRoomView: View {
             .position(x:w*pose.foot.x,y:h*pose.foot.y-size/2).animation(.linear(duration:0.9),value:pose.foot).allowsHitTesting(false).accessibilityHidden(true)
     }
     private func stockChoice() {
-        guard let dish=choice else{hint="料理柜里还没有成品，先去厨房制作。";return}
+        guard let dish=choice else{hint=availableDishes.isEmpty ? "料理柜里还没有成品，先去厨房制作。":"请先从料理柜选择一份料理。";return}
         let previous=store.data
         guard store.data.stock(dish) else{hint="陈列位已满，先收款或下架在售料理。";return}
         guard store.save() else{store.data=previous;return}
         listedAt=Date();soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。"
+    }
+    private func collect(_ orders:[ShopOrder]) {
+        let previous=store.data
+        var amount=0
+        for order in orders where store.data.collectSale(order.id) {amount+=order.price}
+        guard amount>0 else{return}
+        guard store.save() else{store.data=previous;return}
+        soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
     }
     private func unstock(_ order:ShopOrder) {
         let previous=store.data
@@ -360,39 +370,59 @@ struct GameRoomView: View {
         guard store.save() else{store.data=previous;return}
         hint="";store.message="\(order.dish.name)已放回料理柜。"
     }
+    private var emptySlots:Int {max(0,store.data.garden.capacity-store.data.garden.orders.count)}
+    private var stockableCount:Int {min(emptySlots,availableDishes.reduce(0){$0+store.data.garden.dishes[$1.id,default:0]})}
+    private func stockAvailable() {
+        let previous=store.data
+        let previousCount=previous.garden.dishes.values.reduce(0,+)
+        var count=0
+        for dish in availableDishes {
+            while store.data.garden.orders.count<store.data.garden.capacity && store.data.stock(dish) {count+=1}
+        }
+        guard count>0 else{return}
+        assert(previousCount == store.data.garden.dishes.values.reduce(0,+)+count)
+        assert(store.data.garden.orders.count == previous.garden.orders.count+count)
+        guard store.save() else {store.data=previous;return}
+        listedAt=Date();soldAt=nil;hint="";store.message="已上架 \(count) 份料理，剩余 \(emptySlots) 个空位。"
+    }
     private var stockTray:some View {
-        VStack(alignment:.leading,spacing:9) {
+        VStack(alignment:.leading,spacing:8) {
             Text("料理柜").font(.headline).foregroundStyle(Palette.goldLight)
-            PixelScrollView {
-                VStack(alignment:.leading,spacing:10) {
-                    ForEach(availableDishes) {dish in
-                        Button{shopChoice=dish.id;hint=""} label:{
-                            HStack(spacing:8) {
-                                GameSprite(sheet:"Foods",index:dish.sprite,size:44)
-                                VStack(alignment:.leading,spacing:4) {
-                                    Text(dish.name).font(.system(size:11)).lineLimit(2)
+            Text(choice.map{"已选："+$0.name} ?? "选择一份料理").font(.system(size:11)).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+            Button(choice.map{"上架 · \(Money.text(store.data.salePrice($0)))"} ?? "上架所选",action:stockChoice)
+                .frame(maxWidth:.infinity).disabled(choice == nil || emptySlots == 0)
+            Button("一键上架 \(stockableCount) 份",action:stockAvailable).frame(maxWidth:.infinity).disabled(stockableCount == 0)
+            Text("空位 \(emptySlots) · 可上架 \(stockableCount) 份").font(.system(size:10)).foregroundStyle(Palette.muted)
+            GeometryReader {geo in
+                PixelScrollView {
+                    let columns=Array(repeating:GridItem(.flexible(minimum:0,maximum:150)),count:SceneSizing.stockColumns(width:max(1,geo.size.width-16)))
+                    LazyVGrid(columns:columns,alignment:.leading,spacing:8) {
+                        ForEach(availableDishes) {dish in
+                            Button{shopChoice=dish.id;hint=""} label:{
+                                VStack(spacing:5) {
+                                    GameSprite(sheet:"Foods",index:dish.sprite,size:42)
+                                    Text(dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
                                     Text("×\(store.data.garden.dishes[dish.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
-                                }
-                                Spacer(minLength:0)
-                            }.padding(7).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
-                                .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
-                        }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)")
-                        if choice?.id == dish.id {
-                            Text(Money.text(store.data.salePrice(dish))).font(.caption).foregroundStyle(Palette.goldLight)
-                            Button("上架料理",action:stockChoice).buttonStyle(PixelButtonStyle(primary:true))
-                                .disabled(store.data.garden.orders.count>=store.data.garden.capacity)
+                                }.frame(maxWidth:.infinity).padding(6).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
+                                    .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
+                            }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)")
                         }
                     }
                     if availableDishes.isEmpty {Text("还没有可上架的成品").font(.caption).foregroundStyle(Palette.muted)}
-                    if !store.data.garden.orders.isEmpty {Divider();Text("柜台").font(.caption).foregroundStyle(Palette.goldLight)}
-                    ForEach(store.data.garden.orders,id:\.id) {order in
-                        VStack(alignment:.leading,spacing:6) {
-                            Text(order.dish.name).font(.system(size:11)).lineLimit(2)
-                            Text(order.ready(store.data.totalFocus) ? "已成交 · 待收款":"在售").font(.caption).foregroundStyle(Palette.muted)
-                            Button("下架"){unstock(order)}.disabled(order.ready(store.data.totalFocus)).accessibilityLabel("下架\(order.dish.name)")
-                        }.padding(7).magicSurface(Palette.card)
+                    if !store.data.garden.orders.isEmpty {Text("柜台").font(.caption).foregroundStyle(Palette.goldLight).frame(maxWidth:.infinity,alignment:.leading).padding(.top,10)}
+                    LazyVGrid(columns:columns,alignment:.leading,spacing:8) {
+                        ForEach(store.data.garden.orders,id:\.id) {order in
+                            VStack(spacing:5) {
+                                GameSprite(sheet:"Foods",index:order.dish.sprite,size:42)
+                                Text(order.dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
+                                Text(order.ready(store.data.totalFocus) ? "待收款":"在售").font(.caption).foregroundStyle(Palette.goldLight)
+                                if order.ready(store.data.totalFocus) {
+                                    Button("收款"){collect([order])}.accessibilityLabel("收取\(order.dish.name)货款")
+                                } else {Button("下架"){unstock(order)}.accessibilityLabel("下架\(order.dish.name)")}
+                            }.frame(maxWidth:.infinity).padding(6).magicSurface(Palette.card)
+                        }
                     }
-                }.padding(.trailing,20)
+                }
             }
         }.padding(10).magicSurface(Palette.paper)
     }

@@ -2,8 +2,19 @@ import SwiftUI
 import AppKit
 
 enum GameImages {
-    static let backgrounds: [String:NSImage] = ["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study"].reduce(into: [:]) { result, name in
+    private static let aiServiceIcon: NSImage? = Bundle.main.url(forResource:"AIService",withExtension:"png",subdirectory:"Game").flatMap { NSImage(contentsOf:$0) }
+    static let backgrounds: [String:NSImage] = ["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment"].reduce(into: [:]) { result, name in
         if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Game"), let image = NSImage(contentsOf: url) { result[name] = image }
+    }
+    static func interfaceIcon(name:String)->NSImage? {
+        if name == "AI 服务" || name == "ai" {return aiServiceIcon}
+        let index:[String:Int] = ["成长":0,"sparkles":0,"growth":0,"炼金室":1,"熬制魔药":1,"flask":1,"alchemy":1,
+            "衣柜":2,"tshirt":2,"地图":3,"户外地图":3,"map":3,"worldmap":3,
+            "库存":4,"archivebox":4,"inventory":4,"采买":5,"market":5,"cart":5,"配方册":6,"recipes":6,
+            "种子柜":7,"seed-cabinet":7,"湖畔钓鱼":8,"渔具":8,"tackle":8,"林间冒险":9,"背包":9,"backpack":9,
+            "首页":10,"小院":10,"home":10,"书房":11,"study":11]
+        guard let slot=index[name],let images=sprites["Interface"],images.indices.contains(slot) else{return nil}
+        return images[slot]
     }
     static let sprites: [String:[NSImage]] = {
         guard let boundsURL = Bundle.main.url(forResource: "Bounds", withExtension: "json", subdirectory: "Game"),

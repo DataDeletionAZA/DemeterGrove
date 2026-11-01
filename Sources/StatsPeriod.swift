@@ -8,6 +8,9 @@ struct StatsPeriod {
     var date: Date
     var range: StatsRange
     var calendar: Calendar = CalendarDates.defaultCalendar
+    var rolloverMinutes = 0
+    var boundary: DayBoundary { DayBoundary(timeZoneID: calendar.timeZone.identifier, rolloverMinutes: rolloverMinutes, firstWeekday: calendar.firstWeekday) }
+    var interval: DateInterval { DateInterval(start: boundary.start(of: start), end: boundary.start(of: end)) }
     private var component: Calendar.Component { range == .week ? .weekOfYear : (range == .month ? .month : .year) }
     var start: Date {
         if range == .week { return CalendarDates.weekStart(date, calendar: calendar) }
@@ -19,12 +22,12 @@ struct StatsPeriod {
         let count = calendar.dateComponents([.day], from: start, to: end).day!
         return (0..<count).map { calendar.date(byAdding: .day, value: $0, to: start)! }
     }
-    func contains(_ date: Date) -> Bool { date >= start && date < end }
+    func contains(_ date: Date) -> Bool { date >= interval.start && date < interval.end }
     func shifted(_ amount: Int) -> Date { calendar.date(byAdding: component, value: amount, to: date)! }
     var title: String {
         if range == .year { return "\(calendar.component(.year, from: start))年" }
-        if range == .month { return start.formatted(.dateTime.year().month(.wide)) }
-        return start.formatted(.dateTime.year().month().day()) + " — " + days.last!.formatted(.dateTime.year().month().day())
+        if range == .month { return String(format: "%04d年%d月", calendar.component(.year, from: start), calendar.component(.month, from: start)) }
+        return CalendarDates.key(start, calendar: calendar) + " — " + CalendarDates.key(days.last!, calendar: calendar)
     }
 }
 
@@ -56,16 +59,16 @@ struct StatsSummary {
     var clicks: Int { days.reduce(0) { $0 + $1.clicks } }
     var actions: Int { keys + clicks }
     init(data: AppData, period: StatsPeriod) {
-        let interval = DateInterval(start: period.start, end: period.end)
+        let interval = period.interval
         let entries = data.sessions.filter { $0.recordedSeconds(in: interval) > 0 }
         days = period.days.map { day in
             let key = CalendarDates.key(day, calendar: period.calendar)
-            let end = period.calendar.date(byAdding: .day, value: 1, to: day)!
-            let span = DateInterval(start: day, end: end)
+            let span = period.boundary.interval(forDay: day)
+            let start = span.start, end = span.end
             let focused = entries.filter { $0.kind != .rest }.reduce(0) { $0 + $1.recordedSeconds(in: span) }
             let rested = entries.filter { $0.kind == .rest }.reduce(0) { $0 + $1.recordedSeconds(in: span) }
             let paused = data.sessions.flatMap { $0.pauseIntervals ?? [] }.reduce(0.0) { total, pause in
-                total + max(0, min(pause.endedAt, end).timeIntervalSince(max(pause.beganAt, day)))
+                total + max(0, min(pause.endedAt, end).timeIntervalSince(max(pause.beganAt, start)))
             }
             return StatsDay(date: day, seconds: focused, restSeconds: rested, pausedSeconds: paused, keys: data.keys[key, default: 0], clicks: data.mouseClicks?[key] ?? 0)
         }
@@ -88,7 +91,7 @@ struct StatsMonth: Identifiable {
     static func months(data: AppData, year: StatsPeriod) -> [StatsMonth] {
         (0..<12).map { offset in
             let date = year.calendar.date(byAdding: .month, value: offset, to: year.start)!
-            return StatsMonth(date: date, summary: StatsSummary(data: data, period: StatsPeriod(date: date, range: .month, calendar: year.calendar)))
+            return StatsMonth(date: date, summary: StatsSummary(data: data, period: StatsPeriod(date: date, range: .month, calendar: year.calendar, rolloverMinutes: year.rolloverMinutes)))
         }
     }
 }

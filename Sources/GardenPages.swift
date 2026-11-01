@@ -20,11 +20,7 @@ struct SettingsPage: View {
     private let sections = ["通用", "桌宠", "专注与提醒", "AI 服务", "表达与提示词", "存档"]
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 7) {
-                ForEach(sections, id: \.self) { item in
-                    Button(item) { section = item }.buttonStyle(PixelButtonStyle(primary: section == item))
-                }
-            }
+            SceneToolbar(items:sections.map {item in SceneToolbarItem(item,selected:section == item){section=item}})
             sectionContent
         }
     }
@@ -52,6 +48,7 @@ struct SettingsPage: View {
                     }
                 }
             }
+            DaySettingsView(store:store)
             Card(title:"日历",icon:"calendar") {
                 HStack {
                     Text("一周开始于")

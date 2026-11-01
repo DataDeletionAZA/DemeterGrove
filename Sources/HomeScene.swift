@@ -2,16 +2,18 @@ import SwiftUI
 
 struct HomeScene: View {
     @ObservedObject var store: GardenStore
-    @State private var choosingTrail=false
+    @State private var showingInventory=false
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
                 HStack {
-                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
                     WalletView(coins: store.data.garden.coins)
-                    InventoryButton(store:store)
                 }
+                SceneToolbar(items:[
+                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("库存",action:{showingInventory=true})
+                ])
             }
             SceneCanvas { size in
                 let w = size.width, h = size.height
@@ -21,23 +23,11 @@ struct HomeScene: View {
                     SceneTarget(object: .kitchenDoor, sceneSize: size, label: "厨房", action: { SceneNavigation.open("厨房",store:store) })
                     SceneTarget(object: .studyDoor, sceneSize: size, label: "书房", action: { SceneNavigation.open("书房",store:store) })
                     SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store) })
-                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{choosingTrail=true})
-                        .popover(isPresented:$choosingTrail) {
-                            VStack(spacing:10) {
-                                ForEach(SceneNavigation.wilds,id:\.self) {route in
-                                    Button(route) {choosingTrail=false;SceneNavigation.open(route,store:store)}.buttonStyle(PixelButtonStyle())
-                                }
-                            }.padding(14).frame(width:210).magicSurface(Palette.paper,strong:true).magicControls()
-                        }
+                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{SceneNavigation.open("户外地图",store:store)})
                     SceneParticles()
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
             }
-            HStack(spacing: 18) {
-                Label("今日任务 \(store.todayTasks.count)", systemImage: "checklist")
-                Label("累计专注 \(Int(store.data.totalFocus/60)) 分钟", systemImage: "hourglass")
-                Spacer()
-            }.font(.caption).foregroundStyle(Palette.muted)
-        }
+        }.sheet(isPresented:$showingInventory) {InventoryView(store:store)}
     }
 }
 
@@ -68,17 +58,20 @@ struct SceneTarget: View {
 
 struct StudyScene: View {
     @ObservedObject var store: GardenStore
+    @State private var showingInventory=false
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
                 HStack {
-                    Text("等级 \(store.data.levelProgress.level)").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
                     WalletView(coins:store.data.garden.coins)
-                    InventoryButton(store:store)
                 }
+                SceneToolbar(items:[
+                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("库存",action:{showingInventory=true})
+                ])
             }
-            SceneCanvas { size in
+            SceneCanvas(hasSidebar:true) { size in
                 let w = size.width, h = size.height
                 ZStack {
                     RoomBackdrop(name: "Study").frame(width: w, height: h).clipped()
@@ -90,7 +83,7 @@ struct StudyScene: View {
                     SceneParticles()
                     SceneArrows(store:store,scene:"书房")
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
-            }
-        }
+            } sidebar: {StudyTodaySidebar(store:store)}
+        }.sheet(isPresented:$showingInventory) {InventoryView(store:store)}
     }
 }

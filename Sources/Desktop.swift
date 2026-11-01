@@ -283,9 +283,9 @@ final class PetController {
     private func showTool(_ name: String) {
         if name == "统计" {store.previewMotion(.review)}
         store.activeTool = name
-        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "湖畔钓鱼", "林间冒险", "炼金室", "衣柜"].contains(name)
+        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "户外地图", "湖畔钓鱼", "林间冒险", "炼金室", "衣柜"].contains(name)
         let wide = name == "任务" || game
-        let preserveSize = toolPanel?.isVisible == true
+        let preservedSize = toolPanel?.isVisible == true ? toolPanel?.frame.size:nil
         if toolPanel == nil {
             let panel = MagicPanel(contentRect: .zero, styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
             panel.isOpaque = false
@@ -305,9 +305,16 @@ final class PetController {
         toolPanel.contentView = toolViews[name]
         toolPanel.title = SceneNavigation.title(name)
         let area = screenArea
-        toolPanel.minSize = NSSize(width: min(game ? 640 : 460, area.width-16), height: min(420,area.height-16))
-        if !preserveSize {
-            toolPanel.setContentSize(NSSize(width:min(game ? 760:wide ? 720:490,area.width-16),height:min(game ? 820:name == "计时器" ? 500:650,area.height-16)))
+        toolPanel.minSize = NSSize(width: min(460, area.width-16), height: min(420,area.height-16))
+        if let preservedSize {
+            toolPanel.setContentSize(preservedSize)
+        } else {
+            if game {
+                let sideWidth=max(panel.frame.minX-area.minX-16,area.maxX-panel.frame.maxX-16)
+                toolPanel.setContentSize(SceneSizing.initialWindow(available:CGSize(width:min(area.width-16,max(360,sideWidth)),height:area.height-16)))
+            } else {
+                toolPanel.setContentSize(NSSize(width:min(wide ? 720:490,area.width-16),height:min(name == "计时器" ? 500:650,area.height-16)))
+            }
         }
         positionTool()
         if toolPanel.parent !== panel { panel.addChildWindow(toolPanel, ordered: .above) }
@@ -530,15 +537,23 @@ struct PetMenu: View {
             }
         }.frame(width: 320).frame(maxHeight: .infinity).magicSurface(Palette.card, strong: true)
             .foregroundStyle(Palette.ink).magicControls()
+            .environment(\.calendar,store.calendar)
+            .environment(\.dayBoundary,store.dayBoundary)
+            .environment(\.timeZone,store.calendar.timeZone)
     }
 }
 
 struct ToolPanelView: View {
     @ObservedObject var store: GardenStore
     var tool: String
+    private var sceneMetadata:String {
+        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","户外地图"].contains(tool) else{return ""}
+        let level="等级 \(store.data.levelProgress.level)"
+        return tool == "商店" ? level+" · 栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)":level
+    }
     var body: some View {
         VStack(spacing: 0) {
-        MagicHeader(title: SceneNavigation.title(tool), draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
+        MagicHeader(title: SceneNavigation.title(tool), metadata: sceneMetadata, draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
         GeometryReader { viewport in
         PixelScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -557,6 +572,7 @@ struct ToolPanelView: View {
                     case "首页": HomeScene(store:store)
                     case "书房": StudyScene(store:store)
                     case "地图": HomeScene(store:store)
+                    case "户外地图": WorldMapScene(store:store)
                     case "湖畔钓鱼": MapPage(store:store,journey:.fishing)
                     case "林间冒险": MapPage(store:store,journey:.adventure)
                     case "炼金室", "熬制魔药": MapPage(store:store,journey:.potions)
@@ -572,6 +588,8 @@ struct ToolPanelView: View {
             .overlay { WindowResizeBorder(began:{store.pet?.beginToolResize()},ended:{store.pet?.finishToolResize()}) }
             .environment(\.locale, Locale(identifier: "zh_CN"))
             .environment(\.calendar,store.calendar)
+            .environment(\.dayBoundary,store.dayBoundary)
+            .environment(\.timeZone,store.calendar.timeZone)
             .sheet(isPresented:Binding(get:{tool == "计时器" && store.activeTool == tool && store.pendingFocusReviewID != nil && store.pet?.managerIsOpen != true},set:{if !$0 {store.pendingFocusReviewID=nil}})) {
                 if let id=store.pendingFocusReviewID {FocusSessionEditor(store:store,sessionID:id)}
             }

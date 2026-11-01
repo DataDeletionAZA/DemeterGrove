@@ -43,3 +43,44 @@ enum CalendarDates {
             && (maximum.map { day <= calendar.startOfDay(for: $0) } ?? true)
     }
 }
+
+
+struct DayBoundary: Equatable {
+    var timeZoneID: String? = nil
+    var rolloverMinutes = 0
+    var firstWeekday = 2
+    var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = timeZoneID.flatMap(TimeZone.init(identifier:)) ?? .current
+        value.firstWeekday = firstWeekday
+        return value
+    }
+    var isValid: Bool { (0..<1440).contains(rolloverMinutes) && (timeZoneID.map { TimeZone(identifier: $0) != nil } ?? true) }
+    func start(of day: Date) -> Date {
+        let midnight = calendar.startOfDay(for: day)
+        if rolloverMinutes == 0 { return midnight }
+        // A skipped clock time uses the first valid time; a repeated clock time uses its first occurrence.
+        return calendar.nextDate(after: midnight.addingTimeInterval(-1), matching: DateComponents(hour: rolloverMinutes / 60, minute: rolloverMinutes % 60, second: 0), matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward)!
+    }
+    func day(for instant: Date) -> Date {
+        let civilDay = calendar.startOfDay(for: instant)
+        return instant < start(of: civilDay) ? calendar.date(byAdding: .day, value: -1, to: civilDay)! : civilDay
+    }
+    func key(for instant: Date) -> String { CalendarDates.key(day(for: instant), calendar: calendar) }
+    func interval(forDay day: Date) -> DateInterval {
+        DateInterval(start: start(of: day), end: start(of: calendar.date(byAdding: .day, value: 1, to: day)!))
+    }
+    func time(onDay day: Date, minutes: Int) -> Date {
+        let civilDay = calendar.date(byAdding: .day, value: minutes < rolloverMinutes ? 1 : 0, to: calendar.startOfDay(for: day))!
+        return calendar.nextDate(after: civilDay.addingTimeInterval(-1), matching: DateComponents(hour: minutes / 60, minute: minutes % 60, second: 0), matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward)!
+    }
+    func timestamp(_ instant: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm zzz"
+        return formatter.string(from: instant)
+    }
+    func dateText(_ day: Date) -> String { CalendarDates.key(day, calendar: calendar) }
+}

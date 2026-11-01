@@ -14,6 +14,10 @@ xcrun swiftc Sources/CalendarDates.swift Tests/Calendar/main.swift -o "$checks_d
 "$checks_dir/calendar"
 xcrun swiftc "${model[@]}" Sources/StatsPeriod.swift Sources/HabitDayState.swift Sources/DailyRecords.swift Tests/Statistics/main.swift -o "$checks_dir/statistics"
 "$checks_dir/statistics"
+xcrun swiftc "${model[@]}" Sources/StatsPeriod.swift Sources/HabitDayState.swift Sources/DailyRecords.swift Tests/DayBoundary/main.swift -o "$checks_dir/day-boundary"
+"$checks_dir/day-boundary"
+xcrun swiftc Sources/WorldMapData.swift Tests/WorldMap/main.swift -o "$checks_dir/world-map"
+"$checks_dir/world-map"
 xcrun swiftc Sources/PetPlacement.swift Tests/Placement/main.swift -o "$checks_dir/placement"
 "$checks_dir/placement"
 xcrun swiftc Sources/WindowResize.swift Tests/Resize/main.swift -o "$checks_dir/resize" -framework SwiftUI -framework AppKit

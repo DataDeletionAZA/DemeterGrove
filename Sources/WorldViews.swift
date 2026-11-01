@@ -153,6 +153,8 @@ struct MapPage: View {
     @ObservedObject var store:GardenStore
     var journey:JourneyKind = .fishing
     @State private var hint=""
+    @State private var showingInventory=false
+    @State private var showingTackleShop=false
     private var trip:Journey? {store.data.garden.economy.journey}
     private var unlocked:Bool {store.data.levelProgress.level>=journey.level}
     private var matching:Bool {trip?.kind == journey}
@@ -167,46 +169,97 @@ struct MapPage: View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             SceneHeader {
-                HStack {Text("等级 \(store.data.levelProgress.level)").font(.headline);Spacer();WalletView(coins:store.data.garden.coins);InventoryButton(store:store)}
+                HStack {Spacer();WalletView(coins:store.data.garden.coins)}
+                SceneToolbar(items:[
+                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("库存",action:{showingInventory=true})
+                ])
             }
             if journey == .potions {PotionScene(store:store)}
             else {
-                SceneCanvas {size in
+                SceneCanvas(hasSidebar:true) {size in
                     let w=size.width,h=size.height
                     ZStack {
                         RoomBackdrop(name:journey.scene).frame(width:w,height:h)
                         ObjectButton(label:actionLabel,action:act,caption:actionLabel) {GameSprite(sheet:"Equipment",index:journey.icon,size:w*0.13)}
                             .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.51:0.64),y:h*(journey == .fishing ? 0.54:0.73))
-                        if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
+                        if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"户外地图"){SceneNavigation.open("户外地图",store:store)}}
                         if matching {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
                         if !unlocked {
                             Palette.paper.opacity(0.55).allowsHitTesting(false)
                             Label("等级 \(journey.level) 解锁",systemImage:"lock.fill").font(.headline).padding(14).magicSurface(Palette.paper)
                         }
-                        SceneArrows(store:store,scene:journey.rawValue)
                     }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
+                } sidebar: {expeditionSidebar}
+            }
+            if journey == .potions {harvestBag}
+        }
+        .sheet(isPresented:$showingInventory) {InventoryView(store:store)}
+        .sheet(isPresented:$showingTackleShop) {tackleShop}
+    }
+    private var expeditionSidebar:some View {
+        PixelScrollView {
+            VStack(alignment:.leading,spacing:12) {
+                Text(journey == .fishing ? "渔具箱":"探险背包").font(.headline)
+                HStack(alignment:.top,spacing:8) {
+                    let tool:Upgrade=journey == .fishing ? .rod:.wand
+                    GameSprite(sheet:"Equipment",index:tool.icon,size:38)
+                    VStack(alignment:.leading,spacing:4) {
+                        Text(tool.name).font(.callout)
+                        Text("等级 \(store.data.garden.rank(tool)) / \(tool.limit)").font(.caption).foregroundStyle(Palette.muted)
+                    }
                 }
+                if journey == .fishing {Button("渔具店") {showingTackleShop=true}}
                 if let trip,matching {
                     PixelProgress(value:trip.progress(store.data.totalFocus))
-                    Text(trip.progress(store.data.totalFocus)>=1 ? "收获已备好" : "还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight)
+                    Text(trip.progress(store.data.totalFocus)>=1 ? "收获已备好":"还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注")
+                        .font(.caption).foregroundStyle(Palette.goldLight).fixedSize(horizontal:false,vertical:true)
                 }
-                if !hint.isEmpty {Text(hint).font(.caption).foregroundStyle(Palette.goldLight)}
+                if !hint.isEmpty {Text(hint).font(.caption).foregroundStyle(Palette.goldLight).fixedSize(horizontal:false,vertical:true)}
+                harvestBag
+            }.padding(12).frame(maxWidth:.infinity,alignment:.topLeading)
+        }.magicSurface(Palette.paper)
+    }
+    private var tackleShop:some View {
+        SceneDialog(preferred:CGSize(width:370,height:340)) {
+            HStack {Text("渔具店").font(.title2);Spacer();WalletView(coins:store.data.garden.coins)}
+        } content: {
+            let tool=Upgrade.rod
+            let rank=store.data.garden.rank(tool)
+            VStack(alignment:.leading,spacing:12) {
+                HStack {GameSprite(sheet:"Equipment",index:tool.icon,size:48);Text("钓竿 · 等级 \(rank)").font(.headline)}
+                Text(tool.effect).font(.callout).foregroundStyle(Palette.muted)
+                if rank<tool.limit {
+                    Text("等级 \(tool.level(rank)) · \(Money.text(tool.price(rank)))").font(.caption).foregroundStyle(Palette.goldLight)
+                    Button("升级钓竿") {
+                        if store.data.upgrade(tool) {store.message="钓竿已升至 \(rank+1) 级。"}
+                    }.disabled(store.data.levelProgress.level<tool.level(rank) || store.data.garden.coins<tool.price(rank))
+                } else {Text("已完成全部升级").font(.caption).foregroundStyle(Palette.sage)}
             }
-            harvestBag
+        } footer: {HStack {Spacer();Button("关闭") {showingTackleShop=false}}}
+    }
+    private var harvestKeys:[String] {
+        store.data.garden.economy.finds.keys.sorted().filter {key in
+            guard store.data.garden.economy.finds[key,default:0]>0 else{return false}
+            if journey == .fishing {return key.contains("鱼")}
+            if journey == .adventure {return !key.contains("鱼") && !Potion.all.contains{$0.id == key}}
+            return true
         }
     }
     private var harvestBag:some View {
         VStack(alignment:.leading,spacing:8) {
-            if !store.data.garden.economy.finds.filter({$0.value>0}).isEmpty {
-                Text("收获袋").font(.headline)
-                ForEach(store.data.garden.economy.finds.keys.sorted(),id:\.self) {key in
+            Text("收获袋").font(.headline)
+            if harvestKeys.isEmpty {Text("暂无收获").font(.caption).foregroundStyle(Palette.muted)}
+            else {
+                ForEach(harvestKeys,id:\.self) {key in
                     let count=store.data.garden.economy.finds[key,default:0]
                     if count>0 {
                         let potion=Potion.all.first{$0.id == key}
-                        HStack {
-                            GameSprite(sheet:"Equipment",index:potion != nil ? 11:key.contains("鱼") ? 8:10,size:35)
-                            Text("\(potion?.name ?? key) ×\(count)").font(.callout)
-                            Spacer()
+                        VStack(alignment:.leading,spacing:8) {
+                            HStack(spacing:6) {
+                                GameSprite(sheet:"Equipment",index:potion != nil ? 11:key.contains("鱼") ? 8:10,size:30)
+                                Text("\(potion?.name ?? key) ×\(count)").font(.callout).fixedSize(horizontal:false,vertical:true)
+                            }
                             if let potion {Button("使用"){if store.data.usePotion(potion.id){store.message=potion.benefit}else{store.message="先在农场播种，再使用繁盛药剂。"}}.accessibilityLabel("使用\(potion.name)")}
                             Button("出售 · \(Money.text(store.data.findPrice(key)))"){if store.data.sellFind(key){store.message="已出售\(potion?.name ?? key)。"}}.accessibilityLabel("出售\(potion?.name ?? key)")
                         }.padding(8).magicSurface(Palette.paper)

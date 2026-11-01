@@ -262,6 +262,9 @@ struct Preferences: Codable {
     var notifications = false
     var idlePose: Int? = nil
     var weekStartsOn: Int? = nil
+    var dayTimeZoneID: String? = nil
+    var dayRolloverMinutes: Int? = nil
+    var dayBoundary: DayBoundary { DayBoundary(timeZoneID: dayTimeZoneID, rolloverMinutes: dayRolloverMinutes ?? 0, firstWeekday: weekStartsOn ?? 2) }
 }
 
 struct AppData: Codable {
@@ -271,6 +274,7 @@ struct AppData: Codable {
     var events: [Appointment] = []
     var habits: [Habit] = []
     var habitProgress: HabitProgress? = nil
+    var habitRewardNotBefore: Date? = nil
     var recurringTaskCompletions: [TaskCompletionRecord]? = nil
     var taskOccurrenceReschedules: [TaskOccurrenceReschedule]? = nil
     var reminderAssignments: [ReminderAssignment]? = nil
@@ -395,6 +399,7 @@ struct AppData: Codable {
             date.timeIntervalSince1970.isFinite && (Date.distantPast...Date.distantFuture).contains(date)
         }
         try require(ai?.isValid ?? true)
+        try require(preferences.dayBoundary.isValid && (habitRewardNotBefore.map(validDate) ?? true))
         try require((1...4).contains(version))
         try require(validDate(savedAt))
         try require(tasks.allSatisfy { ($0.due.map(validDate) ?? true) && ($0.completedAt.map(validDate) ?? true) })
@@ -470,8 +475,8 @@ struct AppData: Codable {
             try require(trip.kind != .fishing || [900.0,780,660,540].contains(trip.duration))
         }
         var result = self
-        var calendar = Calendar.current; calendar.firstWeekday = preferences.weekStartsOn ?? 2
-        result.migrateRecurrences(at: now, calendar: calendar)
+        let boundary = preferences.dayBoundary
+        result.migrateRecurrences(at: boundary.day(for: now), calendar: boundary.calendar)
         return result
     }
 }

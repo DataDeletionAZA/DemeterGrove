@@ -164,6 +164,10 @@ struct PixelIcon: View {
     var name: String
     var size: CGFloat = 28
     var body: some View {
+        Group {
+            if let image=GameImages.interfaceIcon(name:name) {
+                Image(nsImage:image).resizable().interpolation(.none).scaledToFit()
+            } else {
         Canvas { context, bounds in
             context.withCGContext { c in
                 c.setShouldAntialias(false)
@@ -192,13 +196,18 @@ struct PixelIcon: View {
                     rect(7, 25, 21, 4, gold); rect(8, 25, 19, 1, bright); rect(25, 26, 2, 2, outline)
                 }
                 switch name {
+                case "桌宠":
+                    rect(8,8,16,16,outline);rect(10,11,12,11,cream)
+                    rect(8,7,16,7,green);rect(11,4,10,5,green);rect(6,12,20,3,gold)
+                    rect(12,16,2,2,outline);rect(19,16,2,2,outline);rect(14,21,5,1,gold)
+                    rect(6,24,20,6,outline);rect(8,25,16,4,green);rect(14,25,5,4,purple)
                 case "close":
                     for i in 0..<12 { rect(CGFloat(10+i), CGFloat(10+i), 2, 2, cream); rect(CGFloat(21-i), CGFloat(10+i), 2, 2, cream) }
                 case "check":
                     poly([(5,16),(8,13),(13,18),(24,7),(27,10),(13,24)], lightGreen)
                     poly([(8,14),(13,19),(25,8),(26,10),(13,22)], bright)
                 case "down": poly([(9,12),(23,12),(16,19)], cream)
-                case "计时器", "timer":
+                case "计时器", "timer", "专注与提醒":
                     rect(7, 3, 18, 3, outline); rect(8, 3, 16, 2, bright); rect(10, 5, 12, 2, gold)
                     poly([(10,7),(22,7),(21,11),(18,15),(18,17),(22,23),(22,26),(10,26),(10,23),(14,17),(14,15),(10,10)], glass)
                     poly([(12,7),(20,7),(19,11),(16,14),(13,10)], cream)
@@ -206,14 +215,14 @@ struct PixelIcon: View {
                     rect(11,8,1,3,NSColor.white.withAlphaComponent(0.7)); rect(15,14,2,5,bright)
                     rect(7,26,18,3,outline);rect(8,26,16,1,bright);rect(9,27,14,2,gold)
                     rect(7,6,1,20,gold);rect(24,6,1,20,gold)
-                case "日记", "book.closed":
+                case "日记", "book.closed", "存档":
                     rect(5,3,23,26,outline);rect(7,4,19,24,green);rect(6,4,3,24,gold)
                     rect(10,5,14,1,lightGreen);rect(24,6,1,20,outline);rect(10,25,14,2,cream)
                     rect(10,27,14,1,paper);rect(10,7,2,2,bright);rect(21,7,2,2,bright)
                     rect(10,22,2,2,bright);rect(21,22,2,2,bright)
                     poly([(16,10),(20,15),(16,20),(12,15)],gold);poly([(16,12),(18,15),(16,18),(14,15)],purple)
                     rect(6,7,3,1,bright);rect(6,23,3,1,bright);rect(25,14,4,4,gold)
-                case "任务", "待办", "checklist":
+                case "任务", "待办", "checklist", "表达与提示词":
                     scroll();rect(12,11,8,1,gold);rect(12,15,10,1,gold);rect(12,19,6,1,gold)
                     rect(9,11,1,1,outline);rect(9,15,1,1,outline);rect(9,19,1,1,outline)
                     poly([(25,10),(28,8),(27,19),(19,26),(20,21)],glass);rect(20,24,2,3,outline)
@@ -268,7 +277,7 @@ struct PixelIcon: View {
                 case "统计", "chart.bar":
                     scroll();rect(10,21,3,3,green);rect(15,17,3,7,purple);rect(20,12,3,12,gold)
                     rect(10,21,2,1,lightGreen);rect(15,17,2,1,lightPurple);rect(20,12,2,1,bright)
-                case "设置", "settings", "slider.horizontal.3":
+                case "设置", "settings", "slider.horizontal.3", "通用":
                     poly([(12,3),(20,3),(21,7),(25,8),(29,12),(29,20),(25,24),(21,25),(20,29),(12,29),(11,25),(7,24),(3,20),(3,12),(7,8),(11,7)],outline)
                     poly([(13,4),(19,4),(20,8),(24,9),(28,13),(28,19),(24,23),(20,24),(19,28),(13,28),(12,24),(8,23),(4,19),(4,13),(8,9),(12,8)],gold)
                     rect(12,10,8,12,paper);rect(10,12,12,8,paper);rect(13,12,6,8,outline);rect(12,13,8,6,outline)
@@ -281,12 +290,15 @@ struct PixelIcon: View {
                     rect(11,18,2,5,NSColor.white.withAlphaComponent(0.65));rect(14,8,1,5,cream)
                 }
             }
+            }
+        }
         }.frame(width: size, height: size).accessibilityHidden(true)
     }
 }
 
 struct MagicHeader: View {
     var title: String
+    var metadata = ""
     var draggable = true
     var back: (() -> Void)? = nil
     var close: () -> Void
@@ -299,7 +311,8 @@ struct MagicHeader: View {
             HStack(spacing: 10) {
                 PixelIcon(name: title, size: 24)
                 Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.goldLight)
-                Spacer()
+                if !metadata.isEmpty {Text(metadata).font(.caption).foregroundStyle(Palette.muted).lineLimit(1).minimumScaleFactor(0.7)}
+                Spacer(minLength:0)
             }.contentShape(Rectangle()).overlay { if draggable { WindowDragArea() } }
             Button(action: close) { PixelIcon(name: "close", size: 16).frame(width:40,height:40).contentShape(Rectangle()) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
         }.padding(.horizontal, 16).frame(height: 48)

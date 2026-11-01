@@ -15,8 +15,18 @@ struct RepeatRule: Codable, Equatable {
         (unit != .week || !weekdays.isEmpty) && weekdays.allSatisfy { (1...7).contains($0) } &&
         (unit != .cycle || !activeDays.isEmpty) && activeDays.allSatisfy { (0..<cycleLength).contains($0) }
     }
+    static func workRest(active: Int, rest: Int) -> RepeatRule {
+        RepeatRule(unit: .cycle, cycleLength: active + rest, activeDays: Set(0..<max(0, active)))
+    }
+    var continuousActiveDays: Int? {
+        let count = activeDays.count
+        return count > 0 && activeDays == Set(0..<count) ? count : nil
+    }
     var summary: String {
-        if unit == .cycle { return "每 \(cycleLength) 天循环 · 执行 \(activeDays.count) 天" }
+        if unit == .cycle {
+            if let active = continuousActiveDays { return "连续执行 \(active) 天，再休息 \(cycleLength-active) 天 · 共 \(cycleLength) 天循环" }
+            return "每 \(cycleLength) 天循环 · 第 " + activeDays.sorted().map { String($0 + 1) }.joined(separator: "、") + " 天执行，其余休息"
+        }
         return "每 \(every) \(unit.rawValue)" + (unit == .week ? " · " + weekdays.sorted().map { ["日", "一", "二", "三", "四", "五", "六"][$0-1] }.joined(separator: "、") : "")
     }
 }
