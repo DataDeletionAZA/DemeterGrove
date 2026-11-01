@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ImageIO
 
 enum ChibiBody: String, CaseIterable {
     case stand = "Stand", sit = "Sit", focus = "Focus", rest = "Rest", drag = "DragRight"
@@ -80,6 +81,62 @@ enum ChibiImages {
     }()
 }
 
+enum ChibiSkins {
+    struct Artwork {
+        let crop: CGRect
+        let headWidth: CGFloat
+        let headCenter: CGFloat
+        var scale: CGFloat { 277 / headWidth }
+        var size: CGSize { CGSize(width: crop.width * scale, height: crop.height * scale) }
+        var center: CGFloat { (headCenter - crop.minX) * scale }
+    }
+    static let artwork: [ChibiBody: Artwork] = [
+        .stand: Artwork(crop: CGRect(x:7,y:4,width:986,height:1547),headWidth:986,headCenter:500),
+        .sit: Artwork(crop: CGRect(x:28,y:55,width:983,height:1465),headWidth:952,headCenter:535),
+        .drag: Artwork(crop: CGRect(x:51,y:1,width:914,height:1529),headWidth:914,headCenter:508),
+        .focus: Artwork(crop: CGRect(x:132,y:16,width:1223,height:1564),headWidth:820,headCenter:817),
+        .rest: Artwork(crop: CGRect(x:132,y:12,width:1223,height:1568),headWidth:813,headCenter:815.5)
+    ]
+    static func name(for pose: ChibiPose) -> String {
+        switch pose.body {
+        case .stand: return "Stand"
+        case .sit: return "Sit"
+        case .drag: return "Drag"
+        case .focus: return "Focus"
+        case .rest:
+            let moment = pose.time.truncatingRemainder(dividingBy: 12)
+            return !pose.reduceMotion && (3..<4.8).contains(moment) ? "RestOpen" : "Rest"
+        }
+    }
+    static let images: [String:NSImage] = {
+        var result: [String:NSImage] = [:]
+        for (name,body) in [("Stand",ChibiBody.stand),("Sit",.sit),("Drag",.drag),("Focus",.focus),("Rest",.rest),("RestOpen",.rest)] {
+            guard let spec = artwork[body],
+                  let url = Bundle.main.url(forResource:name,withExtension:"png",subdirectory:"ChibiSkins/Casual"),
+                  let source = CGImageSourceCreateWithURL(url as CFURL,nil),
+                  let original = CGImageSourceCreateImageAtIndex(source,0,nil),
+                  let cropped = original.cropping(to:spec.crop) else { continue }
+            let width = Int(ceil(spec.size.width * 2)), height = Int(ceil(spec.size.height * 2))
+            guard let context = CGContext(data:nil,width:width,height:height,bitsPerComponent:8,bytesPerRow:width*4,
+                                          space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            context.interpolationQuality = .high
+            context.draw(cropped,in:CGRect(x:0,y:0,width:width,height:height))
+            if let image = context.makeImage() { result[name] = NSImage(cgImage:image,size:spec.size) }
+        }
+        return result
+    }()
+    static var isAvailable: Bool { images.count == 6 }
+    static func frame(for pose:ChibiPose) -> NSImage? { images[name(for:pose)] }
+    static func rect(body:ChibiBody,in size:CGSize,grounded:Bool,facingRight:Bool = false) -> CGRect {
+        guard let spec = artwork[body] else { return .zero }
+        let bottom:CGFloat = grounded ? 0:14
+        let scale = min(size.width / 480, max(0,size.height - 18) / 535)
+        let x = size.width / 2 - spec.center * scale
+        let width = spec.size.width * scale, height = spec.size.height * scale
+        return CGRect(x:facingRight ? size.width-x-width:x,y:size.height-bottom-height,width:width,height:height)
+    }
+}
+
 struct ChibiSprite: View, Animatable {
     var phase = 0
     var time: Double
@@ -95,6 +152,7 @@ struct ChibiSprite: View, Animatable {
     var facingRight = false
     var glances = false
     var grounded = false
+    var skin:PetSkin = .casual
     var animatableData: Double {
         get { dragImpulse }
         set { dragImpulse = newValue }
@@ -104,6 +162,27 @@ struct ChibiSprite: View, Animatable {
         let pose = ChibiPose(phase: phase, time: time, elapsed: elapsed, basePhase: basePhase,
                              idlePose: idlePose, expression: expression, expressionActive: expressionActive, dragImpulse: dragImpulse, reduceMotion: reduceMotion, dragAge: dragAge,glances:glances)
         Canvas { context, size in
+            if skin == .casual {
+                guard let source = ChibiSkins.frame(for:pose) else { return }
+                let image = context.resolve(Image(nsImage:source).interpolation(.none))
+                let rect = ChibiSkins.rect(body:pose.body,in:size,grounded:grounded)
+                var drawing = context
+                if facingRight { drawing.translateBy(x:size.width,y:0); drawing.scaleBy(x:-1,y:1) }
+                if pose.body == .drag {
+                    let spec = ChibiSkins.artwork[.drag]!
+                    let pivot = CGPoint(x:rect.minX+(520-spec.crop.minX)/spec.crop.width*rect.width,
+                                        y:rect.minY+(760-spec.crop.minY)/spec.crop.height*rect.height)
+                    drawing.translateBy(x:pivot.x,y:pivot.y)
+                    drawing.rotate(by:.radians(pose.swing * 0.55 * (facingRight ? -1:1)))
+                    drawing.translateBy(x:-pivot.x,y:-pivot.y)
+                } else if pose.body == .stand {
+                    drawing.translateBy(x:rect.midX,y:rect.maxY)
+                    drawing.scaleBy(x:1+pose.spring*0.035,y:1+pose.breath*0.0005-pose.spring*0.035)
+                    drawing.translateBy(x:-rect.midX,y:-rect.maxY)
+                }
+                drawing.draw(image,in:rect)
+                return
+            }
             guard let rawSource = ChibiImages.images[pose.imageName] else { return }
             let source = ChibiWardrobe.frame(source: rawSource, imageName: pose.imageName, body: pose.body.rawValue, economy: economy)
             let image = context.resolve(Image(nsImage: source).interpolation(.none))

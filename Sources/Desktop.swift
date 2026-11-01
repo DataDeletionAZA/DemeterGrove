@@ -165,6 +165,10 @@ final class PetController {
         petSpeechBubble = PetDialogueBubbleController(store: store, anchor: { [weak self] in
             guard let self, self.panel.isVisible else { return nil }
             let pose = ChibiPose(phase:self.store.petPhase,time:0,elapsed:2,basePhase:self.store.petBasePhase,idlePose:self.store.idlePose)
+            if self.store.data.preferences.selectedPetSkin == .casual {
+                let rect = ChibiSkins.rect(body:pose.body,in:CGSize(width:200,height:225),grounded:self.store.petDocked,facingRight:self.store.petFacingRight)
+                return NSRect(x:self.panel.frame.minX+rect.minX,y:self.panel.frame.maxY-rect.maxY,width:rect.width,height:rect.height)
+            }
             let size = ChibiImages.images[pose.body.rawValue]?.size ?? CGSize(width:280,height:431)
             let scale = min(200.0/480,225.0/535)
             return NSRect(x:self.panel.frame.midX-size.width*scale/2,
@@ -407,7 +411,7 @@ struct DesktopPet: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,expressionActive:store.petSpeech != nil,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true,grounded:store.petDocked).frame(width:200,height:225)
+                ProfessorSprite(phase:store.petPhase,size:200,economy:store.data.garden.economy,lookDirection:store.petLookDirection,motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,expression:store.petExpression,expressionActive:store.petSpeech != nil,dragImpulse:Double(store.petDragImpulse),dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,glances:true,grounded:store.petDocked,skin:store.data.preferences.selectedPetSkin).frame(width:200,height:225)
                 PetDragSurface(click:click,drag:drag,drop:drop,move:move,look:{point,size in store.updatePetLook(point:point,size:size)})
             }.frame(width:200,height:225)
             if !store.petDocked {
@@ -538,7 +542,7 @@ struct PetMenu: View {
                 }
                 HStack {
                     Text("平时姿势").font(.system(size: 12)).foregroundStyle(Palette.muted)
-                    PixelTabs(selection: Binding(get: { store.idlePose }, set: { store.idlePose = $0 }), items: [(0, "站立"), (1, "坐地")])
+                    PixelTabs(selection: Binding(get: { store.idlePose }, set: { store.idlePose = $0 }), items: [(0, "站立"), (1, "坐下")])
                 }
                 HStack {
                     Button("设置") { store.pet?.openTool("设置") }

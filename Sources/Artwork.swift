@@ -249,18 +249,19 @@ struct ProfessorSprite: View {
     var facingRight=false
     var glances=false
     var grounded=false
+    var skin:PetSkin = .casual
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var began=Date()
     var body:some View {
         TimelineView(.animation(minimumInterval:1/(PetMotion(rawValue:phase)?.frameRate ?? 12),paused:reduceMotion)) { timeline in
-            if ChibiImages.images["Stand"] != nil {
+            if skin == .casual ? ChibiSkins.isAvailable : ChibiImages.images["Stand"] != nil {
                 ChibiSprite(phase:phase,time:timeline.date.timeIntervalSince1970,
                             elapsed:timeline.date.timeIntervalSince(motionStart ?? began),basePhase:basePhase,
                             reduceMotion:reduceMotion,idlePose:idlePose,expression:expression,expressionActive:expressionActive,dragImpulse:dragImpulse,economy:economy,
-                            dragAge:dragUpdated.map {timeline.date.timeIntervalSince($0)},facingRight:facingRight,glances:glances,grounded:grounded)
+                            dragAge:dragUpdated.map {timeline.date.timeIntervalSince($0)},facingRight:facingRight,glances:glances,grounded:grounded,skin:skin)
                     .animation(reduceMotion ? nil:.easeOut(duration:0.14),value:dragImpulse)
             } else {Text("人物图片未载入").font(.caption).foregroundStyle(Palette.muted)}
-        }.frame(width:size,height:grounded ? size*1.125:size*208/192).accessibilityHidden(true)
+        }.frame(width:size,height:grounded || skin == .casual ? size*1.125:size*208/192).accessibilityHidden(true)
             .onAppear {began=Date()}
             .onChange(of:phase) { old,value in
                 if !([10,11].contains(old) && [10,11].contains(value)) {began=Date()}

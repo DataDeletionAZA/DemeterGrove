@@ -250,6 +250,12 @@ struct Garden: Codable {
 
 }
 
+enum PetSkin: String, Codable, CaseIterable, Identifiable {
+    case casual, original
+    var id: String { rawValue }
+    var name: String { self == .casual ? "常服" : "原有搭配" }
+}
+
 struct Preferences: Codable {
     var name = "西弗勒斯"
     var hair = 0
@@ -261,6 +267,8 @@ struct Preferences: Codable {
     var sound = true
     var notifications = false
     var idlePose: Int? = nil
+    var petSkin: String? = nil
+    var selectedPetSkin: PetSkin { PetSkin(rawValue: petSkin ?? "") ?? .casual }
     var weekStartsOn: Int? = nil
     var dayTimeZoneID: String? = nil
     var dayRolloverMinutes: Int? = nil

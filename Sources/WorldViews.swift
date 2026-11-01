@@ -55,6 +55,29 @@ struct GrowthPage: View {
 
 struct WardrobePage: View {
     @ObservedObject var store:GardenStore
+    @State private var preview = "Stand"
+    private var selection:Binding<PetSkin> {
+        Binding(get:{store.data.preferences.selectedPetSkin},set:{skin in
+            _ = store.commitGameChange {$0.preferences.petSkin=skin.rawValue;return true}
+        })
+    }
+    var body:some View {
+        VStack(alignment:.leading,spacing:14) {
+            PixelTabs(selection:selection,items:PetSkin.allCases.map{($0,$0.name)})
+            if selection.wrappedValue == .casual {
+                VStack(spacing:12) {
+                    ProfessorSprite(phase:preview == "DragRight" ? 10:preview == "Focus" ? 30:preview == "Rest" ? 31:0,
+                                    size:260,idlePose:preview == "Sit" ? 1:0,skin:.casual)
+                    PixelSelect(selection:$preview,items:[("Stand","站立"),("Sit","坐下"),("DragRight","拎起"),("Focus","专注"),("Rest","休息")])
+                        .frame(width:160).accessibilityLabel("预览姿势")
+                }.frame(maxWidth:.infinity).padding(18).magicSurface(Palette.paper)
+            } else { LegacyWardrobePage(store:store) }
+        }
+    }
+}
+
+private struct LegacyWardrobePage: View {
+    @ObservedObject var store:GardenStore
     @State private var slot:ClothingSlot = .top
     @State private var preview="Stand"
     @State private var showingBase=false
@@ -91,7 +114,7 @@ struct WardrobePage: View {
         return layout {
                 ProfessorSprite(phase:preview == "DragRight" ? 10:preview == "Focus" ? 30:preview == "Rest" ? 31:0,size:230,
                                 economy:showingBase ? Economy(outfit:"base"):store.data.garden.economy,idlePose:preview == "Sit" ? 1:0,
-                                expression:store.petExpression,expressionActive:store.petSpeech != nil)
+                                expression:store.petExpression,expressionActive:store.petSpeech != nil,skin:.original)
                 VStack(alignment:.leading,spacing:10) {
                     Text("当前穿戴").font(.title2)
                     WalletView(coins:store.data.garden.coins)
