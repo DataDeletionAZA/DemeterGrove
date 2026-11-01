@@ -6,6 +6,15 @@ trap 'rm -rf "$checks_dir"' EXIT
 qa_dir="${1:-${CASUAL_SKIN_QA_DIR:-$checks_dir/visuals}}"
 mkdir -p "$qa_dir"
 qa_dir="$(cd "$qa_dir" && pwd)"
+python3 - <<'PY_RESOURCES'
+from pathlib import Path
+root = Path('Resources/ChibiSkins/Casual')
+required = [root / 'Expressions' / f'{pose}{expression}.png' for pose in ['Stand','Sit','Focus','Rest'] for expression in range(9)]
+required += [root / 'Layers' / f'{pose}-{layer}.png' for pose in ['Sit','Focus','Rest','RestOpen'] for layer in ['background','person','foreground']]
+missing = [str(path) for path in required if not path.is_file() or not path.stat().st_size]
+if missing:
+    raise SystemExit('Required artwork missing:\n' + '\n'.join(missing))
+PY_RESOURCES
 python3 - "$checks_dir" <<'PY'
 from pathlib import Path
 import plistlib

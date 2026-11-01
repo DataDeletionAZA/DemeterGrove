@@ -29,7 +29,11 @@ struct SettingsPage: View {
             if section == "桌宠" {
             Card(title: "桌宠", icon: "person.crop.square") {
                 HStack(spacing: 32) {
-                    ProfessorSprite(phase:store.petPhase,size:120,economy:store.data.garden.economy,idlePose:store.idlePose,expression:store.petExpression,basePhase:store.petBasePhase,skin:store.data.preferences.selectedPetSkin)
+                    ProfessorSprite(phase:store.petPhase,size:120,economy:store.data.garden.economy,lookDirection:store.petLookDirection,
+                                    motionStart:store.tapPhase == 0 ? nil:store.petAnimationBegan,idlePose:store.idlePose,
+                                    expression:store.petExpression,expressionActive:store.petSpeech != nil,dragImpulse:Double(store.petDragImpulse),
+                                    dragUpdated:store.petDragUpdated,basePhase:store.petBasePhase,facingRight:store.petFacingRight,
+                                    glances:true,grounded:store.petDocked,skin:store.data.preferences.selectedPetSkin)
                     VStack(alignment: .leading, spacing: 16) {
                         TextField("名字", text: $store.data.preferences.name).textFieldStyle(PixelTextFieldStyle()).frame(maxWidth: 260)
                         Toggle("在桌面显示", isOn: Binding(get: { store.data.preferences.petVisible }, set: { store.setPet($0) }))

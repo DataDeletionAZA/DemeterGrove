@@ -30,6 +30,7 @@ final class GardenStore: ObservableObject {
     @Published var petExpression = 0
     @Published private(set) var petSpeech: PetSpeech? = nil
     private var petDialoguePicker = PetDialoguePicker()
+    private var petClickExpression = 0
     private var petSpeechElapsed: TimeInterval = 0
     private var petSpeechUpdatedAt: Date? = nil
     private var petSpeechHovered = false
@@ -106,6 +107,7 @@ final class GardenStore: ObservableObject {
             storageLocked = true
         }
         data.migrateRecurrences(at: today, calendar: calendar)
+        if var settings = data.petDialogue, settings.upgradeDefaultLines() { data.petDialogue = settings }
         journalDate = today
         observedDayBoundary = fixedDayBoundary
         focusDraftMinutes = data.preferences.focusMinutes
@@ -694,8 +696,13 @@ final class GardenStore: ObservableObject {
     }
 
     func clickPet() {
-        animatePet(20, seconds: 0.65)
-        triggerPetDialogue(.click)
+        guard ![10,11].contains(tapPhase) else { return }
+        animatePet(PetMotion.waving.rawValue, seconds: PetMotion.waving.duration)
+        if petSpeech == nil { triggerPetDialogue(.click) }
+        if petSpeech == nil {
+            petExpression = petClickExpression
+            petClickExpression = (petClickExpression + 1) % PetExpression.allCases.count
+        }
     }
 
     func dragPet(_ velocity:CGFloat) {
@@ -727,7 +734,11 @@ final class GardenStore: ObservableObject {
         petAnimationBegan=Date()
         tapPhase = phase
         let duration=[20,22,23].contains(phase) ? max(seconds,PetMotion(rawValue:phase)?.duration ?? seconds):seconds
-        let reset = DispatchWorkItem { [weak self] in self?.tapPhase = 0 }
+        let reset = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.tapPhase = 0
+            if self.petSpeech == nil { self.petExpression = 0 }
+        }
         tapReset = reset
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: reset)
     }

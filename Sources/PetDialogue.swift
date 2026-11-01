@@ -19,13 +19,19 @@ enum PetDialogueEvent: String, Codable, CaseIterable, Identifiable {
 
 enum PetExpression: Int, Codable, CaseIterable, Identifiable {
     case calm = 0, sideways = 1, eyesClosed = 2, smile = 3
+    case composed = 4, flustered = 5, angry = 6, resigned = 7, raisedBrow = 8
     var id: Int { rawValue }
     var title: String {
         switch self {
         case .calm: return "平视"
-        case .sideways: return "侧目"
+        case .sideways: return "看过来"
         case .eyesClosed: return "闭眼蹙眉"
         case .smile: return "微笑"
+        case .composed: return "强作镇定"
+        case .flustered: return "羞恼"
+        case .angry: return "黑脸"
+        case .resigned: return "无奈"
+        case .raisedBrow: return "挑眉"
         }
     }
 }
@@ -58,7 +64,7 @@ struct PetDialogueSettings: Codable, Equatable {
     """
     static let maximumLines = 1000
     var isValid: Bool { lines.count <= Self.maximumLines && Set(lines.map(\.id)).count == lines.count && lines.allSatisfy(\.isValid) && (generationTemplate.map { AIPromptPurpose.encouragement.problem(in: $0) == nil } ?? true) }
-    static let defaultLines: [PetDialogueLine] = [
+    static let previousDefaultLines: [PetDialogueLine] = [
         .init(event: .click, expression: .calm, text: "我在。有什么事？"),
         .init(event: .click, expression: .sideways, text: "嗯？这次又发现了什么？"),
         .init(event: .dragEnd, expression: .sideways, text: "好了，这个位置就可以。"),
@@ -76,6 +82,24 @@ struct PetDialogueSettings: Codable, Equatable {
         .init(event: .craft, expression: .smile, text: "做成了，看看这次的成果。"),
         .init(event: .craft, expression: .calm, text: "完成了，已经放好了。")
     ]
+    static let defaultLines = previousDefaultLines + [
+        .init(event: .click, expression: .eyesClosed, text: "听见了，不必再戳。"),
+        .init(event: .click, expression: .smile, text: "嗯。看见你了。"),
+        .init(event: .click, expression: .composed, text: "……我没事。只是没料到。"),
+        .init(event: .click, expression: .flustered, text: "别这样看着我。"),
+        .init(event: .click, expression: .angry, text: "够了。手收回去。"),
+        .init(event: .click, expression: .resigned, text: "……随你吧，轻些就好。"),
+        .init(event: .click, expression: .raisedBrow, text: "嗯？你是认真的？")
+    ]
+    @discardableResult
+    mutating func upgradeDefaultLines() -> Bool {
+        guard lines.count == Self.previousDefaultLines.count,
+              Self.previousDefaultLines.allSatisfy({ original in
+                  lines.contains { $0.event == original.event && $0.expression == original.expression && $0.text == original.text }
+              }) else { return false }
+        lines += Self.defaultLines.dropFirst(Self.previousDefaultLines.count)
+        return true
+    }
     mutating func append(_ incoming: [PetDialogueLine]) throws -> Int {
         guard incoming.allSatisfy(\.isValid) else { throw PetDialogueIssue.invalid }
         var next = lines

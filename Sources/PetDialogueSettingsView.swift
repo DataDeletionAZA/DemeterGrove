@@ -25,7 +25,7 @@ struct PetDialogueSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) { eventPicker; expressionPicker }
             }
             HStack(alignment: .center, spacing: 16) {
-                PetDialogueExpressionPreview(expression: expression).frame(width: 62, height: 76)
+                PetDialogueExpressionPreview(expression: expression, skin: store.data.preferences.selectedPetSkin).frame(width: 62, height: 76)
                 Text("新台词和纯文字导入使用以上场景、表情。完整台词文件会保留每句自己的设置。").font(.caption).foregroundStyle(Palette.muted)
             }
             TextField("搜索这个场景的台词", text: $search).textFieldStyle(PixelTextFieldStyle()).accessibilityLabel("搜索桌宠台词")
@@ -48,7 +48,7 @@ struct PetDialogueSettingsView: View {
             }.frame(minHeight: 100, maxHeight: 270)
             if let speech = store.petSpeech {
                 HStack(alignment: .top, spacing: 12) {
-                    PetDialogueExpressionPreview(expression: speech.line.expression).frame(width: 50, height: 62)
+                    PetDialogueExpressionPreview(expression: speech.line.expression, skin: store.data.preferences.selectedPetSkin).frame(width: 50, height: 62)
                     Text(speech.line.text).font(.callout).frame(maxWidth: .infinity, alignment: .leading)
                     Button("收起") { store.dismissPetSpeech(id: speech.id) }
                 }.padding(10).magicSurface(Palette.paper)
@@ -143,8 +143,11 @@ struct PetDialogueSettingsView: View {
 
 struct PetDialogueExpressionPreview: View {
     var expression: PetExpression
+    var skin: PetSkin
     var body: some View {
-        if let image = ChibiImages.images["StandExpression" + String(expression.rawValue)] {
+        let pose = ChibiPose(phase: 0, time: 0, elapsed: 2, expression: expression.rawValue, expressionActive: true)
+        let source = skin == .casual ? ChibiSkins.frame(for: pose) : ChibiImages.images[pose.imageName]
+        if let image = source {
             GeometryReader { geometry in
                 Image(nsImage: image).resizable().interpolation(.none)
                     .frame(width: geometry.size.width, height: geometry.size.width * image.size.height / image.size.width)
@@ -165,7 +168,7 @@ private struct PetDialogueLineEditor: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("编辑台词").font(.title2)
             PixelSelect(selection: $line.event, items: PetDialogueEvent.allCases.map { ($0, $0.title) }).accessibilityLabel("台词场景")
-            HStack { PetDialogueExpressionPreview(expression: line.expression).frame(width: 90, height: 105); PixelSelect(selection: $line.expression, items: PetExpression.allCases.map { ($0, $0.title) }).accessibilityLabel("台词表情") }
+            HStack { PetDialogueExpressionPreview(expression: line.expression, skin: store.data.preferences.selectedPetSkin).frame(width: 90, height: 105); PixelSelect(selection: $line.expression, items: PetExpression.allCases.map { ($0, $0.title) }).accessibilityLabel("台词表情") }
             TextField("写一句这个场景会说的话", text: $line.text, axis: .vertical).lineLimit(3...6).textFieldStyle(PixelTextFieldStyle()).accessibilityLabel("台词内容")
             Text("\(line.text.count) / 160 字").font(.caption).foregroundStyle(line.text.count > 160 ? Palette.clay : Palette.muted)
             Button("预览台词与表情") { store.previewPetDialogue(line) }.disabled(!line.isValid)

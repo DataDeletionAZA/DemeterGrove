@@ -56,6 +56,13 @@ struct GrowthPage: View {
 struct WardrobePage: View {
     @ObservedObject var store:GardenStore
     @State private var preview = "Stand"
+    @State private var expression = -1
+    @State private var clickPhase = 0
+    @State private var clickExpression = 0
+    @State private var nextClickExpression = 0
+    @State private var clickBegan = Date()
+    @State private var clickID = 0
+    private var basePhase:Int { preview == "DragRight" ? 10:preview == "Focus" ? 30:preview == "Rest" ? 31:0 }
     private var selection:Binding<PetSkin> {
         Binding(get:{store.data.preferences.selectedPetSkin},set:{skin in
             _ = store.commitGameChange {$0.preferences.petSkin=skin.rawValue;return true}
@@ -66,13 +73,47 @@ struct WardrobePage: View {
             PixelTabs(selection:selection,items:PetSkin.allCases.map{($0,$0.name)})
             if selection.wrappedValue == .casual {
                 VStack(spacing:12) {
-                    ProfessorSprite(phase:preview == "DragRight" ? 10:preview == "Focus" ? 30:preview == "Rest" ? 31:0,
-                                    size:260,idlePose:preview == "Sit" ? 1:0,skin:.casual)
-                    PixelSelect(selection:$preview,items:[("Stand","站立"),("Sit","坐下"),("DragRight","拎起"),("Focus","专注"),("Rest","休息")])
-                        .frame(width:160).accessibilityLabel("预览姿势")
+                    ProfessorSprite(phase:clickPhase == 0 ? basePhase:clickPhase,size:260,
+                                    motionStart:clickPhase == 0 ? nil:clickBegan,idlePose:preview == "Sit" ? 1:0,
+                                    expression:expression < 0 ? clickExpression:expression,expressionActive:expression >= 0 || clickPhase != 0,
+                                    basePhase:basePhase,skin:.casual)
+                        .contentShape(Rectangle()).onTapGesture(perform:replayPreview)
+                    HStack(spacing:10) {
+                        PixelSelect(selection:$preview,items:[("Stand","站立"),("Sit","坐下"),("DragRight","拎起"),("Focus","专注"),("Rest","休息")])
+                            .frame(width:140).accessibilityLabel("预览姿势")
+                        PixelSelect(selection:$expression,items:[(-1,"自然")] + PetExpression.allCases.map {($0.rawValue,$0.title)})
+                            .frame(width:150).accessibilityLabel("预览表情")
+                        Button("点一下",action:replayPreview).font(.caption).buttonStyle(PixelButtonStyle()).disabled(preview == "DragRight")
+                    }
                 }.frame(maxWidth:.infinity).padding(18).magicSurface(Palette.paper)
+                    .task(id:clickID) {
+                        guard clickPhase != 0 else { return }
+                        let activeClickID = clickID
+                        do { try await Task.sleep(nanoseconds:UInt64(PetMotion.waving.duration * 1_000_000_000)) }
+                        catch { return }
+                        guard !Task.isCancelled, activeClickID == clickID else { return }
+                        clickPhase = 0
+                    }
+                    .onChange(of:preview) { _,_ in resetPreview() }
+                    .onDisappear(perform:resetPreview)
             } else { LegacyWardrobePage(store:store) }
         }
+    }
+    private func replayPreview() {
+        guard preview != "DragRight" else { return }
+        if expression < 0 {
+            clickExpression = nextClickExpression
+            nextClickExpression = (nextClickExpression + 1) % PetExpression.allCases.count
+        }
+        clickBegan = Date()
+        clickPhase = PetMotion.waving.rawValue
+        clickID += 1
+    }
+    private func resetPreview() {
+        clickPhase = 0
+        clickExpression = 0
+        nextClickExpression = 0
+        clickID += 1
     }
 }
 

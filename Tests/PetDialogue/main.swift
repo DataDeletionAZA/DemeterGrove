@@ -6,10 +6,48 @@ import Foundation
         func check(_ value: @autoclosure () -> Bool) { assert(value()); count += 1 }
         func rejected(_ body: () throws -> Void) { do { try body(); assertionFailure("Expected rejection") } catch { count += 1 } }
         let now = Date()
+        let expressions: [PetExpression] = [.calm, .sideways, .eyesClosed, .smile, .composed, .flustered, .angry, .resigned, .raisedBrow]
+        check(PetExpression.allCases == expressions)
+        for (raw, expression) in expressions.enumerated() {
+            check(expression.rawValue == raw)
+            check(try! JSONDecoder().decode(PetExpression.self, from: Data(String(raw).utf8)) == expression)
+            check(try! JSONEncoder().encode(expression) == Data(String(raw).utf8))
+            let line = PetDialogueLine(event: .click, expression: expression, text: "嗯，知道了。")
+            let bytes = try PetDialogueFile.encode([line], structured: true)
+            check(try! PetDialogueFile.decode(bytes, structured: true, event: .click, expression: .calm) == [line])
+        }
+        rejected { _ = try JSONDecoder().decode(PetExpression.self, from: Data("9".utf8)) }
         let defaults = PetDialogueSettings()
         check(defaults.isValid)
         check(Set(defaults.lines.map(\.event)) == Set(PetDialogueEvent.allCases))
         check(Set(defaults.lines.map(\.expression)) == Set(PetExpression.allCases))
+        check(Set(defaults.lines.filter { $0.event == .click }.map(\.expression)) == Set(PetExpression.allCases))
+        var previousDefaults = defaults
+        previousDefaults.enabled = false
+        previousDefaults.aiProfileID = UUID()
+        previousDefaults.writingPresetID = UUID()
+        previousDefaults.lines = PetDialogueSettings.previousDefaultLines.reversed().map { original in
+            var line = original; line.id = UUID(); return line
+        }
+        let previousLines = previousDefaults.lines
+        var upgraded = try JSONDecoder().decode(PetDialogueSettings.self, from: JSONEncoder().encode(previousDefaults))
+        check(upgraded.upgradeDefaultLines())
+        check(Array(upgraded.lines.prefix(previousLines.count)) == previousLines)
+        check(!upgraded.enabled && upgraded.aiProfileID == previousDefaults.aiProfileID && upgraded.writingPresetID == previousDefaults.writingPresetID)
+        check(Set(upgraded.lines.filter { $0.event == .click }.map(\.expression)) == Set(PetExpression.allCases))
+        check(!upgraded.upgradeDefaultLines())
+        for change in 0..<5 {
+            var custom = previousDefaults
+            switch change {
+            case 0: custom.lines[0].text = "这里是自己的台词。"
+            case 1: custom.lines.removeLast()
+            case 2: custom.lines.append(.init(event: .click, expression: .calm, text: "嗯。"))
+            case 3: custom.lines[0].expression = .raisedBrow
+            default: custom.lines[0] = custom.lines[1]; custom.lines[0].id = UUID()
+            }
+            let original = custom
+            check(!custom.upgradeDefaultLines() && custom == original)
+        }
         check(AIPromptPurpose.encouragement.problem(in: PetDialogueSettings.defaultGenerationTemplate) == nil)
         check(!PetDialogueLine(event: .click, expression: .calm, text: " ").isValid)
         check(!PetDialogueLine(event: .click, expression: .calm, text: String(repeating: "字", count: 161)).isValid)
@@ -122,6 +160,9 @@ import Foundation
         store.previewPetDialogue(first, at: now)
         store.dragPet(300)
         check(store.petSpeech == nil)
+        let dragBegan = store.petAnimationBegan
+        store.clickPet()
+        check(store.tapPhase == PetMotion.dragRight.rawValue && store.petAnimationBegan == dragBegan && store.petSpeech == nil)
         store.dropPet()
         let landingSpeech = store.petSpeech
         check(landingSpeech?.line.event == .dragEnd)
@@ -203,6 +244,54 @@ import Foundation
         check(store.setPetDialogueAIPresets(profileID: api.id, writingPresetID: replacementWriting.id))
         check(store.petDialogueSettings.aiProfileID == nil && store.petDialogueSettings.writingPresetID == replacementWriting.id)
         check(!store.setPetDialogueAIPresets(profileID: UUID(), writingPresetID: replacementWriting.id) && store.data.ai == replacements)
+        for expression in PetExpression.allCases {
+            store.previewPetDialogue(.init(event: .click, expression: expression, text: "嗯，听见了。"))
+            let id = store.petSpeech?.id
+            store.clickPet()
+            check(store.petSpeech?.id == id && store.petExpression == expression.rawValue)
+            store.dismissPetSpeech(id: id)
+            check(store.petSpeech == nil && store.petExpression == 0)
+        }
+        var silent = store.petDialogueSettings; silent.enabled = false
+        check(store.updatePetDialogue(silent))
+        for expression in PetExpression.allCases {
+            store.clickPet()
+            check(store.petSpeech == nil && store.petExpression == expression.rawValue && store.tapPhase == PetMotion.waving.rawValue)
+        }
+        store.clickPet()
+        check(store.petExpression == PetExpression.calm.rawValue)
+        try await Task.sleep(nanoseconds: 700_000_000)
+        check(store.tapPhase == PetMotion.waving.rawValue)
+        let firstBegan = store.petAnimationBegan
+        store.clickPet()
+        check(store.petAnimationBegan > firstBegan && store.petExpression == PetExpression.sideways.rawValue)
+        try await Task.sleep(nanoseconds: 750_000_000)
+        check(store.tapPhase == PetMotion.waving.rawValue && store.petExpression == PetExpression.sideways.rawValue)
+        try await Task.sleep(nanoseconds: 700_000_000)
+        check(store.tapPhase == 0 && store.petExpression == 0)
+        silent.enabled = true; silent.lines = []
+        check(store.updatePetDialogue(silent))
+        store.clickPet()
+        check(store.petSpeech == nil && store.petExpression == PetExpression.eyesClosed.rawValue)
+        store.dragPet(-300)
+        let leftDragBegan = store.petAnimationBegan
+        store.clickPet()
+        check(store.tapPhase == PetMotion.dragLeft.rawValue && store.petAnimationBegan == leftDragBegan && store.petSpeech == nil && store.petExpression == 0)
+        store.dropPet()
+        check(store.tapPhase == PetMotion.landing.rawValue)
+        try await Task.sleep(nanoseconds: 650_000_000)
+        check(store.tapPhase == 0)
+        store.data.petDialogue = previousDefaults
+        check(store.save())
+        let reloaded = GardenStore(preview: true)
+        reloaded.storageLocked = true
+        check(Array(reloaded.petDialogueSettings.lines.prefix(previousLines.count)) == previousLines)
+        check(Set(reloaded.petDialogueSettings.lines.filter { $0.event == .click }.map(\.expression)) == Set(PetExpression.allCases))
+        store.data.petDialogue = silent
+        check(store.save())
+        let customReloaded = GardenStore(preview: true)
+        customReloaded.storageLocked = true
+        check(customReloaded.petDialogueSettings == silent)
         print("PASS: \(count) pet-dialogue checks cover local defaults, event/expression binding, import/export/limits, duplicate suppression, old saves, API/template isolation, deleted-preset fallback, game transaction rollback without delayed rewrites, speech replacement/hover/expiry and focus/rest/drag event settlement")
     }
 }
