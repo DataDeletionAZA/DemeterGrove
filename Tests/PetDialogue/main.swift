@@ -175,7 +175,7 @@ import Foundation
         check(store.data.garden.coins == previousCoins - shirt.price && store.data.garden.economy.worn(shirt.slot) == shirt.id)
         check(store.commitGameChange { $0.buySeeds(.carrot) })
         let gameRoundtrip = try SaveFile.read(store.file)
-        check(gameRoundtrip.garden.coins == previousCoins - shirt.price - EconomyBalance.seedPacketPrice(.carrot) && gameRoundtrip.garden.cropSeeds[Crop.carrot.rawValue, default: 0] == previousSeeds[Crop.carrot.rawValue, default: 0] + 3)
+        check(gameRoundtrip.garden.coins == previousCoins - shirt.price - EconomyBalance.seedPacketPrice(.carrot) && gameRoundtrip.garden.cropSeeds[Crop.carrot.rawValue, default: 0] == previousSeeds[Crop.carrot.rawValue, default: 0] + 1)
 
         var badModule = store.petDialogueSettings
         badModule.generationTemplate = "{{事项}} {{数量}} {{长度}}"

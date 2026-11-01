@@ -501,7 +501,7 @@ struct IngredientMarket: View {
                                     IngredientArt(name:crop.rawValue,size:48)
                                     Text(crop.rawValue+"种子").font(.system(size:12))
                                     Text("库存 \(store.data.garden.cropSeeds[crop.rawValue,default:0]) 袋").font(.system(size:10)).foregroundStyle(Palette.muted)
-                                    Text(waterPayment ? "\(EconomyBalance.seedWaterPrice(crop:crop)) 滴露水 / 袋":Money.text(EconomyBalance.seedPacketPrice(crop))+" / 3 袋").font(.system(size:10)).foregroundStyle(Palette.goldLight)
+                                    Text(waterPayment ? "\(EconomyBalance.seedWaterPrice(crop:crop)) 滴露水 / 袋":Money.text(EconomyBalance.seedPacketPrice(crop))+" / 袋").font(.system(size:10)).foregroundStyle(Palette.goldLight)
                                 }.frame(maxWidth:.infinity).padding(8).magicSurface(Palette.card)
                             }.buttonStyle(.plain).disabled(waterPayment ? store.data.garden.water<EconomyBalance.seedWaterPrice(crop:crop):store.data.garden.coins<EconomyBalance.seedPacketPrice(crop))
                         }

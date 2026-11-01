@@ -6,7 +6,7 @@ enum EconomyBalance {
     }
 
     static func seedPacketPrice(_ crop: Crop) -> Int {
-        (Ingredient(rawValue: crop.harvestName)?.purchasePrice ?? 6) * 3
+        Ingredient(rawValue: crop.harvestName)?.purchasePrice ?? 6
     }
 
     static func ingredientWaterPrice(_ ingredient: Ingredient) -> Int {

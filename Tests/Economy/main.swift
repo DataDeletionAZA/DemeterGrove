@@ -55,21 +55,28 @@ for ingredient in Ingredient.allCases {
     data.garden.coins += 1
     check(data.buyIngredient(ingredient) && data.garden.coins == 0 && data.ingredientCount(ingredient) == count + 1,"ingredient charges copper quote once")
 }
+check(EconomyBalance.seedPacketPrice(.carrot) == 6 && EconomyBalance.seedPacketPrice(.wheat) == 8 && EconomyBalance.seedPacketPrice(.mushroom) == 10 && EconomyBalance.seedPacketPrice(.pumpkin) == 12,"single seed copper prices")
 for crop in Crop.marketCrops {
     var data = AppData()
     let count = data.garden.cropSeeds[crop.rawValue,default:0]
-    data.garden.coins = EconomyBalance.seedPacketPrice(crop)
-    check(data.buySeeds(crop) && data.garden.coins == 0 && data.garden.cropSeeds[crop.rawValue] == count + 3,"seed packet price and quantity")
+    let price = EconomyBalance.seedPacketPrice(crop), seeds = data.garden.cropSeeds, water = data.garden.water
+    data.garden.coins = price - 1
+    check(!data.buySeeds(crop) && data.garden.coins == price - 1 && data.garden.cropSeeds == seeds && data.garden.water == water,"insufficient seed purchase leaves assets unchanged")
+    data.garden.coins = price
+    check(data.buySeeds(crop) && data.garden.coins == 0 && data.garden.cropSeeds[crop.rawValue] == count + 1 && data.garden.water == water,"exact copper balance buys one seed")
+    check(!data.buySeeds(crop) && data.garden.coins == 0 && data.garden.cropSeeds[crop.rawValue] == count + 1,"empty balance cannot repeat seed purchase")
+    data.garden.coins = price
+    check(data.buySeeds(crop) && data.garden.coins == 0 && data.garden.cropSeeds[crop.rawValue] == count + 2,"each additional seed purchase adds one")
     data.garden.water = 1
-    check(data.exchangeSeed(crop) && data.garden.water == 0 && data.garden.cropSeeds[crop.rawValue] == count + 4,"one water buys one seed")
+    check(data.exchangeSeed(crop) && data.garden.water == 0 && data.garden.cropSeeds[crop.rawValue] == count + 3,"one water buys one seed")
     check(!data.exchangeSeed(crop),"zero water cannot buy seeds")
 }
 var recovery = AppData()
 recovery.garden.ingredients = [:]
 recovery.garden.cropSeeds = [:]
 recovery.garden.water = 0
-finish(&recovery,9 * 60)
-check(recovery.garden.coins == 18 && recovery.buySeeds(.carrot),"zero assets can recover by focus")
+finish(&recovery,3 * 60)
+check(recovery.garden.coins == 6 && recovery.buySeeds(.carrot) && recovery.garden.coins == 0 && recovery.garden.cropSeeds["胡萝卜"] == 1,"zero assets can recover by focus")
 
 let fried = Dish.allCases.first { $0.id == "蛋炒饭" }!
 var shop = AppData()

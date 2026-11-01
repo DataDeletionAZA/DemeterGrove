@@ -374,7 +374,7 @@ struct AppData: Codable {
         let price = EconomyBalance.seedPacketPrice(crop)
         guard crop != .starlightCarrot, garden.coins >= price else { return false }
         garden.coins -= price
-        garden.cropSeeds[crop.rawValue,default:0] += 3
+        garden.cropSeeds[crop.rawValue,default:0] += 1
         return true
     }
 

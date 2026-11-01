@@ -37,7 +37,7 @@ for seconds in [100.0, 200.0] {
 assert(data.totalFocus == 900 && data.garden.water == 6)
 assert(data.collectSale() && data.garden.coins == 53)
 assert(!data.collectSale())
-assert(data.buySeeds() && data.garden.coins == 35)
+assert(data.buySeeds() && data.garden.coins == 47)
 var emptyGarden = AppData()
 emptyGarden.garden.seeds = 0
 emptyGarden.garden.coins = 0
@@ -57,7 +57,7 @@ defer { try? FileManager.default.removeItem(at: folder) }
 let file = folder.appendingPathComponent("save.json")
 try SaveFile.write(data, to: file)
 let restored = try SaveFile.read(file)
-assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 35)
+assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 47)
 var invalid = data
 invalid.sessions.append(invalid.sessions[0])
 do { _ = try invalid.validated(); fatalError("重复结算应被拒绝") } catch DataIssue.invalid { }
@@ -376,11 +376,11 @@ let emptyPlot = typed.garden.plots[0].id
 let waterAtPlant = typed.garden.water
 assert(!typed.plant(.carrot,in:emptyPlot) && typed.garden.water == waterAtPlant)
 assert(typed.plant(.lemon,in:emptyPlot) && typed.garden.cropSeeds["柠檬"] == 0 && typed.garden.cropSeeds["番茄"] == 2)
-typed.garden.coins = 36
-assert(typed.buySeeds(.pumpkin) && typed.garden.cropSeeds["南瓜"] == 3 && typed.garden.cropSeeds["番茄"] == 2 && typed.garden.coins == 0)
+typed.garden.coins = 12
+assert(typed.buySeeds(.pumpkin) && typed.garden.cropSeeds["南瓜"] == 1 && typed.garden.cropSeeds["番茄"] == 2 && typed.garden.coins == 0)
 let tomatoSeeds = typed.garden.cropSeeds["番茄"]
 typed.garden.seeds += 3
-assert(typed.garden.seeds == 8 && typed.garden.cropSeeds["番茄"]! >= tomatoSeeds!)
+assert(typed.garden.seeds == 6 && typed.garden.cropSeeds["番茄"]! >= tomatoSeeds!)
 var seedsJSON = try JSONSerialization.jsonObject(with:JSONEncoder().encode(typed)) as! [String:Any]
 var seedsGarden = seedsJSON["garden"] as! [String:Any]
 seedsGarden.removeValue(forKey:"cropSeeds");seedsGarden["seeds"] = 37;seedsJSON["garden"] = seedsGarden
