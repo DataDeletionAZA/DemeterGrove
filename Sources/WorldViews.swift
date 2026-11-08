@@ -256,7 +256,7 @@ struct MapPage: View {
                     ZStack {
                         RoomBackdrop(name:journey.scene).frame(width:w,height:h)
                         ObjectButton(label:actionLabel,action:act,caption:actionLabel) {GameSprite(sheet:"Equipment",index:journey.icon,size:w*0.13)}
-                            .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.48:0.64),y:h*(journey == .fishing ? 0.51:0.73))
+                            .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.465:0.64),y:h*(journey == .fishing ? 0.435:0.73))
                         if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"户外地图"){SceneNavigation.open("户外地图",store:store)}}
                         if trip != nil {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
                         if !unlocked {
