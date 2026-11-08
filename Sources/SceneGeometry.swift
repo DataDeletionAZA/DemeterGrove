@@ -41,19 +41,21 @@ enum SceneNavigation {
             return studyRoute == route ? "书房" : SceneNavigation.parent(of: route)
         }
     }
-    static let rooms=["书房","农场","厨房","商店","炼金室"]
-    static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue]
+    static let rooms=["书房","农场","牧场","厨房","商店","炼金室","酒馆","铸造"]
+    static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue,"矿洞"]
+    static func isWild(_ route:String)->Bool {wilds.contains(route) || ["钓鱼","探险","矿洞"].contains(route.components(separatedBy:"/")[0])}
+    static func isScene(_ route:String)->Bool {rooms.contains(route) || isWild(route) || ["首页","地图","户外地图","成长","衣柜"].contains(route)}
     static func canonical(_ route:String)->String {
         ["地图":"首页","小院":"首页","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务"][route] ?? route
     }
-    static func parent(of route:String)->String? {let route=canonical(route);return wilds.contains(route) ? "户外地图":route == "户外地图" ? "首页":nil}
+    static func parent(of route:String)->String? {let route=canonical(route);return isWild(route) ? "户外地图":route == "户外地图" ? "首页":nil}
     static func neighbors(of scene:String)->(String,String)? {
         let scene=canonical(scene)
         let group=rooms.contains(scene) ? rooms:wilds
         guard let index=group.firstIndex(of:scene) else{return nil}
         return (group[(index+group.count-1)%group.count],group[(index+1)%group.count])
     }
-    static func title(_ route:String)->String {canonical(route) == "首页" ? "小院":canonical(route)}
+    static func title(_ route:String)->String {let route=canonical(route);return route == "首页" ? "小院":route.components(separatedBy:"/")[0]}
 }
 
 struct ShopCustomerPose {

@@ -6,7 +6,7 @@ enum InventoryCategory:String,CaseIterable,Identifiable {
 }
 
 struct InventoryEntry:Identifiable,Equatable {
-    enum Artwork:Equatable {case ingredient(String),dish(Int),seed(Crop),material,item,clothing(String?)}
+    enum Artwork:Equatable {case ingredient(String),dish(Int),seed(Crop),material,item,clothing(String?),nature(String)}
     var id:String
     var name:String
     var category:InventoryCategory
@@ -37,7 +37,22 @@ extension AppData {
             let count=garden.economy.finds[name,default:0]
             guard count>0,Ingredient(rawValue:name) == nil else{return nil}
             let potion=Potion.all.first{$0.id == name}
-            return InventoryEntry(id:"find:"+name,name:potion?.name ?? name,category:potion == nil ? .material:.item,count:count,artwork:potion == nil ? .material:.item)
+            let natural=NatureItemInfo.find(name)
+            return InventoryEntry(id:"find:"+name,name:potion?.name ?? natural?.name ?? name,category:potion == nil ? .material:.item,count:count,artwork:natural.map{.nature($0.spriteKey)} ?? (potion == nil ? .material:.item))
+        }
+        for (prefix,items) in [("fishing",garden.economy.fishing?.inventory ?? [:]),("forage",garden.economy.expedition?.inventory ?? [:]),("mining",garden.economy.mining?.inventory ?? [:])] {
+            result += items.keys.sorted().compactMap {id in
+                guard let item=NatureItemInfo.find(id),items[id,default:0]>0 else{return nil}
+                return InventoryEntry(id:prefix+":"+id,name:item.name,category:.material,count:items[id,default:0],artwork:.nature(item.spriteKey))
+            }
+        }
+        result += NatureCatalog.baits.compactMap {bait in
+            let count=garden.economy.fishing?.baitStock[bait.id,default:0] ?? 0
+            return count>0 ? InventoryEntry(id:"bait:"+bait.id,name:bait.name,category:.item,count:count,artwork:.nature(bait.spriteKey)):nil
+        }
+        result += CraftedGear.all.compactMap {gear in
+            let count=garden.economy.expedition?.gear[gear.id,default:0] ?? 0
+            return count>0 ? InventoryEntry(id:"gear:"+gear.id,name:gear.name,category:.item,count:count,artwork:.nature(gear.spriteKey)):nil
         }
         result += Cosmetic.all.filter{garden.economy.owned.contains($0.id)}.map {item in
             InventoryEntry(id:"clothing:"+item.id,name:item.name,category:.clothing,count:1,artwork:.clothing(item.asset))

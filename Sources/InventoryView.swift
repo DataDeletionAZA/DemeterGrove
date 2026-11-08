@@ -46,6 +46,7 @@ struct InventoryView:View {
     }
     @ViewBuilder private func artwork(_ entry:InventoryEntry)->some View {
         switch entry.artwork {
+        case .nature(let key):GameNatureSprite(key:key,size:48)
         case .ingredient(let name):IngredientArt(name:name,size:48)
         case .dish(let index):GameSprite(sheet:"Foods",index:index,size:48)
         case .seed(let crop):PlantArt(crop:crop,stage:0,size:48)

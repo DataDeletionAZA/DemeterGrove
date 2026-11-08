@@ -84,3 +84,13 @@ assert(!garden.plant(.carrot,in:emptyPlot) && garden.garden.cropSeeds == planted
 garden.garden.water=0
 assert(!garden.plant(.wheat,in:garden.garden.plots[1].id) && garden.garden.cropSeeds == plantedSeeds)
 print("PASS: kitchen portions, stock limits, intent/method rules, processing outputs, old dishes, falling motion, and atomic planting")
+
+for name in ["鸭蛋","羊奶","欧洲越橘","覆盆子","榛子","犬蔷薇果","云莓","红果越橘","椰子","香荚兰果荚"] {
+    assert(Ingredient(rawValue:name) != nil)
+}
+assert(CookingIntent.drink.methods(ingredients:["羊奶":1,"覆盆子":1]).contains(.mix))
+assert(CookingIntent.dessert.methods(ingredients:["羊奶":1,"鸭蛋":1]).contains(.steam))
+assert(!CookingIntent.dessert.methods(ingredients:["鸭蛋":1]).contains(.mix))
+assert(!CookingIntent.dish.methods(ingredients:["鱼肉":1]).contains(.mix))
+for food in NatureCatalog.forage where food.isCookable {assert(food.ingredient.flatMap(Ingredient.init(rawValue:)) != nil)}
+print("PASS: ranch dairy and gathered fruit cooking methods, raw egg/fish restrictions")

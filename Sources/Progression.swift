@@ -157,6 +157,11 @@ struct Economy: Codable {
     var journeys: [Journey]? = nil
     var finds: [String:Int] = [:]
     var expeditions = 0
+    var autoShop: AutoShopState? = nil
+    var ranch: RanchState? = nil
+    var fishing: FishingState? = nil
+    var expedition: ExpeditionState? = nil
+    var mining: MiningState? = nil
     var activeJourneys: [Journey] {
         get { journeys ?? journey.map { [$0] } ?? [] }
         set { journeys = newValue; journey = nil }
@@ -230,8 +235,7 @@ extension AppData {
         guard levelProgress.level>=kind.level,garden.economy.trip(kind) == nil else{return false}
         let duration:Double
         if kind == .potions {
-            guard let potion=Potion.all.first(where:{$0.id == recipe}),garden.ingredients[potion.ingredient,default:0]>0,garden.economy.finds[potion.material,default:0]>0 else{return false}
-            garden.ingredients[potion.ingredient,default:0]-=1;garden.economy.finds[potion.material,default:0]-=1
+            guard let potion=Potion.all.first(where:{$0.id == recipe}),consumePotionMaterials(potion) else{return false}
             duration=900
         } else { duration=kind == .fishing ? Double(900-garden.rank(.rod)*120) : 1200 }
         garden.economy.activeJourneys.append(Journey(kind:kind,startedAt:gameFocus(at:date),duration:duration,recipe:kind == .potions ? recipe : nil))
@@ -250,6 +254,7 @@ extension AppData {
     }
     func findPrice(_ item:String) -> Int {
         if let potion=Potion.all.first(where:{$0.id == item}) {return potion.price}
+        if let natural=NatureItemInfo.find(item) {return natural.price}
         return ["银鳞鱼":12,"月光鱼":20,"金纹鱼":30,"月光草":15,"琥珀石":25,"星砂":35][item] ?? 0
     }
     mutating func sellFind(_ item:String) -> Bool {

@@ -32,6 +32,7 @@ struct GameRoomView: View {
     @State private var resultStock=0
     @State private var customerArrivedAt=Date()
     @State private var shopChoice: String?
+    @State private var shopLedger = false
     @State private var inventory = false
     private var recipe: Dish? {
         if var saved = loadedDish, saved.ingredients == additions, saved.method == method, saved.category == category {
@@ -59,7 +60,7 @@ struct GameRoomView: View {
             let mature=store.data.garden.plots.filter{$0.crop != nil && $0.progress(store.gameFocus)>=1}.count
             return "空地 \(empty) · 已成熟 \(mature)"
         case "厨房":return cooking ? "正在料理…" : additions.isEmpty ? "料理台还没有食材" : "已放入 \(selection.portions.count)/6 份食材"
-        default:return "在售 \(store.data.garden.orders.count) · 待收款 \(store.data.garden.orders.filter{$0.ready(store.gameFocus)}.count)"
+        default:return "在售 \(store.data.garden.orders.count) · 待收款 \(Money.text(store.data.garden.autoShopState.receivables))"
         }
     }
     var body: some View {
@@ -352,11 +353,10 @@ struct GameRoomView: View {
         DisplayGlass()
         if let customer,!customer.behindCounter {customerSprite(customer,w:w,h:h)}
         if let listedAt {SceneParticles(burst:listedAt).frame(width:w*0.3,height:h*0.25).position(x:w*0.3,y:h*0.50)}
-        let ready=orders.filter{$0.ready(store.gameFocus)}
-        if !ready.isEmpty {
-            let amount=ready.reduce(0){$0+$1.price}
+        let amount=store.data.garden.autoShopState.receivables
+        if amount > 0 {
             ObjectButton(label:"收取 \(Money.text(amount))",action:{
-                collect(ready)
+                collectShop()
             }) {GameSprite(index:10,size:w*0.09)}.position(x:w*0.68,y:h*0.50)
         }
         if let soldAt {SceneParticles(burst:soldAt).frame(width:w*0.25,height:h*0.35).position(x:w*0.68,y:h*0.50)}
@@ -369,43 +369,43 @@ struct GameRoomView: View {
     }
     private func stockChoice() {
         guard let dish=choice else{hint=availableDishes.isEmpty ? "料理柜里还没有成品，先去厨房制作。":"请先从料理柜选择一份料理。";return}
-        let previous=store.data
-        guard store.data.stock(dish,at:store.now) else{hint="陈列位已满，先收款或下架在售料理。";return}
-        guard store.save() else{store.data=previous;return}
+        guard store.commitGameChange({$0.stock(dish,at:store.now)}) else{return}
         listedAt=Date();soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。"
     }
-    private func collect(_ orders:[ShopOrder]) {
-        let previous=store.data
+    private func collectShop() {
         var amount=0
-        for order in orders where store.data.collectSale(order.id,at:store.now) {amount+=order.price}
-        guard amount>0 else{return}
-        guard store.save() else{store.data=previous;return}
+        guard store.commitGameChange({amount=$0.collectShopProceeds(at:store.now);return amount>0}) else{return}
         soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
     }
     private func unstock(_ order:ShopOrder) {
-        let previous=store.data
-        guard store.data.unstock(order.id,at:store.now) else{hint="这份料理已成交，请先收款。";return}
-        guard store.save() else{store.data=previous;return}
-        hint="";store.message="\(order.dish.name)已放回料理柜。"
+        let selected=store.data.garden.autoShopState.dishIDs.contains(order.dish.id)
+        guard store.commitGameChange({$0.stopRestockingAndUnstock(order.id,at:store.now)}) else{return}
+        hint="";store.message="\(order.dish.name)已放回料理柜。" + (selected ? "该料理已停止自动补货。":"")
     }
     private var emptySlots:Int {max(0,store.data.garden.capacity-store.data.garden.orders.count)}
     private var stockableCount:Int {min(emptySlots,availableDishes.reduce(0){$0+store.data.garden.dishes[$1.id,default:0]})}
     private func stockAvailable() {
-        let previous=store.data
-        let previousCount=previous.garden.dishes.values.reduce(0,+)
         var count=0
-        for dish in availableDishes {
-            while store.data.garden.orders.count<store.data.garden.capacity && store.data.stock(dish,at:store.now) {count+=1}
-        }
-        guard count>0 else{return}
-        assert(previousCount == store.data.garden.dishes.values.reduce(0,+)+count)
-        assert(store.data.garden.orders.count == previous.garden.orders.count+count)
-        guard store.save() else {store.data=previous;return}
+        guard store.commitGameChange({count=$0.stockAllAvailable(at:store.now);return count>0}) else{return}
         listedAt=Date();soldAt=nil;hint="";store.message="已上架 \(count) 份料理，剩余 \(emptySlots) 个空位。"
     }
+    private func toggleRestock(_ dish:Dish) {
+        guard store.commitGameChange({$0.toggleAutoShopDish(dish.id,at:store.now)}) else{return}
+        hint=""
+    }
+    private var restockDishes:[Dish] {
+        let selected=store.data.garden.autoShopState.dishIDs
+        return selected.compactMap {id in store.data.garden.menu.first{$0.id == id}}
+            + availableDishes.filter{!selected.contains($0.id)}
+    }
     private var stockTray:some View {
-        VStack(alignment:.leading,spacing:8) {
-            Text("料理柜").font(.headline).foregroundStyle(Palette.goldLight)
+        let state=store.data.garden.autoShopState
+        return VStack(alignment:.leading,spacing:8) {
+            HStack {
+                Text("料理柜").font(.headline).foregroundStyle(Palette.goldLight)
+                Spacer(minLength:0)
+                Text("空位 \(emptySlots)").font(.system(size:10)).foregroundStyle(Palette.muted)
+            }
             Text(choice.map{"已选："+$0.name} ?? "选择一份料理").font(.system(size:11)).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
             HStack(spacing:6) {
                 Button(action:stockChoice) { Text(choice == nil ? "上架":"上架 ×1份").lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity) }
@@ -413,34 +413,68 @@ struct GameRoomView: View {
                 Button(action:stockAvailable) { Text("一键上架").lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity) }
                     .disabled(stockableCount == 0).accessibilityLabel("一键上架")
             }
-            Text("空位 \(emptySlots) · 可上架 \(stockableCount) 份").font(.system(size:10)).foregroundStyle(Palette.muted)
+            VStack(alignment:.leading,spacing:6) {
+                VStack(alignment:.leading,spacing:2) {
+                    Text("待收款 · \(state.soldCount) 份").font(.system(size:10)).foregroundStyle(Palette.muted)
+                    Text(Money.text(state.receivables)).font(.system(size:11)).monospacedDigit().foregroundStyle(Palette.goldLight).lineLimit(2).minimumScaleFactor(0.85)
+                }
+                HStack(spacing:5) {
+                    Button("明细"){shopLedger.toggle()}.lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity).accessibilityLabel("查看售出料理明细")
+                    Button("收款",action:collectShop).lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity)
+                        .disabled(state.receivables == 0).accessibilityLabel("全部收款")
+                }
+            }.padding(7).magicSurface(Palette.card)
             GeometryReader {geo in
                 PixelScrollView {
+                    if shopLedger {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("售出明细").font(.system(size:12)).foregroundStyle(Palette.goldLight)
+                            if state.receipts.isEmpty {Text("收款后会开始记下一笔账。").font(.system(size:10)).foregroundStyle(Palette.muted)}
+                            ForEach(state.receipts) {receipt in
+                                HStack(spacing:6) {
+                                    GameSprite(sheet:"Foods",index:receipt.sprite,size:26)
+                                    VStack(alignment:.leading,spacing:2) {
+                                        Text("\(receipt.name) ×\(receipt.count)").font(.system(size:10)).fixedSize(horizontal:false,vertical:true)
+                                        Text(Money.text(receipt.amount)).font(.system(size:10)).foregroundStyle(Palette.goldLight)
+                                    }
+                                }
+                            }
+                        }.frame(maxWidth:.infinity,alignment:.leading).padding(7).magicSurface(Palette.card).padding(.bottom,7)
+                    }
+                    VStack(alignment:.leading,spacing:6) {
+                        Toggle("自动补货",isOn:Binding(get:{store.data.garden.autoShopState.enabled},set:{enabled in
+                            if store.commitGameChange({$0.setAutoShop(enabled:enabled,at:store.now)}) {hint=""}
+                        })).font(.system(size:12)).toggleStyle(PixelToggleStyle())
+                    }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,7)
                     let columns=Array(repeating:GridItem(.flexible(minimum:0,maximum:150)),count:SceneSizing.stockColumns(width:max(1,geo.size.width-16)))
                     LazyVGrid(columns:columns,alignment:.leading,spacing:8) {
-                        ForEach(availableDishes) {dish in
-                            Button{shopChoice = shopChoice == dish.id ? nil:dish.id;hint=""} label:{
-                                VStack(spacing:5) {
-                                    GameSprite(sheet:"Foods",index:dish.sprite,size:42)
-                                    Text(dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
-                                    Text("×\(store.data.garden.dishes[dish.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
-                                }.frame(maxWidth:.infinity).padding(6).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
-                                    .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
-                            }.buttonStyle(.plain).accessibilityLabel("选择上架：\(dish.name)").accessibilityAddTraits(choice?.id == dish.id ? [.isSelected]:[])
+                        ForEach(restockDishes) {dish in
+                            VStack(spacing:5) {
+                                Button{shopChoice = shopChoice == dish.id ? nil:dish.id;hint=""} label:{
+                                    VStack(spacing:5) {
+                                        GameSprite(sheet:"Foods",index:dish.sprite,size:42)
+                                        Text(dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
+                                        Text("×\(store.data.garden.dishes[dish.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
+                                    }.frame(maxWidth:.infinity)
+                                }.buttonStyle(.plain).disabled(store.data.garden.dishes[dish.id,default:0] == 0)
+                                    .accessibilityLabel("选择上架：\(dish.name)").accessibilityAddTraits(choice?.id == dish.id ? [.isSelected]:[])
+                                Button{toggleRestock(dish)} label:{
+                                    Text(state.dishIDs.firstIndex(of:dish.id).map{"补货第 \($0+1) 位 · 移除"} ?? "加入补货")
+                                        .font(.system(size:10)).lineLimit(2).minimumScaleFactor(0.85).frame(maxWidth:.infinity)
+                                }.accessibilityLabel(state.dishIDs.contains(dish.id) ? "停止自动补货：\(dish.name)":"加入自动补货：\(dish.name)")
+                            }.frame(maxWidth:.infinity).padding(6).magicSurface(choice?.id == dish.id ? Palette.card:Palette.paper)
+                                .overlay(PixelFrame().stroke(choice?.id == dish.id ? Palette.gold:Palette.line,lineWidth:1))
                         }
                     }
-                    if availableDishes.isEmpty {Text("还没有可上架的成品").font(.caption).foregroundStyle(Palette.muted)}
+                    if restockDishes.isEmpty {Text("还没有可上架的成品").font(.caption).foregroundStyle(Palette.muted)}
                     if !store.data.garden.orders.isEmpty {Text("柜台").font(.caption).foregroundStyle(Palette.goldLight).frame(maxWidth:.infinity,alignment:.leading).padding(.top,10)}
                     LazyVGrid(columns:columns,alignment:.leading,spacing:8) {
                         ForEach(store.data.garden.orders,id:\.id) {order in
                             VStack(spacing:5) {
                                 GameSprite(sheet:"Foods",index:order.dish.sprite,size:42)
                                 Text(order.dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
-                                Text(order.ready(store.gameFocus) ? "已售出":"在售").font(.caption).foregroundStyle(Palette.goldLight)
-                                if order.ready(store.gameFocus) {
-                                    Text(Money.text(order.price)).font(.system(size:11)).monospacedDigit().foregroundStyle(Palette.goldLight)
-                                    Button("收款"){collect([order])}.accessibilityLabel("收取\(order.dish.name)货款")
-                                } else {Button("下架"){unstock(order)}.accessibilityLabel("下架\(order.dish.name)")}
+                                Text("在售 · \(Money.text(order.price))").font(.system(size:10)).foregroundStyle(Palette.goldLight)
+                                Button("下架"){unstock(order)}.accessibilityLabel("下架\(order.dish.name)并停止该料理自动补货")
                             }.frame(maxWidth:.infinity).padding(6).magicSurface(Palette.card)
                         }
                     }

@@ -59,8 +59,8 @@ struct PotionScene:View {
             PixelScrollView {
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:64))],spacing:9) {
                     if materials {
-                        ForEach(store.data.garden.economy.finds.keys.filter{store.data.garden.economy.finds[$0,default:0]>0 && !Potion.all.map(\.id).contains($0)}.sorted(),id:\.self) {name in
-                            materialButton(name,kind:.material,available:store.data.garden.economy.finds[name,default:0])
+                        ForEach(store.data.potionMaterialNames,id:\.self) {name in
+                            materialButton(name,kind:.material,available:store.data.potionMaterialCount(name))
                         }
                     } else {
                         ForEach(Ingredient.allCases.filter{store.data.ingredientCount($0)>0}) {ingredient in
@@ -86,11 +86,9 @@ struct PotionScene:View {
     }
     private func openPot() {
         if ready {
-            var next=store.data
-            if let result=next.collectJourney(.potions,at:store.now){
-                guard store.commitGameChange({$0=next;return true}) else {return}
-                store.message=result;hint="";store.triggerPetDialogue(.craft)
-            }
+            var result:String?
+            guard store.commitGameChange({result=$0.collectJourney(.potions,at:store.now);return result != nil}) else {return}
+            store.message=result ?? "";hint="";store.triggerPetDialogue(.craft)
         } else {recipes=true}
     }
     private var recipeWindow:some View {
@@ -127,9 +125,7 @@ struct PotionScene:View {
     }
     private func brew(_ potion:Potion) {
         guard selection.matches(potion) else{return}
-        var next=store.data
-        guard next.embark(.potions,recipe:potion.id,at:store.now) else{hint="材料不足。";recipes=false;return}
-        guard store.commitGameChange({$0=next;return true}) else{return}
+        guard store.commitGameChange({$0.embark(.potions,recipe:potion.id,at:store.now)}) else{return}
         selection.clear();recipes=false;hint="";store.message="\(potion.name)开始熬制。"
     }
 }
@@ -140,6 +136,7 @@ private struct PotionMaterialArt:View {
     var size:CGFloat
     var body:some View {
         if kind == .ingredient {IngredientArt(name:name,size:size)}
+        else if let item=NatureCatalog.forage.first(where:{$0.name == name || $0.id == name}) {GameNatureSprite(key:item.spriteKey,size:size)}
         else {GameSprite(sheet:"Equipment",index:name.contains("鱼") ? 8:10,size:size)}
     }
 }

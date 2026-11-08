@@ -65,33 +65,34 @@ enum CookingIntent: String, CaseIterable, Identifiable {
         guard !ingredients.isEmpty, ingredients.values.allSatisfy({ (1...6).contains($0) }), ingredients.values.reduce(0,+) <= 6,
               ingredients.keys.allSatisfy({ Ingredient(rawValue:$0) != nil }) else { return [] }
         let names = Set(ingredients.keys)
+        let berries: Set<String> = ["欧洲越橘","覆盆子","犬蔷薇果","云莓","红果越橘"]
         switch self {
         case .process:
             return CookingMethod.allCases.filter { method in
                 Dish.allCases.contains { $0.outputIngredient != nil && $0.ingredients == ingredients && $0.method == method }
             }
         case .drink:
-            let allowed: Set<String> = ["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","蜂蜜","砂糖","可可","咖啡豆","草莓"]
-            guard names.isSubset(of: allowed), !names.isDisjoint(with: ["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","可可","咖啡豆","草莓"]) else { return [] }
+            let allowed: Set<String> = Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","蜂蜜","砂糖","可可","咖啡豆","草莓","羊奶","椰子","香荚兰果荚"]).union(berries)
+            guard names.isSubset(of: allowed), !names.isDisjoint(with: Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","可可","咖啡豆","草莓","羊奶","椰子"]).union(berries)) else { return [] }
             var result: [CookingMethod] = [.brew,.boil]
             if names.isDisjoint(with:["茶叶","焙炒茶叶","咖啡豆"]) { result.append(.mix) }
             return result
         case .dessert:
-            let allowed: Set<String> = ["小麦","牛奶","鸡蛋","蜂蜜","砂糖","可可","草莓","南瓜","胡萝卜","玉米","柠檬","薄荷","蛋糕胚","面包"]
-            guard names.isSubset(of: allowed), !names.isDisjoint(with:["小麦","牛奶","鸡蛋","草莓","南瓜","蛋糕胚","面包"]) else { return [] }
+            let allowed: Set<String> = Set(["小麦","牛奶","鸡蛋","蜂蜜","砂糖","可可","草莓","南瓜","胡萝卜","玉米","柠檬","薄荷","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子","香荚兰果荚"]).union(berries)
+            guard names.isSubset(of: allowed), !names.isDisjoint(with:Set(["小麦","牛奶","鸡蛋","草莓","南瓜","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子"]).union(berries)) else { return [] }
             var result: [CookingMethod] = [.bake]
-            if names.contains("牛奶") && names.contains("鸡蛋") { result += [.boil,.steam] }
-            if names.isDisjoint(with:["小麦","鸡蛋","南瓜"]) { result.append(.mix) }
+            if !names.isDisjoint(with:["牛奶","羊奶"]) && !names.isDisjoint(with:["鸡蛋","鸭蛋"]) { result += [.boil,.steam] }
+            if names.isDisjoint(with:["小麦","鸡蛋","鸭蛋","南瓜"]) { result.append(.mix) }
             return result
         case .dish:
             guard names.isDisjoint(with:["茶叶","焙炒茶叶","咖啡豆","可可"]),
                   names.contains(where: { name in
                       guard let item = Ingredient(rawValue:name) else { return false }
-                      return item.category == .fish || item.category == .grain || item == .egg ||
-                          (item.category == .farm && ![Ingredient.strawberry,.mint,.lemon].contains(item))
+                      return item.category == .fish || item.category == .grain || [Ingredient.egg,.duckEgg].contains(item) ||
+                          (item.category == .farm && ![Ingredient.strawberry,.mint,.lemon,.bilberry,.raspberry,.rosehip,.cloudberry,.lingonberry].contains(item))
                   }) else { return [] }
             var result: [CookingMethod] = [.boil,.fry,.steam,.bake]
-            if names.isDisjoint(with:["鸡蛋","小麦","大米","土豆","南瓜","银鳞鱼","月光鱼","金纹鱼"]) { result.append(.mix) }
+            if names.isDisjoint(with:["鸡蛋","鸭蛋","小麦","大米","土豆","南瓜","银鳞鱼","月光鱼","金纹鱼","鱼肉"]) { result.append(.mix) }
             return result
         }
     }
@@ -127,14 +128,15 @@ enum CookingIntent: String, CaseIterable, Identifiable {
 }
 
 enum Ingredient: String, Codable, CaseIterable, Identifiable {
-    case roastedTea = "焙炒茶叶", carrot = "胡萝卜", wheat = "小麦", tomato = "番茄", potato = "土豆", cucumber = "黄瓜", cabbage = "卷心菜", mushroom = "蘑菇", corn = "玉米", pumpkin = "南瓜", strawberry = "草莓", mint = "薄荷", lemon = "柠檬", rice = "大米", egg = "鸡蛋", milk = "牛奶", honey = "蜂蜜", tea = "茶叶", sugar = "砂糖", cocoa = "可可", coffee = "咖啡豆", cookedRice = "米饭", noodles = "面条", cakeBase = "蛋糕胚", bread = "面包", silverFish = "银鳞鱼", moonFish = "月光鱼", goldFish = "金纹鱼"
+    case roastedTea = "焙炒茶叶", carrot = "胡萝卜", wheat = "小麦", tomato = "番茄", potato = "土豆", cucumber = "黄瓜", cabbage = "卷心菜", mushroom = "蘑菇", corn = "玉米", pumpkin = "南瓜", strawberry = "草莓", mint = "薄荷", lemon = "柠檬", rice = "大米", egg = "鸡蛋", milk = "牛奶", honey = "蜂蜜", tea = "茶叶", sugar = "砂糖", cocoa = "可可", coffee = "咖啡豆", cookedRice = "米饭", noodles = "面条", cakeBase = "蛋糕胚", bread = "面包", silverFish = "银鳞鱼", moonFish = "月光鱼", goldFish = "金纹鱼", fishFillet = "鱼肉", duckEgg = "鸭蛋", goatMilk = "羊奶", bilberry = "欧洲越橘", raspberry = "覆盆子", hazelnut = "榛子", rosehip = "犬蔷薇果", cloudberry = "云莓", lingonberry = "红果越橘", vanilla = "香荚兰果荚", coconut = "椰子"
     var id: String { rawValue }
     var category:IngredientCategory {
         if self == .wheat {return .grain}
         if Crop(rawValue:rawValue) != nil { return .farm }
         switch self {
-        case .silverFish,.moonFish,.goldFish:return .fish
-        case .egg,.milk:return .dairy
+        case .silverFish,.moonFish,.goldFish,.fishFillet:return .fish
+        case .egg,.milk,.duckEgg,.goatMilk:return .dairy
+        case .bilberry,.raspberry,.hazelnut,.rosehip,.cloudberry,.lingonberry,.coconut:return .farm
         case .rice,.cookedRice,.noodles,.cakeBase,.bread:return .grain
         default:return .seasoning
         }
@@ -147,6 +149,9 @@ enum Ingredient: String, Codable, CaseIterable, Identifiable {
         case .mushroom,.lemon:return 10
         case .pumpkin,.strawberry,.milk,.roastedTea:return 12
         case .honey,.cocoa,.coffee:return 14
+        case .fishFillet,.goatMilk,.duckEgg:return 12
+        case .bilberry,.raspberry,.hazelnut,.rosehip,.cloudberry,.lingonberry,.coconut:return 14
+        case .vanilla:return 18
         case .noodles,.silverFish:return 18
         case .bread:return 24
         case .moonFish:return 28

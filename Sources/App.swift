@@ -5,11 +5,11 @@ struct RootView: View {
     @ObservedObject var store: GardenStore
     @State private var sidebarShown = true
     private let pages = [("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
-                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
+                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "person.3"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
                          ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
     private var sidebarPage:String {
         let route=SceneNavigation.canonical(store.selectedPage)
-        return route == "首页" || route == "户外地图" || SceneNavigation.wilds.contains(route) ? "地图":route
+        return route == "首页" || route == "户外地图" || SceneNavigation.isWild(route) ? "地图":route
     }
     private var sceneMetadata:String {
         let route=SceneNavigation.canonical(store.selectedPage)
@@ -93,11 +93,18 @@ struct RootView: View {
                         case "成长": GrowthPage(store: store)
                         case "地图":HomeScene(store:store)
                         case "户外地图":WorldMapScene(store:store)
-                        case "湖畔钓鱼":MapPage(store:store,journey:.fishing)
-                        case "林间冒险": MapPage(store: store, journey: .adventure)
+                        case "湖畔钓鱼", "钓鱼": FishingScene(store:store)
+                        case "林间冒险", "探险": ExpeditionScene(store:store)
                         case "炼金室", "熬制魔药": MapPage(store: store, journey: .potions)
                         case "菜单":PetMenu(store:store)
-                        case "衣柜": WardrobePage(store: store)
+                        case "牧场": RanchScene(store:store)
+                    case "酒馆": TavernScene(store:store)
+                    case "铸造": ForgeScene(store:store)
+                    case "矿洞": MiningScene(store:store)
+                    case let route where route.hasPrefix("钓鱼/"): FishingScene(store:store,initialLocation:String(route.dropFirst(3)))
+                    case let route where route.hasPrefix("探险/"): ExpeditionScene(store:store,initialLocation:String(route.dropFirst(3)))
+                    case let route where route.hasPrefix("矿洞/"): MiningScene(store:store,initialArea:String(route.dropFirst(3)))
+                    case "衣柜": WardrobePage(store: store)
                         case "统计": StatsPage(store: store)
                         default: SettingsPage(store: store)
                         }

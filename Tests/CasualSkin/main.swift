@@ -147,7 +147,9 @@ enum CasualSkinChecks {
         fixture.garden.economy.owned = ["sweater", "trousers", "coat", "grayScarf", "blackShoes", "focusSuit"]
         fixture.garden.economy.equipped = ["top": "sweater", "bottom": "trousers", "outer": "coat", "neck": "grayScarf", "shoes": "blackShoes", "focusOutfit": "focusSuit"]
         fixture.garden.economy.adjustments = ["grayScarf": WearAdjustment(x: 7, y: -4, scale: 110)]
-        let originalGarden = try gardenFingerprint(fixture.garden)
+        var expectedGarden = fixture.garden
+        expectedGarden.economy.autoShop = AutoShopState(lastAdvancedFocus: 0)
+        let originalGarden = try gardenFingerprint(expectedGarden)
         var legacy = try JSONSerialization.jsonObject(with: encoded(fixture)) as! [String: Any]
         var preferences = legacy["preferences"] as! [String: Any]
         preferences.removeValue(forKey: "petSkin"); legacy["preferences"] = preferences

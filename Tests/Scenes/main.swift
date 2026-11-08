@@ -16,10 +16,10 @@ for viewportWidth:CGFloat in [240,380,800,1500,2600] {
     }
 }
 assert(SceneSizing.sidebar(width:1500)>SceneSizing.sidebar(width:500))
-assert(SceneNavigation.rooms == ["书房","农场","厨房","商店","炼金室"])
+assert(SceneNavigation.rooms == ["书房","农场","牧场","厨房","商店","炼金室","酒馆","铸造"])
 assert(SceneNavigation.neighbors(of:"首页") == nil)
 assert(SceneNavigation.neighbors(of:"其他") == nil)
-assert(SceneNavigation.neighbors(of:"书房")!.0 == "炼金室")
+assert(SceneNavigation.neighbors(of:"书房")!.0 == "铸造")
 assert(SceneNavigation.neighbors(of:"商店")!.1 == "炼金室")
 for group in [SceneNavigation.rooms,SceneNavigation.wilds] {
     for scene in group {

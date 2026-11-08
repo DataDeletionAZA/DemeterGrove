@@ -23,6 +23,8 @@ struct GameReadyEvent {
     var kind: GameReminderKind
     var name: String
     var amount: Int = 0
+    var stored = false
+    var quantity = 0
 }
 
 struct GameReadyNotice: Equatable {
@@ -45,6 +47,15 @@ extension AppData {
             return GameReadyEvent(id: "journey/\(trip.kind.rawValue)/\(trip.startedAt)", kind: kind,
                                  name: trip.recipe.flatMap { id in Potion.all.first { $0.id == id }?.name } ?? trip.kind.rawValue)
         }
+        events += (garden.economy.fishing?.catches ?? []).suffix(32).filter{$0.focus <= focus}.map { item in
+            GameReadyEvent(id:"catch/\(item.id)",kind:.fishing,
+                           name:item.itemID.flatMap{NatureItemInfo.find($0)?.name} ?? "空钩",stored:true,quantity:item.itemID == nil ? 0:1)
+        }
+        events += (garden.economy.expedition?.history ?? []).suffix(32).filter(\.completed).map { trip in
+            GameReadyEvent(id:"expedition/\(trip.id)",kind:.adventure,
+                           name:(ExpeditionLocation.all.first{$0.id == trip.locationID}?.name ?? "远行")+"探险",
+                           stored:true,quantity:trip.rewards.values.reduce(0,+))
+        }
         return events
     }
 
@@ -62,7 +73,20 @@ extension AppData {
             switch kind {
             case .crops: text = "\(events.count) 块田地可收获：" + Set(events.map(\.name)).sorted().joined(separator: "、")
             case .sales: text = "\(events.count) 份料理已售出，共 " + Money.text(events.reduce(0) { $0 + $1.amount })
-            default: text = events.map(\.name).joined(separator: "、") + "已完成，可领取收获。"
+            default:
+                var parts:[String]=[]
+                let manual=events.filter{!$0.stored},stored=events.filter(\.stored)
+                if !manual.isEmpty {parts.append(manual.map(\.name).joined(separator:"、")+"已完成，可领取收获。")}
+                if !stored.isEmpty {
+                    let count=stored.reduce(0){$0+$1.quantity}
+                    if kind == .fishing {
+                        if count>0 {parts.append("钓鱼完成，\(count) 份收获已放入库存："+Set(stored.filter{$0.quantity>0}.map(\.name)).sorted().joined(separator:"、"))}
+                        else {parts.append("钓鱼完成，本次空钩。")}
+                    } else {
+                        parts.append(stored.map(\.name).joined(separator:"、")+"已完成，\(count) 份收获已放进行囊。")
+                    }
+                }
+                text=parts.joined(separator:"\n")
             }
             return GameReadyNotice(kind: kind, text: text)
         }

@@ -3,6 +3,7 @@ import SwiftUI
 struct WorldMapScene: View {
     @ObservedObject var store: GardenStore
     @State private var showingInventory=false
+    @State private var selectedPlace:String?
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
@@ -22,6 +23,20 @@ struct WorldMapScene: View {
                     ForEach(WorldMapPlace.all) {place in
                         mapMarker(place,size:size)
                     }
+                    if let place=WorldMapPlace.all.first(where:{$0.id == selectedPlace}) {
+                        let popupHeight=CGFloat(place.activities.count)*40+60
+                        let popupHalf=popupHeight/2
+                        VStack(spacing:5) {
+                            HStack {Text(place.name).font(.headline);Spacer();Button("关闭"){selectedPlace=nil}.font(.caption)}
+                            ForEach(place.activities,id:\.1) {activity in
+                                Button {selectedPlace=nil;SceneNavigation.open(activity.1,store:store)} label: {
+                                    Text(activity.0).lineLimit(1).frame(maxWidth:.infinity)
+                                }
+                            }
+                        }.environment(\.compactSceneControls,true).padding(10)
+                            .frame(width:min(180,size.width-24),height:popupHeight).magicSurface(Palette.paper,strong:true)
+                            .position(x:min(size.width-100,max(100,size.width*place.point.x)),y:min(size.height-popupHalf-6,max(popupHalf+6,size.height*place.point.y-popupHalf)))
+                    }
                 }.frame(width:size.width,height:size.height).clipped()
                     .clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
             }
@@ -30,7 +45,10 @@ struct WorldMapScene: View {
     private func mapMarker(_ place:WorldMapPlace,size:CGSize)->some View {
         let unlocked=place.canEnter(level:store.data.levelProgress.level)
         return Button {
-            if unlocked,let route=place.route {SceneNavigation.open(route,store:store)}
+            if unlocked,let route=place.route {
+                if place.activities.count>1 {selectedPlace=place.id}
+                else {selectedPlace=nil;SceneNavigation.open(route,store:store)}
+            }
         } label: {
             VStack(spacing:2) {
                 HStack(spacing:4) {

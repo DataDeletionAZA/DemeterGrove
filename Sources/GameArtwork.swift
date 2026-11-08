@@ -3,10 +3,12 @@ import AppKit
 
 enum GameImages {
     private static let aiServiceIcon: NSImage? = Bundle.main.url(forResource:"AIService",withExtension:"png",subdirectory:"Game").flatMap { NSImage(contentsOf:$0) }
-    static let backgrounds: [String:NSImage] = ["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment"].reduce(into: [:]) { result, name in
+    static let backgrounds: [String:NSImage] = ["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment", "Ranch", "Tavern", "Forge", "Mine", "River", "MountainLake", "Beach", "Tropical", "Sea", "Polar", "PolarCoast", "SeaWarm"].reduce(into: [:]) { result, name in
         if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Game"), let image = NSImage(contentsOf: url) { result[name] = image }
     }
     static func interfaceIcon(name:String)->NSImage? {
+        let natureIcons = ["牧场":"ranch_cow", "动物商店":"ranch_chicken", "酒馆":"companion_rowan", "酒馆与装备":"companion_rowan", "铸造":"gear_iron_staff", "矿洞":"tool_pickaxe", "鱼类图鉴":"fish_common_carp", "渔具店":"rod_ash"]
+        if let key=natureIcons[name] {return NatureImages.image(key)}
         if name == "AI 服务" || name == "ai" {return aiServiceIcon}
         let index:[String:Int] = ["成长":0,"sparkles":0,"growth":0,"炼金室":1,"熬制魔药":1,"flask":1,"alchemy":1,
             "衣柜":2,"tshirt":2,"地图":3,"户外地图":3,"map":3,"worldmap":3,
@@ -91,7 +93,7 @@ struct IngredientArt: View {
         case "面条":return ("Bases",1)
         case "面包":return ("Bases",2)
         case "蛋糕胚":return ("Bases",7)
-        case "银鳞鱼","月光鱼","金纹鱼":return ("Equipment",8)
+        case "银鳞鱼","月光鱼","金纹鱼","鱼肉":return ("Equipment",8)
         default:
             let names = ["土豆","黄瓜","卷心菜","蘑菇","玉米","南瓜","草莓","薄荷","柠檬","大米","鸡蛋","牛奶","蜂蜜","茶叶","砂糖","可可","咖啡豆"]
             return ("Ingredients", min(15, names.firstIndex(of: name) ?? 0))
@@ -99,6 +101,8 @@ struct IngredientArt: View {
     }
     var body: some View {
         if let crop = Crop(rawValue:name) { PlantArt(crop:crop,stage:4,size:size) }
+        else if let item=NatureCatalog.forage.first(where:{$0.ingredient == name && $0.name == name}) {GameNatureSprite(key:item.spriteKey,size:size)}
+        else if let item=NatureCatalog.ranchSpecies.first(where:{$0.ingredient == name && ["duck","goat"].contains($0.id)}) {GameNatureSprite(key:"product_"+item.id,size:size)}
         else { GameSprite(sheet: slot.0, index: slot.1, size: size) }
     }
 }

@@ -6,7 +6,7 @@ import UserNotifications
 let desktopTools: [(String, String)] = [
     ("任务", "checklist"), ("计时器", "timer"),
     ("日程", "calendar"), ("习惯", "checkmark.circle"), ("日记", "book.closed"),
-    ("书房", "book.closed"), ("农场", "carrot"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
+    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "person.3"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
     ("成长", "sparkles"), ("地图", "map"), ("衣柜", "tshirt")
 ]
 
@@ -300,7 +300,7 @@ final class PetController {
     private func showTool(_ name: String) {
         if name == "统计" {store.previewMotion(.review)}
         store.activeTool = name
-        let game = ["首页", "书房", "农场", "厨房", "商店", "成长", "地图", "户外地图", "湖畔钓鱼", "林间冒险", "炼金室", "衣柜"].contains(name)
+        let game = SceneNavigation.isScene(name)
         let wide = name == "任务" || game
         let preservedSize = toolPanel?.isVisible == true ? toolPanel?.frame.size:nil
         if toolPanel == nil {
@@ -590,9 +590,16 @@ struct ToolPanelView: View {
                     case "书房": StudyScene(store:store)
                     case "地图": HomeScene(store:store)
                     case "户外地图": WorldMapScene(store:store)
-                    case "湖畔钓鱼": MapPage(store:store,journey:.fishing)
-                    case "林间冒险": MapPage(store:store,journey:.adventure)
+                    case "湖畔钓鱼", "钓鱼": FishingScene(store:store)
+                    case "林间冒险", "探险": ExpeditionScene(store:store)
                     case "炼金室", "熬制魔药": MapPage(store:store,journey:.potions)
+                    case "牧场": RanchScene(store:store)
+                    case "酒馆": TavernScene(store:store)
+                    case "铸造": ForgeScene(store:store)
+                    case "矿洞": MiningScene(store:store)
+                    case let route where route.hasPrefix("钓鱼/"): FishingScene(store:store,initialLocation:String(route.dropFirst(3)))
+                    case let route where route.hasPrefix("探险/"): ExpeditionScene(store:store,initialLocation:String(route.dropFirst(3)))
+                    case let route where route.hasPrefix("矿洞/"): MiningScene(store:store,initialArea:String(route.dropFirst(3)))
                     case "衣柜": WardrobePage(store:store)
                     default: SettingsPage(store: store)
                     }
