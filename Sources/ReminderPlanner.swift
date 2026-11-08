@@ -1,5 +1,74 @@
 import Foundation
 
+enum GameReminderKind: String, Codable, CaseIterable, Identifiable {
+    case crops, sales, fishing, adventure, potions
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .crops: return "作物成熟"
+        case .sales: return "料理售出"
+        case .fishing: return "钓鱼完成"
+        case .adventure: return "探险完成"
+        case .potions: return "魔药完成"
+        }
+    }
+}
+
+struct GameReminderOptions: Codable, Equatable {
+    var enabled: Set<GameReminderKind> = []
+}
+
+struct GameReadyEvent {
+    var id: String
+    var kind: GameReminderKind
+    var name: String
+    var amount: Int = 0
+}
+
+struct GameReadyNotice: Equatable {
+    var kind: GameReminderKind
+    var text: String
+}
+
+extension AppData {
+    func gameReadyEvents(at date: Date) -> [GameReadyEvent] {
+        let focus = gameFocus(at: date)
+        var events = garden.plots.compactMap { plot -> GameReadyEvent? in
+            guard let crop = plot.crop, plot.progress(focus) >= 1 else { return nil }
+            return GameReadyEvent(id: "crop/\(plot.id)/\(plot.plantedAt)", kind: .crops, name: crop.rawValue)
+        }
+        events += garden.orders.filter { $0.ready(focus) }.map {
+            GameReadyEvent(id: "sale/\($0.id)", kind: .sales, name: $0.dish.name, amount: $0.price)
+        }
+        events += garden.economy.activeJourneys.filter { $0.progress(focus) >= 1 }.map { trip in
+            let kind: GameReminderKind = trip.kind == .fishing ? .fishing : trip.kind == .adventure ? .adventure : .potions
+            return GameReadyEvent(id: "journey/\(trip.kind.rawValue)/\(trip.startedAt)", kind: kind,
+                                 name: trip.recipe.flatMap { id in Potion.all.first { $0.id == id }?.name } ?? trip.kind.rawValue)
+        }
+        return events
+    }
+
+    mutating func takeGameNotices(at date: Date) -> [GameReadyNotice] {
+        guard let run = timer, run.kind != .rest, let options = run.gameReminders, !options.enabled.isEmpty else { return [] }
+        let ready = gameReadyEvents(at: date)
+        let seen = Set(run.notifiedGameEvents ?? [])
+        let fresh = ready.filter { options.enabled.contains($0.kind) && !seen.contains($0.id) }
+        guard !fresh.isEmpty else { return [] }
+        timer?.notifiedGameEvents = Array(seen.intersection(ready.map(\.id)).union(fresh.map(\.id))).sorted()
+        return GameReminderKind.allCases.compactMap { kind in
+            let events = fresh.filter { $0.kind == kind }
+            guard !events.isEmpty else { return nil }
+            let text: String
+            switch kind {
+            case .crops: text = "\(events.count) 块田地可收获：" + Set(events.map(\.name)).sorted().joined(separator: "、")
+            case .sales: text = "\(events.count) 份料理已售出，共 " + Money.text(events.reduce(0) { $0 + $1.amount })
+            default: text = events.map(\.name).joined(separator: "、") + "已完成，可领取收获。"
+            }
+            return GameReadyNotice(kind: kind, text: text)
+        }
+    }
+}
+
 struct ReminderPhrase: Codable, Equatable, Identifiable {
     var id = UUID()
     var text: String

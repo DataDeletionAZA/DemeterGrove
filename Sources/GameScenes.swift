@@ -54,12 +54,12 @@ struct GameRoomView: View {
         if !hint.isEmpty {return hint}
         switch room {
         case "农场":
-            if let selectedSeed { return "已选\(selectedSeed.rawValue)种子 · 点击亮起的空地播种" }
+            if let selectedSeed { return "已选\(selectedSeed.rawValue)种子 · 剩余 \(store.data.garden.cropSeeds[selectedSeed.rawValue,default:0]) 袋" }
             let empty=store.data.garden.plots.filter{$0.crop == nil}.count
-            let mature=store.data.garden.plots.filter{$0.crop != nil && $0.progress(store.data.totalFocus)>=1}.count
+            let mature=store.data.garden.plots.filter{$0.crop != nil && $0.progress(store.gameFocus)>=1}.count
             return "空地 \(empty) · 已成熟 \(mature)"
         case "厨房":return cooking ? "正在料理…" : additions.isEmpty ? "料理台还没有食材" : "已放入 \(selection.portions.count)/6 份食材"
-        default:return "在售 \(store.data.garden.orders.count) · 待收款 \(store.data.garden.orders.filter{$0.ready(store.data.totalFocus)}.count)"
+        default:return "在售 \(store.data.garden.orders.count) · 待收款 \(store.data.garden.orders.filter{$0.ready(store.gameFocus)}.count)"
         }
     }
     var body: some View {
@@ -99,6 +99,9 @@ struct GameRoomView: View {
         .sheet(isPresented: $market) { IngredientMarket(store: store) }
         .sheet(isPresented:$inventory) {InventoryView(store:store)}
         .onChange(of:store.data.garden.orders.first?.id) {_,_ in customerArrivedAt=Date()}
+        .onChange(of:store.data.garden.cropSeeds) {_,current in
+            if let selectedSeed,current[selectedSeed.rawValue,default:0] <= 0 {self.selectedSeed=nil}
+        }
         .onChange(of:store.data.garden.dishes) {previous,current in
             if let dish=lastDish,dish.outputIngredient == nil,current[dish.id,default:0]<previous[dish.id,default:0] {lastDish=nil}
         }
@@ -119,8 +122,8 @@ struct GameRoomView: View {
             let soil = SceneObject.gardenPlots[index % SceneObject.gardenPlots.count]
             let center = soil.target
             let x = w * center.x, y = h * center.y
-            let progress = plot.progress(store.data.totalFocus)
-            let stage = plot.growthStage(store.data.totalFocus)
+            let progress = plot.progress(store.gameFocus)
+            let stage = plot.growthStage(store.gameFocus)
             ObjectButton(label: plot.crop.map { "\($0.rawValue)，\(["刚播种","出苗","成长中","成熟，点击收获"][stage])" } ?? "第 \(index+1) 块空地，选择种子", action: { workPlot(plot) }, embeddedInBackdrop: plot.crop == nil) {
                 ZStack {
                     Color.clear
@@ -146,11 +149,11 @@ struct GameRoomView: View {
         if let crop = plot.crop {
             let amount=store.data.harvestYield * (crop == .starlightCarrot ? 2:1)
             var next=store.data
-            if next.harvest(plot.id) {
+            if next.harvest(plot.id,at:store.now) {
                 guard store.commitGameChange({$0=next;return true}) else {return}
                 store.triggerPetDialogue(.harvest)
                 harvested = plot.id; harvestedCrop = crop;harvestedCount=amount; burst = Date(); store.message = "收获 \(crop.harvestName) ×\(amount)";hint="" }
-            else { hint = "\(crop.rawValue)还需记录 \(Int(ceil((1-plot.progress(store.data.totalFocus))*(plot.duration ?? crop.seconds)/60))) 分钟专注。" }
+            else { hint = "\(crop.rawValue)还需记录 \(Int(ceil((1-plot.progress(store.gameFocus))*(plot.duration ?? crop.seconds)/60))) 分钟专注。" }
         } else if let selectedSeed { plant(selectedSeed,in:plot) }
         else { plantingPlot=plot }
     }
@@ -161,6 +164,10 @@ struct GameRoomView: View {
             PixelScrollView {
                 seedCards(plot:nil)
             }
+            Button(action:scatterSeeds) {
+                HStack(spacing:5) {GameSprite(index:8,size:18);Text("撒一把种子")}.frame(maxWidth:.infinity)
+            }.buttonStyle(PixelButtonStyle(primary:true))
+                .disabled(ownedSeeds.isEmpty || store.data.garden.water < 1 || !store.data.garden.plots.contains{$0.crop == nil})
             if selectedSeed != nil {Button("取消播种"){selectedSeed=nil;hint=""}}
             if ownedSeeds.isEmpty {Text("种子柜空空的").font(.caption).foregroundStyle(Palette.muted)}
         }.padding(10).magicSurface(Palette.paper)
@@ -178,16 +185,21 @@ struct GameRoomView: View {
                         Text("×\(store.data.garden.cropSeeds[crop.rawValue,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
                     }.frame(maxWidth:.infinity).padding(6).magicSurface(selectedSeed == crop ? Palette.card:Palette.paper)
                         .overlay(PixelFrame().stroke(selectedSeed == crop ? Palette.gold:Palette.line,lineWidth:1))
-                }.buttonStyle(.plain).disabled(plot != nil && store.data.garden.water<1).accessibilityLabel("选择\(crop.rawValue)种子")
+                }.buttonStyle(.plain).disabled(plot != nil && store.data.garden.water<1).accessibilityLabel("选择\(crop.rawValue)种子").accessibilityAddTraits(selectedSeed == crop ? [.isSelected]:[])
             }
         }
     }
     private func plant(_ crop:Crop,in plot:Plot) {
-        guard store.data.plant(crop,in:plot.id) else {
-            hint=store.data.garden.water < 1 ? "露水不足，记录专注后再来播种。":"这袋种子已用完。"
-            return
-        }
-        plantingPlot=nil;selectedSeed=nil;harvested=plot.id;harvestedCrop=nil;burst=Date();hint="";store.message="种下了\(crop.rawValue)。"
+        guard store.data.garden.cropSeeds[crop.rawValue,default:0] > 0 else {selectedSeed=nil;hint="这袋种子已用完。";return}
+        guard store.data.garden.water > 0 else {hint="露水不足，记录专注后再来播种。";return}
+        guard store.commitGameChange({$0.plant(crop,in:plot.id,at:store.now)}) else {return}
+        plantingPlot=nil;selectedSeed=store.data.garden.cropSeeds[crop.rawValue,default:0] > 0 ? crop:nil
+        harvested=plot.id;harvestedCrop=nil;burst=Date();hint="";store.message="种下了\(crop.rawValue)。"
+    }
+    private func scatterSeeds() {
+        var count=0
+        guard store.commitGameChange({count=$0.plantRandomly(at:store.now);return count > 0}) else {return}
+        plantingPlot=nil;seedCabinet=false;hint="";store.message="种下了 \(count) 袋种子。"
     }
     private func seedSelection(_ plot:Plot?) -> some View {
         VStack(alignment:.leading,spacing:14) {
@@ -317,7 +329,7 @@ struct GameRoomView: View {
     }
     @ViewBuilder private func shopScene(w:CGFloat,h:CGFloat)->some View {
         let orders=store.data.garden.orders
-        let customer=orders.first.map{ShopCustomerPose(progress:$0.ready(store.data.totalFocus) ? 1:store.now.timeIntervalSince(customerArrivedAt)/6)}
+        let customer=orders.first.map{ShopCustomerPose(progress:$0.ready(store.gameFocus) ? 1:store.now.timeIntervalSince(customerArrivedAt)/6)}
         if let customer,customer.behindCounter {customerSprite(customer,w:w,h:h)}
         let counter=SceneObject.shopCounter
         ObjectButton(label:"柜台，查看陈列状态",action:{hint="在售 \(orders.count) · 空位 \(max(0,store.data.garden.capacity-orders.count))"},embeddedInBackdrop:true,caption:"料理陈列") {
@@ -327,7 +339,7 @@ struct GameRoomView: View {
             let order=orders.indices.contains(slot) ? orders[slot]:nil
             let x=store.data.garden.capacity == 1 ? 0.25:0.14+Double(slot)*0.34/Double(store.data.garden.capacity-1)
             ObjectButton(label:order.map{"查看在售料理：\($0.dish.name)"} ?? "第 \(slot+1) 个陈列位，上架料理",action:{
-                if let order {hint="\(order.dish.name) · \(order.ready(store.data.totalFocus) ? "待收款":"在售") · \(Money.text(order.price))"}
+                if let order {hint="\(order.dish.name) · \(order.ready(store.gameFocus) ? "待收款":"在售") · \(Money.text(order.price))"}
                 else {hint="从料理柜选择成品，再点击上架。"}
             }) {
                 ZStack {
@@ -340,7 +352,7 @@ struct GameRoomView: View {
         DisplayGlass()
         if let customer,!customer.behindCounter {customerSprite(customer,w:w,h:h)}
         if let listedAt {SceneParticles(burst:listedAt).frame(width:w*0.3,height:h*0.25).position(x:w*0.3,y:h*0.50)}
-        let ready=orders.filter{$0.ready(store.data.totalFocus)}
+        let ready=orders.filter{$0.ready(store.gameFocus)}
         if !ready.isEmpty {
             let amount=ready.reduce(0){$0+$1.price}
             ObjectButton(label:"收取 \(Money.text(amount))",action:{
@@ -358,21 +370,21 @@ struct GameRoomView: View {
     private func stockChoice() {
         guard let dish=choice else{hint=availableDishes.isEmpty ? "料理柜里还没有成品，先去厨房制作。":"请先从料理柜选择一份料理。";return}
         let previous=store.data
-        guard store.data.stock(dish) else{hint="陈列位已满，先收款或下架在售料理。";return}
+        guard store.data.stock(dish,at:store.now) else{hint="陈列位已满，先收款或下架在售料理。";return}
         guard store.save() else{store.data=previous;return}
         listedAt=Date();soldAt=nil;hint="";store.message="\(dish.name)已摆上柜台。"
     }
     private func collect(_ orders:[ShopOrder]) {
         let previous=store.data
         var amount=0
-        for order in orders where store.data.collectSale(order.id) {amount+=order.price}
+        for order in orders where store.data.collectSale(order.id,at:store.now) {amount+=order.price}
         guard amount>0 else{return}
         guard store.save() else{store.data=previous;return}
         soldAt=Date();hint="";store.message="收到 \(Money.text(amount))。"
     }
     private func unstock(_ order:ShopOrder) {
         let previous=store.data
-        guard store.data.unstock(order.id) else{hint="这份料理已成交，请先收款。";return}
+        guard store.data.unstock(order.id,at:store.now) else{hint="这份料理已成交，请先收款。";return}
         guard store.save() else{store.data=previous;return}
         hint="";store.message="\(order.dish.name)已放回料理柜。"
     }
@@ -383,7 +395,7 @@ struct GameRoomView: View {
         let previousCount=previous.garden.dishes.values.reduce(0,+)
         var count=0
         for dish in availableDishes {
-            while store.data.garden.orders.count<store.data.garden.capacity && store.data.stock(dish) {count+=1}
+            while store.data.garden.orders.count<store.data.garden.capacity && store.data.stock(dish,at:store.now) {count+=1}
         }
         guard count>0 else{return}
         assert(previousCount == store.data.garden.dishes.values.reduce(0,+)+count)
@@ -424,8 +436,9 @@ struct GameRoomView: View {
                             VStack(spacing:5) {
                                 GameSprite(sheet:"Foods",index:order.dish.sprite,size:42)
                                 Text(order.dish.name).font(.system(size:11)).lineLimit(2).frame(height:30)
-                                Text(order.ready(store.data.totalFocus) ? "待收款":"在售").font(.caption).foregroundStyle(Palette.goldLight)
-                                if order.ready(store.data.totalFocus) {
+                                Text(order.ready(store.gameFocus) ? "已售出":"在售").font(.caption).foregroundStyle(Palette.goldLight)
+                                if order.ready(store.gameFocus) {
+                                    Text(Money.text(order.price)).font(.system(size:11)).monospacedDigit().foregroundStyle(Palette.goldLight)
                                     Button("收款"){collect([order])}.accessibilityLabel("收取\(order.dish.name)货款")
                                 } else {Button("下架"){unstock(order)}.accessibilityLabel("下架\(order.dish.name)")}
                             }.frame(maxWidth:.infinity).padding(6).magicSurface(Palette.card)

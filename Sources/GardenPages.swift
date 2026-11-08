@@ -66,6 +66,7 @@ struct SettingsPage: View {
                 PixelStepper(title: "默认专注", value: $store.data.preferences.focusMinutes, range: 1...180).frame(maxWidth: 360)
                 PixelStepper(title: "默认休息", value: $store.data.preferences.breakMinutes, range: 1...60).frame(maxWidth: 360)
                 Toggle("完成时播放轻提示音", isOn: $store.data.preferences.sound)
+                GameReminderPicker(options: Binding(get: { store.data.preferences.gameReminders ?? GameReminderOptions() }, set: { store.data.preferences.gameReminders = $0 }), title: "默认经营提醒")
                 HStack {
                     Button(store.data.preferences.notifications ? "重新检查通知权限" : "开启计时和日程通知") { store.requestNotifications() }
                     if store.data.preferences.notifications {

@@ -6,10 +6,10 @@ struct PotionScene:View {
     @State private var materials=false
     @State private var recipes=false
     @State private var hint=""
-    private var trip:Journey? {store.data.garden.economy.journey}
-    private var brewing:Bool {trip?.kind == .potions}
+    private var trip:Journey? {store.data.garden.economy.trip(.potions)}
+    private var brewing:Bool {trip != nil}
     private var unlocked:Bool {store.data.levelProgress.level>=JourneyKind.potions.level}
-    private var ready:Bool {brewing && (trip?.progress(store.data.totalFocus) ?? 0)>=1}
+    private var ready:Bool {brewing && (trip?.progress(store.gameFocus) ?? 0)>=1}
     private var label:String {ready ? "领取魔药":brewing ? "查看熬制":"选择配方"}
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
@@ -20,7 +20,7 @@ struct PotionScene:View {
                     ObjectButton(label:label,action:openPot,caption:label) {GameSprite(index:7,size:w*0.19)}
                         .disabled(!unlocked).position(x:w*0.735,y:h*0.59)
                     if brewing,let trip {
-                        PotionBrewAnimation(progress:trip.progress(store.data.totalFocus),ready:ready)
+                        PotionBrewAnimation(progress:trip.progress(store.gameFocus),ready:ready)
                             .frame(width:w*0.25,height:h*0.38).position(x:w*0.735,y:h*0.54)
                         if ready {
                             ObjectButton(label:"领取魔药",action:openPot,caption:"领取") {GameSprite(sheet:"Equipment",index:11,size:w*0.10)}
@@ -40,9 +40,9 @@ struct PotionScene:View {
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
             } sidebar: {cabinet}
             if let trip,brewing {
-                PixelProgress(value:trip.progress(store.data.totalFocus))
+                PixelProgress(value:trip.progress(store.gameFocus))
                 HStack {
-                    Text(ready ? "魔药已熬好" : "还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight)
+                    Text(ready ? "魔药已熬好" : "还需 \(Int(ceil(max(0,trip.duration-(store.gameFocus-trip.startedAt))/60))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
                     if !ready {Button("记录专注"){SceneNavigation.open("计时器",store:store)}}
                 }
@@ -87,7 +87,7 @@ struct PotionScene:View {
     private func openPot() {
         if ready {
             var next=store.data
-            if let result=next.collectJourney(){
+            if let result=next.collectJourney(.potions,at:store.now){
                 guard store.commitGameChange({$0=next;return true}) else {return}
                 store.message=result;hint="";store.triggerPetDialogue(.craft)
             }
@@ -102,7 +102,7 @@ struct PotionScene:View {
                     let potion=Potion.all.first{$0.id == trip.recipe}
                     Text(potion?.name ?? "魔药").font(.headline)
                     Text(potion?.benefit ?? "").font(.caption).foregroundStyle(Palette.muted)
-                    PixelProgress(value:trip.progress(store.data.totalFocus))
+                    PixelProgress(value:trip.progress(store.gameFocus))
                     Text("熬制需要累计 15 分钟专注").font(.caption)
                 } else {
                     Text("桌上："+(selection.portions.isEmpty ? "尚未选材":selection.portions.map(\.name).joined(separator:" + "))).font(.caption).foregroundStyle(Palette.goldLight)
@@ -122,12 +122,14 @@ struct PotionScene:View {
                 }
             }
         } footer: {
-            Text(trip == nil ? "熬制用时：15 分钟专注":"进行中：\(trip!.kind == .potions ? "炼金室":trip!.kind.rawValue)").font(.caption).foregroundStyle(Palette.muted)
+            Text(trip == nil ? "熬制用时：15 分钟专注":"进行中：炼金室").font(.caption).foregroundStyle(Palette.muted)
         }
     }
     private func brew(_ potion:Potion) {
         guard selection.matches(potion) else{return}
-        guard store.data.embark(.potions,recipe:potion.id) else{hint="材料不足。";recipes=false;return}
+        var next=store.data
+        guard next.embark(.potions,recipe:potion.id,at:store.now) else{hint="材料不足。";recipes=false;return}
+        guard store.commitGameChange({$0=next;return true}) else{return}
         selection.clear();recipes=false;hint="";store.message="\(potion.name)开始熬制。"
     }
 }

@@ -32,6 +32,7 @@ xcrun swiftc -swift-version 5 -parse-as-library "${model[@]}" Sources/AIClient.s
 "$checks_dir/pet-dialogue"
 bash Tests/ChibiWardrobe/run.sh
 bash Tests/CasualSkin/run.sh
+bash Tests/Planting/run.sh
 xcrun swiftc -swift-version 5 -parse-as-library Sources/AIConfiguration.swift Sources/AIPrompts.swift Sources/AIClient.swift Tests/AI/main.swift -o "$checks_dir/ai" -framework Security -framework LocalAuthentication
 "$checks_dir/ai"
 xcrun swiftc -swift-version 5 -parse-as-library Sources/AIConfiguration.swift Sources/AIPrompts.swift Sources/AIClient.swift Tests/Streaming/main.swift -o "$checks_dir/streaming" -framework Security -framework LocalAuthentication

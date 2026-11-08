@@ -142,8 +142,20 @@ enum ChibiSkins {
         let moment = pose.time.truncatingRemainder(dividingBy: 12)
         return !pose.reduceMotion && (3..<4.8).contains(moment) ? "RestOpen" : "Rest"
     }
+    static func blinkStage(for pose:ChibiPose) -> Int {
+        guard !pose.reduceMotion, !pose.hasExpression,
+              pose.body == .stand || pose.body == .sit || pose.body == .focus else { return 0 }
+        let moment = pose.time.truncatingRemainder(dividingBy:23)
+        for start in [2.7,7.4,7.78,13.1,18.4] {
+            let age = moment-start
+            if (0..<0.25).contains(age) { return (0.075..<0.175).contains(age) ? 2:1 }
+        }
+        return 0
+    }
     static func name(for pose: ChibiPose) -> String {
-        pose.hasExpression ? pose.body.rawValue + "Expression" + String(max(0,min(8,pose.expressionIndex))) : baseName(for:pose)
+        if pose.hasExpression { return pose.body.rawValue + "Expression" + String(max(0,min(8,pose.expressionIndex))) }
+        let blink = blinkStage(for:pose)
+        return blink == 0 ? baseName(for:pose):pose.body.rawValue+"Blink"+String(blink)
     }
     private static func source(name:String,subdirectory:String = "ChibiSkins/Casual") -> CGImage? {
         guard let url = Bundle.main.url(forResource:name,withExtension:"png",subdirectory:subdirectory),
@@ -188,6 +200,16 @@ enum ChibiSkins {
         patchCache.setObject(image,forKey:key as NSString,cost:original.bytesPerRow*original.height)
         return ExpressionPatch(image:image,rect:rect)
     }
+    static func blinkPatch(for pose:ChibiPose) -> ExpressionPatch? {
+        let stage = blinkStage(for:pose)
+        guard stage > 0, let rect = expressionRects[pose.body] else { return nil }
+        let name = pose.body.rawValue + String(stage), key = "Blink/"+name
+        if let image = patchCache.object(forKey:key as NSString) { return ExpressionPatch(image:image,rect:rect) }
+        guard let original = source(name:name,subdirectory:"ChibiSkins/Casual/Blink") else { return nil }
+        let image = bitmapImage(original,size:rect.size)
+        patchCache.setObject(image,forKey:key as NSString,cost:original.bytesPerRow*original.height)
+        return ExpressionPatch(image:image,rect:rect)
+    }
     static func patchRect(_ patch:ExpressionPatch,body:ChibiBody,in rect:CGRect) -> CGRect {
         guard let spec = artwork[body] else { return .zero }
         return CGRect(x:rect.minX+(patch.rect.minX-spec.crop.minX)/spec.crop.width*rect.width,
@@ -196,15 +218,15 @@ enum ChibiSkins {
     }
     static func frame(for pose:ChibiPose) -> NSImage? {
         guard let base = images[baseName(for:pose)] else { return nil }
-        return applyingExpression(to:base,pose:pose,key:name(for:pose))
+        return applyingFace(to:base,pose:pose,key:name(for:pose))
     }
     static func personFrame(for pose:ChibiPose,layers:Layers) -> NSImage {
-        applyingExpression(to:layers.person,pose:pose,key:"Person/"+name(for:pose))
+        applyingFace(to:layers.person,pose:pose,key:"Person/"+name(for:pose))
     }
-    private static func applyingExpression(to base:NSImage,pose:ChibiPose,key:String) -> NSImage {
-        guard pose.hasExpression, pose.expressionIndex != 0 else { return base }
+    private static func applyingFace(to base:NSImage,pose:ChibiPose,key:String) -> NSImage {
+        guard pose.hasExpression ? pose.expressionIndex != 0:blinkStage(for:pose) > 0 else { return base }
         if let cached = expressionCache.object(forKey:key as NSString) { return cached }
-        guard let patch = expressionPatch(for:pose),
+        guard let patch = pose.hasExpression ? expressionPatch(for:pose):blinkPatch(for:pose),
               let baseCG = (base.representations.first as? NSBitmapImageRep)?.cgImage,
               let patchCG = (patch.image.representations.first as? NSBitmapImageRep)?.cgImage,
               let pixels = baseCG.dataProvider?.data,
@@ -215,7 +237,7 @@ enum ChibiSkins {
                                       space:baseCG.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo:baseCG.bitmapInfo.rawValue),
               let destination = context.data else { return base }
-        // Preserve the existing premultiplied pixels outside the expression patch.
+        // Preserve the existing premultiplied pixels outside the face patch.
         destination.copyMemory(from:bytes,byteCount:baseCG.bytesPerRow * baseCG.height)
         let bounds = CGRect(x:0,y:0,width:baseCG.width,height:baseCG.height)
         let target = patchRect(patch,body:pose.body,in:bounds)

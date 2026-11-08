@@ -25,6 +25,13 @@ struct FocusInterval: Codable, Equatable {
 }
 
 extension TimerRun {
+    mutating func shiftDates(by offset: TimeInterval) {
+        startedAt = startedAt.addingTimeInterval(offset)
+        resumedAt = resumedAt?.addingTimeInterval(offset)
+        pausedAt = pausedAt?.addingTimeInterval(offset)
+        segments = segments?.map { FocusInterval(beganAt: $0.beganAt.addingTimeInterval(offset), endedAt: $0.endedAt.addingTimeInterval(offset)) }
+        pauseIntervals = pauseIntervals?.map { FocusInterval(beganAt: $0.beganAt.addingTimeInterval(offset), endedAt: $0.endedAt.addingTimeInterval(offset)) }
+    }
     mutating func closeActiveSegment(at date: Date) {
         guard let resumedAt else { return }
         let amount = max(0, elapsed(at: date) - accumulated)

@@ -137,6 +137,8 @@ enum HabitStoreChecks {
         print("PASS: following today crosses custom rollover; past selections and month browsing stay; returning today restores follow; settings preserve day labels, counters, balances and historical selection with persistent reward guard")
         try await HabitReviewChecks.run(store, clock: reviewClock)
         try FocusStoreChecks.run(store)
+        try GameReminderStoreChecks.run(store)
+        try ClockRollbackStoreChecks.run(store)
         try HabitScheduleChecks.run(store)
     }
 }
@@ -535,5 +537,311 @@ private enum FocusStoreChecks {
         let reload = try SaveFile.read(store.file)
         check(reload.taskOccurrenceReschedules == store.data.taskOccurrenceReschedules && reload.sessions == store.data.sessions && reload.taskCompletionRecords == store.taskCompletionRecords, "reflection and occurrence overlay survive reload")
         print("PASS: \(checks) Store focus checks cover atomic start/pause/resume/end, optional reflection, history edits, AI feedback rollback, automatic finish failure/retry, separate rest and occurrence-only reschedule")
+    }
+}
+
+
+@MainActor
+private enum GameReminderStoreChecks {
+    private static var checks = 0
+    private static func check(_ value: Bool, _ name: String) { guard value else { fatalError("FAIL: \(name)") }; checks += 1 }
+    static func run(_ store: GardenStore) throws {
+        let start = Date()
+        let all = GameReminderOptions(enabled: Set(GameReminderKind.allCases))
+        let sales = GameReminderOptions(enabled: [.sales])
+        func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        func reset(readyIn: Double? = nil) {
+            store.data = AppData()
+            store.data.preferences.sound = false
+            store.data.sessions = [FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:start,seconds:100000)]
+            store.pendingFocusReviewID = nil
+            store.error = ""; store.message = ""; store.now = start
+            if let remaining = readyIn {
+                let focus = store.data.totalFocus
+                store.data.garden.plots[0] = Plot(crop:.carrot,plantedAt:focus-600+remaining)
+                store.data.garden.order = ShopOrder(dish:.soup,placedAt:focus-300+remaining,proceeds:731)
+                store.data.garden.economy.activeJourneys = [
+                    Journey(kind:.fishing,startedAt:focus-900+remaining,duration:900),
+                    Journey(kind:.adventure,startedAt:focus-1200+remaining,duration:1200),
+                    Journey(kind:.potions,startedAt:focus-900+remaining,duration:900,recipe:"dew")
+                ]
+            }
+        }
+        func unwritable(_ operation: () throws -> Void) throws {
+            let backup = store.file.deletingLastPathComponent().appendingPathComponent("game-reminder-backup.json")
+            try FileManager.default.moveItem(at:store.file,to:backup)
+            try FileManager.default.createDirectory(at:store.file,withIntermediateDirectories:false)
+            defer {
+                try? FileManager.default.removeItem(at:store.file)
+                try? FileManager.default.moveItem(at:backup,to:store.file)
+            }
+            try operation()
+        }
+        func snapshot() throws -> Data {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            return try encoder.encode(store.data)
+        }
+        func deliver(_ seconds: Double) -> [GameReadyNotice] {
+            store.now = at(seconds)
+            return store.deliverGameReminders(at:at(seconds))
+        }
+        reset()
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:start), "default reminder session starts")
+        check(store.data.timer?.gameReminders == GameReminderOptions() && store.data.preferences.gameReminders == GameReminderOptions(), "all game reminders default off")
+        store.data.preferences.gameReminders = all
+        check(store.data.timer?.gameReminders == GameReminderOptions(), "editing remembered settings leaves current session unchanged")
+        check(store.finishTimer(at:at(1)), "default reminder session finishes")
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:at(2)) && store.data.timer?.gameReminders == all, "next session reuses remembered selections")
+        store.data.preferences.gameReminders = sales
+        check(store.data.timer?.gameReminders == all, "current reminder selection stays independent from preferences")
+        check(store.finishTimer(at:at(3)) && store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:sales,at:at(4)), "explicit next-session selection starts")
+        let selected = try SaveFile.read(store.file)
+        check(selected.timer?.gameReminders == sales && selected.preferences.gameReminders == sales, "session selection and remembered settings persist")
+
+        reset(readyIn:10)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:start), "default-off session starts before readiness")
+        store.message = "默认关闭"
+        check(deliver(10).isEmpty && store.data.gameReadyEvents(at:at(10)).count == 5 && store.message == "默认关闭", "default-off choices suppress actual ready events")
+        reset()
+        check(store.save(), "reminder choice rollback fixture saved")
+        try unwritable {
+            check(!store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:all,at:start), "failed reminder session start returns false")
+            check(store.data.timer == nil && store.data.preferences.gameReminders == nil, "failed start restores remembered choices with idle timer")
+        }
+
+        reset(readyIn:-1)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:all,at:start), "session starts with existing ready events")
+        check(store.data.timer?.notifiedGameEvents?.count == 5, "ready events are recorded at session start")
+        store.message = "现有提示"
+        check(deliver(10).isEmpty && store.message == "现有提示", "already-ready crops sales and journeys do not repeat")
+
+        reset(readyIn:10)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:all,at:start), "all-category reminder session starts")
+        check(deliver(9).isEmpty && store.data.timer?.notifiedGameEvents?.isEmpty == true, "no notice before readiness threshold")
+        let focus = store.data.totalFocus, coins = store.data.garden.coins, water = store.data.garden.water
+        let notices = deliver(10)
+        check(notices.map(\.kind) == GameReminderKind.allCases, "threshold emits each selected category once")
+        check(notices.first{$0.kind == .sales}?.text == "1 份料理已售出，共 " + Money.text(731), "sales notice uses stored actual proceeds")
+        check(notices.first{$0.kind == .potions}?.text.contains("丰沛露水") == true, "potion reminder names actual recipe")
+        check(store.message == notices.map(\.text).joined(separator:"\n"), "Store displays delivered notice text")
+        check(store.data.totalFocus == focus && store.data.garden.coins == coins && store.data.garden.water == water && store.data.garden.economy.activeJourneys.count == 3, "notices do not settle focus collect rewards or end journeys")
+        let markers = store.data.timer!.notifiedGameEvents
+        check(markers?.count == 5 && deliver(20).isEmpty && store.data.timer?.notifiedGameEvents == markers, "later ticks do not repeat readiness notices")
+        store.data = try SaveFile.read(store.file)
+        check(store.data.timer?.gameReminders == all && store.data.timer?.notifiedGameEvents == markers && deliver(25).isEmpty, "saved session reload preserves delivered markers")
+
+        reset(readyIn:10)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:sales,at:start), "sales-only session starts")
+        store.data.preferences.gameReminders = all
+        check(deliver(10).map(\.kind) == [.sales] && store.data.timer?.notifiedGameEvents?.count == 1, "only session-selected category fires despite preference changes")
+        check(deliver(20).isEmpty, "unselected ready categories stay silent")
+
+        reset(readyIn:10)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:all,at:start), "pause test session starts")
+        store.tick(at(9))
+        check(store.pauseTimer(at:at(9)), "session pauses before readiness")
+        store.message = "暂停中"
+        store.tick(at(500))
+        check(store.gameFocus == 100009 && store.data.gameReadyEvents(at:at(500)).isEmpty && store.message == "暂停中" && store.data.timer?.notifiedGameEvents?.isEmpty == true, "pause freezes crop sale and all journey readiness")
+        check(store.resumeTimer(at:at(500)), "session resumes")
+        store.tick(at(501))
+        check(store.data.timer?.notifiedGameEvents?.count == 5 && store.message.contains(Money.text(731)), "resumed active second crosses threshold once")
+        check(deliver(502).isEmpty, "resumed notices do not repeat")
+        reset(readyIn:10)
+        store.data.preferences.gameReminders = all
+        store.data.pomodoroBreakReady = true
+        check(store.startTimer(kind:.rest,minutes:10,task:nil,gameReminders:all,at:start), "rest begins with remembered reminder choices")
+        check(store.data.timer?.gameReminders == nil && store.data.timer?.notifiedGameEvents == nil && store.data.preferences.gameReminders == all, "rest has no game reminders and preserves remembered focus choices")
+        store.message = "休息中"
+        store.tick(at(500))
+        check(store.gameFocus == 100000 && store.data.gameReadyEvents(at:at(500)).isEmpty && store.message == "休息中", "rest freezes every game readiness threshold")
+        store.tick(at(600))
+        check(store.data.timer == nil && store.data.totalFocus == 100000 && store.message == "休息结束，已记录休息时长。", "ending rest gives no game progress or readiness notice")
+
+        reset(readyIn:10)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,gameReminders:all,at:start), "failure test session starts")
+        let beforeDelivery = store.data.timer, beforeDisk = try Data(contentsOf:store.file)
+        store.message = "保存前提示"
+        try unwritable {
+            check(deliver(10).isEmpty && store.data.timer == beforeDelivery, "failed readiness save rolls back all notified markers")
+            check(store.message == "保存前提示" && store.saveStatus == "保存失败", "failed readiness save emits no message")
+            check(deliver(11).isEmpty && store.data.timer == beforeDelivery, "repeated failed save leaves reminder retryable")
+        }
+        check(try Data(contentsOf:store.file) == beforeDisk, "failed readiness saves preserve previous readable disk bytes")
+        check(deliver(12).count == 5 && store.data.timer?.notifiedGameEvents?.count == 5, "write recovery delivers previously unsaved reminders")
+        check(deliver(13).isEmpty, "write recovery delivers each reminder only once")
+        store.data = try SaveFile.read(store.file)
+        check(deliver(14).isEmpty, "recovered reminder markers survive disk reload")
+
+        reset(readyIn:60)
+        check(store.startTimer(kind:.countdown,minutes:1,task:nil,gameReminders:all,at:start), "countdown threshold session starts")
+        store.tick(at(60))
+        check(store.data.timer == nil && store.data.totalFocus == 100060 && store.data.sessions.last?.seconds == 60, "automatic countdown finish records focus once")
+        check(store.message.contains("已记录 1 分 0 秒专注") && GameReminderKind.allCases.allSatisfy { kind in
+            switch kind {
+            case .crops:return store.message.contains("块田地可收获")
+            case .sales:return store.message.contains("1 份料理已售出，共 " + Money.text(731))
+            case .fishing:return store.message.contains("湖畔钓鱼已完成")
+            case .adventure:return store.message.contains("林间冒险已完成")
+            case .potions:return store.message.contains("丰沛露水已完成")
+            }
+        }, "automatic finish retains all game reminders alongside focus summary")
+        let finishedMessage = store.message
+        store.tick(at(61))
+        check(store.message == finishedMessage && store.deliverGameReminders(at:at(61)).isEmpty, "finished countdown does not emit reminders again")
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:at(62)) && deliver(63).isEmpty, "next focus excludes events already ready at start")
+
+        reset()
+        store.data.garden.ingredients["薄荷"] = 2
+        store.data.garden.economy.finds["月光草"] = 2
+        check(store.save(), "journey rollback fixture saved")
+        let idle = try snapshot()
+        try unwritable {
+            for kind in JourneyKind.allCases {
+                check(!store.commitGameChange{$0.embark(kind,recipe:kind == .potions ? "dew":nil,at:start)}, "failed \(kind.rawValue) start returns false")
+                check(try snapshot() == idle, "failed \(kind.rawValue) start preserves inventory and journeys")
+            }
+        }
+        check(store.commitGameChange{$0.embark(.fishing,at:start)} && store.commitGameChange{$0.embark(.adventure,at:start)}, "fishing and adventure start concurrently after write recovery")
+        let twoTrips = try snapshot()
+        try unwritable {
+            check(!store.commitGameChange{$0.embark(.potions,recipe:"dew",at:start)}, "failed parallel potion start returns false")
+            check(try snapshot() == twoTrips, "failed parallel potion start preserves materials and both trips")
+        }
+        check(store.commitGameChange{$0.embark(.potions,recipe:"dew",at:start)}, "parallel potion retry commits once")
+        check(store.data.garden.economy.activeJourneys.count == 3 && store.data.garden.ingredients["薄荷"] == 1 && store.data.garden.economy.finds["月光草"] == 1, "parallel potion spends one material pair")
+        check(!store.commitGameChange{$0.embark(.potions,recipe:"dew",at:start)}, "same-kind retry cannot spend materials twice")
+        store.data.sessions[0].seconds += 1200; store.now = at(1200)
+        check(store.save(), "ready parallel journeys saved")
+        let readyTrips = try snapshot(), readyDisk = try Data(contentsOf:store.file)
+        try unwritable {
+            for kind in JourneyKind.allCases {
+                check(!store.commitGameChange{$0.collectJourney(kind,at:at(1200)) != nil}, "failed \(kind.rawValue) collection returns false")
+                check(try snapshot() == readyTrips, "failed \(kind.rawValue) collection restores rewards and every trip")
+            }
+        }
+        check(try Data(contentsOf:store.file) == readyDisk, "failed journey claims preserve saved ready state")
+        check(store.commitGameChange{$0.collectJourney(.fishing,at:at(1200)) != nil}, "fishing claim retries successfully")
+        check(store.data.garden.economy.activeJourneys.count == 2 && store.data.garden.economy.trip(.adventure) != nil && store.data.garden.economy.trip(.potions) != nil, "collecting fishing preserves parallel adventure and potion")
+        store.data = try SaveFile.read(store.file)
+        check(!store.commitGameChange{$0.collectJourney(.fishing,at:at(1200)) != nil}, "claimed fishing cannot repeat after reload")
+        check(store.commitGameChange{$0.collectJourney(.adventure,at:at(1200)) != nil} && store.commitGameChange{$0.collectJourney(.potions,at:at(1200)) != nil}, "other parallel rewards collect independently")
+        let collected = try snapshot()
+        for kind in JourneyKind.allCases { check(!store.commitGameChange{$0.collectJourney(kind,at:at(1200)) != nil}, "completed \(kind.rawValue) cannot collect again") }
+        check(try snapshot() == collected && store.data.garden.economy.activeJourneys.isEmpty && store.data.garden.economy.expeditions == 3 && store.data.garden.economy.finds["dew"] == 1 && store.data.garden.ingredients["薄荷"] == 1, "all rewards and material usage settle exactly once")
+        print("PASS: \(checks) Store game checks cover default/remembered/session reminder choices, existing-ready suppression, all-category thresholds and exact sale proceeds, pause/rest freezing, reload and failed-save retry, automatic-finish reminders, parallel journey start/claim rollback and one-time rewards")
+    }
+}
+
+
+@MainActor
+private enum ClockRollbackStoreChecks {
+    private static var checks = 0
+    private static func check(_ value: Bool, _ name: String) { guard value else { fatalError("FAIL: \(name)") }; checks += 1 }
+    static func run(_ store: GardenStore) throws {
+        let start = Date().addingTimeInterval(10000)
+        func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        func reset() {
+            store.data = AppData()
+            store.data.preferences.sound = false
+            store.data.sessions = [FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:start,seconds:100000)]
+            store.data.garden.ingredients["薄荷"] = 2
+            store.data.garden.economy.finds["月光草"] = 2
+            store.data.garden.dishes[Dish.soup.rawValue] = 1
+            store.pendingFocusReviewID = nil
+            store.now = start; store.error = ""; store.message = ""
+        }
+        func unwritable(_ operation: () throws -> Void) throws {
+            let backup = store.file.deletingLastPathComponent().appendingPathComponent("clock-rollback-backup.json")
+            try FileManager.default.moveItem(at:store.file,to:backup)
+            try FileManager.default.createDirectory(at:store.file,withIntermediateDirectories:false)
+            defer {
+                try? FileManager.default.removeItem(at:store.file)
+                try? FileManager.default.moveItem(at:backup,to:store.file)
+            }
+            try operation()
+        }
+        func startAndPlant() {
+            check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:start), "clock fixture focus starts")
+            store.tick(at(600))
+            let plot = store.data.garden.plots[0].id
+            check(store.gameFocus == 100600 && store.commitGameChange{$0.plant(.carrot,in:plot,at:at(600))}, "live 600-second focus plants successfully")
+        }
+        reset()
+        startAndPlant()
+        check(store.commitGameChange{$0.stock(.soup,at:at(600))}, "live focus stocks a dish before clock rollback")
+        for kind in JourneyKind.allCases {
+            check(store.commitGameChange{$0.embark(kind,recipe:kind == .potions ? "dew":nil,at:at(600))}, "live focus starts \(kind.rawValue) before clock rollback")
+        }
+        check(store.data.garden.plots[0].plantedAt == 100600 && store.data.garden.order?.placedAt == 100600 && store.data.garden.economy.activeJourneys.allSatisfy{$0.startedAt == 100600}, "all live game operations share exact focus anchor")
+        store.tick(at(300))
+        check(store.now == at(300) && store.gameFocus == 100600 && store.data.timer?.historyIsValid == true, "running clock rollback preserves 600 active seconds and valid timer history")
+        check(store.pauseTimer(at:at(300)), "pause saves after running clock rollback")
+        let paused = try SaveFile.read(store.file)
+        check(paused.timer?.accumulated == 600 && paused.timer?.resumedAt == nil && paused.gameFocus(at:at(300)) == 100600, "rollback pause and game anchors survive save reload")
+        store.tick(at(100))
+        check(store.gameFocus == 100600 && store.data.timer?.pausedAt == at(100), "paused clock rollback shifts pause anchor without changing focus")
+        check(store.resumeTimer(at:at(100)), "resume saves after paused clock rollback")
+        store.tick(at(200))
+        check(store.gameFocus == 100700, "resumed active interval adds exactly 100 seconds")
+        store.tick(at(150))
+        check(store.gameFocus == 100700 && store.data.timer?.historyIsValid == true, "second running rollback preserves closed and active focus intervals")
+        check(store.pauseTimer(at:at(150)) && store.data.timer?.accumulated == 700, "second rollback pause saves all 700 seconds")
+        check(store.finishTimer(at:at(100)), "finish saves after another paused rollback")
+        let record = store.data.sessions.last!
+        check(record.seconds == 700 && record.beganAt == at(-600) && record.endedAt == at(100) && record.isValid, "final record has exact active seconds and valid shifted date anchors")
+        let finished = try SaveFile.read(store.file)
+        check(finished.timer == nil && finished.sessions.last == record && finished.totalFocus == 100700 && finished.garden.economy.activeJourneys.count == 3, "finished shifted history and parallel game state persist together")
+        check(finished.garden.plots[0].plantedAt == 100600 && finished.garden.order?.placedAt == 100600 && finished.garden.economy.activeJourneys.allSatisfy{$0.startedAt == 100600}, "clock corrections preserve crop sale and journey focus anchors")
+
+        reset()
+        store.now = at(3600)
+        check(store.startTimer(kind:.stopwatch,minutes:1,task:nil,at:start), "idle future clock can start at corrected earlier time")
+        let idleStart = try SaveFile.read(store.file)
+        check(idleStart.savedAt == start && idleStart.timer?.elapsed(at:idleStart.savedAt) == 0, "idle rollback start saves current time rather than stale future now")
+        do {
+            let reopened = GardenStore(preview:true)
+            defer { reopened.storageLocked = true }
+            check(!reopened.storageLocked && reopened.data.timer?.accumulated == 0 && reopened.data.timer?.resumedAt == nil && reopened.gameFocus == 100000, "reopening future zero-second save pauses without phantom focus")
+            check(reopened.save(), "corrected reopened idle timer saves")
+            let read = try SaveFile.read(reopened.file)
+            check(read.timer?.accumulated == 0 && read.timer?.elapsed(at:read.savedAt) == 0 && read.timer?.historyIsValid == true, "zero-second corrected pause remains exact after another save reload")
+        }
+
+        reset()
+        startAndPlant()
+        check(store.save(), "future active 600-second checkpoint saves")
+        let futureCheckpoint = try SaveFile.read(store.file)
+        check(futureCheckpoint.savedAt == at(600) && futureCheckpoint.timer?.elapsed(at:futureCheckpoint.savedAt) == 600, "future savedAt checkpoint contains exactly 600 active seconds")
+        do {
+            let reopened = GardenStore(preview:true)
+            defer { reopened.storageLocked = true }
+            check(!reopened.storageLocked && reopened.data.timer?.resumedAt == nil && reopened.data.timer?.accumulated == 600 && reopened.gameFocus == 100600, "initializing with earlier clock pauses saved 600 seconds without loss or growth")
+            check(reopened.data.timer?.pausedAt == reopened.now && reopened.data.timer?.historyIsValid == true, "startup shifts saved timer history to actual current pause anchor")
+            reopened.tick(reopened.now.addingTimeInterval(300))
+            check(reopened.gameFocus == 100600 && reopened.data.garden.plots[0].progress(reopened.gameFocus) == 0, "reopened paused timer does not add elapsed wall time to game progress")
+            check(reopened.save(), "reopened shifted 600-second pause saves with live crop")
+            let read = try SaveFile.read(reopened.file)
+            check(read.timer?.accumulated == 600 && read.timer?.elapsed(at:read.savedAt) == 600 && read.gameFocus(at:read.savedAt) == 100600, "reopened pause keeps exact focus after save reload")
+        }
+
+        reset()
+        startAndPlant()
+        check(store.pauseTimer(at:at(600)) && store.resumeTimer(at:at(700)), "rollback failure fixture has closed 600-second interval")
+        store.tick(at(800))
+        check(store.gameFocus == 100700 && store.save(), "rollback failure fixture checkpoints 100 more active seconds")
+        let disk = try Data(contentsOf:store.file)
+        try unwritable {
+            check(!store.pauseTimer(at:at(750)), "pause write failure after clock rollback returns false")
+            check(store.gameFocus == 100700 && store.data.timer?.accumulated == 600 && store.data.timer?.resumedAt != nil && store.data.timer?.historyIsValid == true, "failed pause retains prior closed interval and current active seconds")
+            check(!store.finishTimer(at:at(700)), "finish write failure after another clock rollback returns false")
+            check(store.gameFocus == 100700 && store.data.timer?.accumulated == 600 && store.data.sessions.count == 1 && store.data.timer?.historyIsValid == true, "failed finish restores valid shifted in-flight progress without session reward")
+        }
+        check(try Data(contentsOf:store.file) == disk, "rollback write failures preserve last readable checkpoint")
+        check(store.pauseTimer(at:at(700)) && store.data.timer?.accumulated == 700, "pause retries after write recovery without losing or duplicating focus")
+        check(store.finishTimer(at:at(700)) && store.data.sessions.last?.seconds == 700 && store.data.sessions.last?.isValid == true, "finish retries once with valid 700-second history")
+        let recovered = try SaveFile.read(store.file)
+        check(recovered.totalFocus == 100700 && recovered.timer == nil && recovered.garden.plots[0].plantedAt == 100600, "recovered shifted history and crop anchor remain readable")
+        print("PASS: \(checks) Store clock checks cover live game anchors, running/paused/repeated rollback, shifted valid final history, idle corrected save time, true preview startup recovery without phantom seconds, and failed pause/finish retry with exact cumulative progress")
     }
 }

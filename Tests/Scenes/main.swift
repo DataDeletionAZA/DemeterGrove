@@ -51,13 +51,104 @@ for potion in Potion.all {
     assert(data.garden.ingredients[potion.ingredient] == 1 && data.garden.economy.finds[potion.material] == 1)
     assert(!data.embark(.potions,recipe:potion.id))
     assert(data.garden.ingredients[potion.ingredient] == 1 && data.garden.economy.finds[potion.material] == 1)
-    assert(data.collectJourney() == nil)
+    assert(data.collectJourney(.potions) == nil)
     data.sessions[0].seconds+=899
-    assert(data.collectJourney() == nil)
+    assert(data.collectJourney(.potions) == nil)
     data.sessions[0].seconds+=1
-    assert(data.collectJourney() != nil && data.garden.economy.finds[potion.id] == 1)
-    assert(data.collectJourney() == nil && data.garden.economy.finds[potion.id] == 1)
+    assert(data.collectJourney(.potions) != nil && data.garden.economy.finds[potion.id] == 1)
+    assert(data.collectJourney(.potions) == nil && data.garden.economy.finds[potion.id] == 1)
 }
+let journeyDate=Date(timeIntervalSince1970:1_800_000_000)
+func journeyFixture() -> AppData {
+    var data=AppData()
+    data.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:journeyDate,seconds:100000)]
+    data.garden.ingredients["薄荷"]=2
+    data.garden.economy.finds["月光草"]=2
+    return data
+}
+for order:[JourneyKind] in [[.fishing,.adventure,.potions],[.potions,.adventure,.fishing]] {
+    var data=journeyFixture()
+    for kind in order { assert(data.embark(kind,recipe:kind == .potions ? "dew":nil,at:journeyDate)) }
+    assert(data.garden.economy.activeJourneys.count == 3)
+    let original=data.garden.economy.activeJourneys
+    let ingredients=data.garden.ingredients,finds=data.garden.economy.finds
+    for kind in order { assert(!data.embark(kind,recipe:kind == .potions ? "dew":nil,at:journeyDate)) }
+    assert(data.garden.ingredients == ingredients && data.garden.economy.finds == finds)
+    assert(data.collectJourney(.fishing,at:journeyDate) == nil)
+    data.sessions[0].seconds+=900
+    assert(!data.embark(.fishing,at:journeyDate) && !data.embark(.potions,recipe:"dew",at:journeyDate))
+    assert(data.collectJourney(.fishing,at:journeyDate) != nil)
+    assert(data.collectJourney(.fishing,at:journeyDate) == nil)
+    assert(data.garden.economy.trip(.adventure)?.startedAt == original.first{$0.kind == .adventure}?.startedAt)
+    assert(data.collectJourney(.adventure,at:journeyDate) == nil)
+    assert(!data.embark(.adventure,at:journeyDate))
+    assert(data.collectJourney(.potions,at:journeyDate) != nil && data.collectJourney(.potions,at:journeyDate) == nil)
+    assert(data.garden.economy.finds["dew"] == 1 && data.garden.economy.expeditions == 2)
+    assert(data.embark(.fishing,at:journeyDate))
+    data.sessions[0].seconds+=300
+    assert(data.collectJourney(.adventure,at:journeyDate) != nil && data.collectJourney(.adventure,at:journeyDate) == nil)
+    assert(data.garden.economy.activeJourneys.count == 1 && data.garden.economy.trip(.fishing)?.progress(data.totalFocus) == 1.0/3)
+    _ = try data.validated(at:journeyDate)
+}
+var liveJourney=journeyFixture()
+liveJourney.timer=TimerRun(kind:.stopwatch,target:1,taskTitle:"阅读",startedAt:journeyDate,resumedAt:journeyDate)
+let embarkDate=journeyDate.addingTimeInterval(125.25)
+assert(liveJourney.embark(.fishing,at:embarkDate) && liveJourney.embark(.adventure,at:embarkDate))
+assert(liveJourney.garden.economy.trip(.fishing)?.startedAt == 100125.25)
+let collectionDate=embarkDate.addingTimeInterval(900)
+assert(liveJourney.collectJourney(.fishing,at:collectionDate.addingTimeInterval(-0.25)) == nil)
+assert(liveJourney.collectJourney(.fishing,at:collectionDate) != nil && liveJourney.collectJourney(.fishing,at:collectionDate) == nil)
+let adventureProgress=liveJourney.garden.economy.trip(.adventure)!.progress(liveJourney.gameFocus(at:collectionDate))
+liveJourney.timer!.pause(at:collectionDate)
+assert(liveJourney.garden.economy.trip(.adventure)?.progress(liveJourney.gameFocus(at:collectionDate.addingTimeInterval(500))) == adventureProgress)
+_ = liveJourney.finishTimer(at:collectionDate.addingTimeInterval(500))
+assert(liveJourney.garden.economy.trip(.adventure)?.progress(liveJourney.totalFocus) == adventureProgress)
+liveJourney.timer=TimerRun(kind:.rest,target:300,taskTitle:"休息",startedAt:collectionDate,resumedAt:collectionDate)
+assert(liveJourney.collectJourney(.adventure,at:collectionDate.addingTimeInterval(300)) == nil)
+_ = liveJourney.finishTimer(at:collectionDate.addingTimeInterval(300))
+_ = try liveJourney.validated(at:collectionDate.addingTimeInterval(500))
+let journeySaveFolder=FileManager.default.temporaryDirectory.appendingPathComponent("daygarden-journeys-\(UUID().uuidString)")
+try FileManager.default.createDirectory(at:journeySaveFolder,withIntermediateDirectories:true)
+defer {try? FileManager.default.removeItem(at:journeySaveFolder)}
+let journeySave=journeySaveFolder.appendingPathComponent("garden.json")
+for kind in JourneyKind.allCases {
+    var legacy=journeyFixture()
+    legacy.garden.economy.journey=Journey(kind:kind,startedAt:legacy.totalFocus-450,duration:kind == .adventure ? 1200:900,recipe:kind == .potions ? "dew":nil)
+    try JSONEncoder().encode(legacy).write(to:journeySave)
+    var restored=try SaveFile.read(journeySave)
+    let trip=restored.garden.economy.trip(kind)!
+    assert(restored.garden.ingredients == legacy.garden.ingredients && restored.garden.economy.finds == legacy.garden.economy.finds)
+    assert(restored.garden.economy.journey == nil && restored.garden.economy.activeJourneys.count == 1)
+    assert(trip.startedAt == legacy.totalFocus-450 && trip.duration == legacy.garden.economy.journey!.duration && trip.recipe == legacy.garden.economy.journey!.recipe)
+    assert(restored.collectJourney(kind,at:journeyDate) == nil)
+    restored.sessions[0].seconds+=trip.duration-450
+    try SaveFile.write(restored,to:journeySave)
+    restored=try SaveFile.read(journeySave)
+    assert(restored.collectJourney(kind,at:journeyDate) != nil)
+    let finds=restored.garden.economy.finds
+    try SaveFile.write(restored,to:journeySave)
+    restored=try SaveFile.read(journeySave)
+    assert(restored.garden.economy.activeJourneys.isEmpty && restored.collectJourney(kind,at:journeyDate) == nil)
+    assert(restored.garden.economy.finds == finds && restored.garden.economy.expeditions == 1)
+}
+var simultaneous=journeyFixture()
+assert(simultaneous.embark(.fishing,at:journeyDate) && simultaneous.embark(.adventure,at:journeyDate) && simultaneous.embark(.potions,recipe:"dew",at:journeyDate))
+try SaveFile.write(simultaneous,to:journeySave)
+simultaneous=try SaveFile.read(journeySave)
+assert(simultaneous.garden.economy.activeJourneys.count == 3)
+assert(simultaneous.garden.economy.activeJourneys.allSatisfy{$0.startedAt == 100000})
+simultaneous.sessions[0].seconds+=900
+assert(simultaneous.collectJourney(.potions,at:journeyDate) != nil && simultaneous.collectJourney(.fishing,at:journeyDate) != nil)
+try SaveFile.write(simultaneous,to:journeySave)
+simultaneous=try SaveFile.read(journeySave)
+assert(simultaneous.garden.economy.activeJourneys.count == 1 && simultaneous.garden.economy.trip(.adventure)?.duration == 1200)
+assert(simultaneous.collectJourney(.potions,at:journeyDate) == nil && simultaneous.collectJourney(.fishing,at:journeyDate) == nil)
+assert(simultaneous.embark(.fishing,at:journeyDate))
+let savedTrip=simultaneous.garden.economy.trip(.fishing)!
+simultaneous.garden.economy.activeJourneys.append(savedTrip)
+assert((try? simultaneous.validated(at:journeyDate)) == nil)
+print("PASS: independent fishing/adventure/potion runs, same-kind exclusion, separate one-time collection, exact legacy progress migration, new save reload and duplicate-kind rejection")
+
 var mismatch=PotionSelection()
 assert(mismatch.add("薄荷",kind:.material,available:1))
 assert(mismatch.add("月光草",kind:.ingredient,available:1))

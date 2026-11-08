@@ -83,6 +83,8 @@ struct TimerRun: Codable, Identifiable, Equatable {
     var segments: [FocusInterval]? = nil
     var pauseIntervals: [FocusInterval]? = nil
     var pausedAt: Date? = nil
+    var gameReminders: GameReminderOptions? = nil
+    var notifiedGameEvents: [String]? = nil
     func elapsed(at now: Date) -> TimeInterval {
         let raw = accumulated + (resumedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
         return kind == .stopwatch ? raw : min(target, raw)
@@ -266,6 +268,7 @@ struct Preferences: Codable {
     var breakMinutes = 5
     var sound = true
     var notifications = false
+    var gameReminders: GameReminderOptions? = nil
     var idlePose: Int? = nil
     var petSkin: String? = nil
     var selectedPetSkin: PetSkin { PetSkin(rawValue: petSkin ?? "") ?? .casual }
@@ -298,6 +301,10 @@ struct AppData: Codable {
     var preferences = Preferences()
     var totalFocus: Double { sessions.filter { $0.kind != .rest }.reduce(0) { $0 + $1.seconds } }
 
+    func gameFocus(at date: Date) -> Double {
+        totalFocus + (timer.flatMap { $0.kind == .rest ? nil : $0.elapsed(at: date) } ?? 0)
+    }
+
     mutating func finishTimer(at now: Date) -> (seconds: Double, water: Int, rest: Bool)? {
         guard let run = timer else { return nil }
         timer = nil
@@ -313,21 +320,33 @@ struct AppData: Codable {
         return (seconds, water, run.kind == .rest)
     }
 
-    mutating func plant(_ crop: Crop, in id: UUID) -> Bool {
+    mutating func plant(_ crop: Crop, in id: UUID, at date: Date = Date()) -> Bool {
         guard let i = garden.plots.firstIndex(where: { $0.id == id }),
               garden.plots[i].crop == nil, garden.cropSeeds[crop.rawValue,default:0] > 0, garden.water > 0 else { return false }
         garden.cropSeeds[crop.rawValue,default:0] -= 1
         garden.water -= 1
         garden.plots[i].crop = crop
-        garden.plots[i].plantedAt = totalFocus
+        garden.plots[i].plantedAt = gameFocus(at:date)
         garden.plots[i].duration = crop.seconds * (1-Double(garden.rank(.watering))*0.10)
         garden.plots[i].bonus = 0
+        timer?.notifiedGameEvents?.removeAll { $0.hasPrefix("crop/\(id)/") }
         return true
     }
 
-    mutating func harvest(_ id: UUID) -> Bool {
+    mutating func plantRandomly(at date: Date = Date()) -> Int {
+        var count = 0
+        for id in garden.plots.filter({ $0.crop == nil }).map(\.id).shuffled() {
+            guard garden.water > 0,
+                  let crop = Crop.allCases.filter({ garden.cropSeeds[$0.rawValue,default:0] > 0 }).randomElement(),
+                  plant(crop,in:id,at:date) else { break }
+            count += 1
+        }
+        return count
+    }
+
+    mutating func harvest(_ id: UUID, at date: Date = Date()) -> Bool {
         guard let i = garden.plots.firstIndex(where: { $0.id == id }),
-              let crop = garden.plots[i].crop, garden.plots[i].progress(totalFocus) >= 1 else { return false }
+              let crop = garden.plots[i].crop, garden.plots[i].progress(gameFocus(at: date)) >= 1 else { return false }
         garden.ingredients[crop.harvestName, default: 0] += harvestYield * (crop == .starlightCarrot ? 2 : 1)
         garden.plots[i].crop = nil
         return true
@@ -360,17 +379,17 @@ struct AppData: Codable {
         return true
     }
 
-    mutating func stock(_ dish: Dish) -> Bool {
+    mutating func stock(_ dish: Dish, at date: Date = Date()) -> Bool {
         guard let dish = garden.recipes[dish.id] ?? Dish.allCases.first(where: { $0.id == dish.id }),
               dish.isValid, garden.orders.count < garden.capacity, garden.dishes[dish.rawValue, default: 0] > 0 else { return false }
         garden.dishes[dish.rawValue, default: 0] -= 1
-        let order=ShopOrder(dish:dish,placedAt:totalFocus,proceeds:salePrice(dish))
+        let order=ShopOrder(dish:dish,placedAt:gameFocus(at:date),proceeds:salePrice(dish))
         if garden.order == nil {garden.order=order} else {garden.economy.extraOrders.append(order)}
         return true
     }
 
-    mutating func collectSale(_ id:UUID?=nil) -> Bool {
-        guard let order = garden.orders.first(where:{$0.ready(totalFocus) && (id == nil || id == $0.id)}) else { return false }
+    mutating func collectSale(_ id:UUID?=nil, at date:Date=Date()) -> Bool {
+        guard let order = garden.orders.first(where:{$0.ready(gameFocus(at:date)) && (id == nil || id == $0.id)}) else { return false }
         garden.coins += order.price
         garden.sales += 1
         if garden.order?.id == order.id {garden.order=nil}
@@ -451,7 +470,9 @@ struct AppData: Codable {
         try require((0...2).contains(preferences.hair) && (0...2).contains(preferences.clothing))
         try require(preferences.idlePose.map { (0...1).contains($0) } ?? true)
         try require(preferences.weekStartsOn.map { $0 == 1 || $0 == 2 } ?? true)
-        try require(garden.plots.allSatisfy { $0.plantedAt.isFinite && $0.plantedAt >= 0 && $0.plantedAt <= totalFocus })
+        let availableGameFocus = gameFocus(at: max(now, savedAt))
+        try require(availableGameFocus.isFinite && availableGameFocus < 1_000_000_000_000)
+        try require(garden.plots.allSatisfy { $0.plantedAt.isFinite && $0.plantedAt >= 0 && $0.plantedAt <= availableGameFocus })
         try require(garden.plots.allSatisfy { $0.bonus.isFinite && (0...1_000_000_000).contains($0.bonus) && ($0.duration.map{$0.isFinite && $0>0 && $0<=1500} ?? true) })
         try require((1...180).contains(preferences.focusMinutes) && (1...60).contains(preferences.breakMinutes))
         if let timer {
@@ -461,11 +482,12 @@ struct AppData: Codable {
             try require(timer.kind == .stopwatch || timer.accumulated <= timer.target)
             try require(!sessions.contains { $0.id == timer.id })
             try require(timer.historyIsValid)
+            try require((timer.notifiedGameEvents?.count ?? 0) <= 256 && (timer.notifiedGameEvents ?? []).allSatisfy { $0.count <= 160 })
         }
         try require(garden.recipes.allSatisfy { $0.key == $0.value.id && $0.value.isValid })
         try require(garden.crafts.values.allSatisfy { (0...1_000_000_000).contains($0) })
         try require(garden.orders.count <= garden.capacity && Set(garden.orders.map(\.id)).count == garden.orders.count)
-        for order in garden.orders { try require(order.dish.isValid && order.placedAt.isFinite && order.placedAt >= 0 && order.placedAt <= totalFocus && (1...1_000_000).contains(order.price)) }
+        for order in garden.orders { try require(order.dish.isValid && order.placedAt.isFinite && order.placedAt >= 0 && order.placedAt <= availableGameFocus && (1...1_000_000).contains(order.price)) }
         let cosmetics=Set(Cosmetic.all.map(\.id))
         try require(garden.economy.owned.isSubset(of:cosmetics))
         try require(["","base"].contains(garden.economy.outfit) || (garden.economy.owned.contains(garden.economy.outfit) && Cosmetic.all.contains{$0.id == garden.economy.outfit && $0.slot == .outfit}))
@@ -482,14 +504,17 @@ struct AppData: Codable {
         try require(garden.economy.redeemedKeys>=0 && garden.economy.redeemedKeys<=keys.values.reduce(0,+)/1000)
         try require(garden.economy.redeemedActions.map { $0 >= garden.economy.redeemedKeys*1000 && $0 <= totalActions } ?? true)
         try require(garden.economy.finds.allSatisfy{findPrice($0.key)>0 && (0...1_000_000_000).contains($0.value)} && (0...1_000_000_000).contains(garden.economy.expeditions))
-        if let trip=garden.economy.journey {
-            try require(trip.startedAt.isFinite && trip.startedAt>=0 && trip.startedAt<=totalFocus && trip.duration.isFinite && (300...1200).contains(trip.duration))
+        try require(garden.economy.journeys == nil || garden.economy.journey == nil)
+        try require(Set(garden.economy.activeJourneys.map(\.kind)).count == garden.economy.activeJourneys.count)
+        for trip in garden.economy.activeJourneys {
+            try require(trip.startedAt.isFinite && trip.startedAt>=0 && trip.startedAt<=availableGameFocus && trip.duration.isFinite && (300...1200).contains(trip.duration))
             try require(levelProgress.level >= trip.kind.level)
             try require(trip.kind == .potions ? Potion.all.contains{$0.id == trip.recipe} && trip.duration == 900 : trip.recipe == nil)
             try require(trip.kind != .adventure || trip.duration == 1200)
             try require(trip.kind != .fishing || [900.0,780,660,540].contains(trip.duration))
         }
         var result = self
+        if garden.economy.journey != nil { result.garden.economy.activeJourneys = garden.economy.activeJourneys }
         let boundary = preferences.dayBoundary
         result.migrateRecurrences(at: boundary.day(for: now), calendar: boundary.calendar)
         return result

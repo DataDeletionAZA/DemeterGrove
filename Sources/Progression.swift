@@ -154,8 +154,14 @@ struct Economy: Codable {
     var redeemedActions:Int? = nil
     var extraOrders: [ShopOrder] = []
     var journey: Journey?
+    var journeys: [Journey]? = nil
     var finds: [String:Int] = [:]
     var expeditions = 0
+    var activeJourneys: [Journey] {
+        get { journeys ?? journey.map { [$0] } ?? [] }
+        set { journeys = newValue; journey = nil }
+    }
+    func trip(_ kind:JourneyKind) -> Journey? { activeJourneys.first { $0.kind == kind } }
     func adjustment(for id:String) -> WearAdjustment {
         adjustments?[id] ?? WearAdjustment()
     }
@@ -220,26 +226,26 @@ extension AppData {
     mutating func wear(_ id:String,outfit:Bool) -> Bool {
         wear(outfit ? (id.isEmpty ? "black":id == "base" ? "":id):id,slot:outfit ? .outfit:.head)
     }
-    mutating func embark(_ kind:JourneyKind,recipe:String?=nil) -> Bool {
-        guard levelProgress.level>=kind.level,garden.economy.journey == nil else{return false}
+    mutating func embark(_ kind:JourneyKind,recipe:String?=nil,at date:Date=Date()) -> Bool {
+        guard levelProgress.level>=kind.level,garden.economy.trip(kind) == nil else{return false}
         let duration:Double
         if kind == .potions {
             guard let potion=Potion.all.first(where:{$0.id == recipe}),garden.ingredients[potion.ingredient,default:0]>0,garden.economy.finds[potion.material,default:0]>0 else{return false}
             garden.ingredients[potion.ingredient,default:0]-=1;garden.economy.finds[potion.material,default:0]-=1
             duration=900
         } else { duration=kind == .fishing ? Double(900-garden.rank(.rod)*120) : 1200 }
-        garden.economy.journey=Journey(kind:kind,startedAt:totalFocus,duration:duration,recipe:kind == .potions ? recipe : nil)
+        garden.economy.activeJourneys.append(Journey(kind:kind,startedAt:gameFocus(at:date),duration:duration,recipe:kind == .potions ? recipe : nil))
         return true
     }
-    mutating func collectJourney() -> String? {
-        guard let trip=garden.economy.journey,trip.progress(totalFocus)>=1 else{return nil}
+    mutating func collectJourney(_ kind:JourneyKind,at date:Date=Date()) -> String? {
+        guard let trip=garden.economy.trip(kind),trip.progress(gameFocus(at:date))>=1 else{return nil}
         let item:String, count:Int
         switch trip.kind {
         case .fishing:item=["银鳞鱼","月光鱼","金纹鱼"][garden.economy.expeditions%3];count=1
         case .adventure:item=["月光草","琥珀石","星砂"][garden.economy.expeditions%3];count=1+garden.rank(.wand)
         case .potions:guard let id=trip.recipe,Potion.all.contains(where:{$0.id == id}) else{return nil};item=id;count=1
         }
-        garden.economy.finds[item,default:0]+=count;garden.economy.journey=nil;garden.economy.expeditions+=1
+        garden.economy.finds[item,default:0]+=count;garden.economy.activeJourneys.removeAll{$0.kind == kind};garden.economy.expeditions+=1
         return "获得 \(Potion.all.first{$0.id == item}?.name ?? item) ×\(count)"
     }
     func findPrice(_ item:String) -> Int {

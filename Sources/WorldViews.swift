@@ -231,14 +231,12 @@ struct MapPage: View {
     @State private var hint=""
     @State private var showingInventory=false
     @State private var showingTackleShop=false
-    private var trip:Journey? {store.data.garden.economy.journey}
+    private var trip:Journey? {store.data.garden.economy.trip(journey)}
     private var unlocked:Bool {store.data.levelProgress.level>=journey.level}
-    private var matching:Bool {trip?.kind == journey}
     private var actionLabel:String {
         if !unlocked {return "等级 \(journey.level) 解锁"}
         if let trip {
-            if !matching {return "先完成\(SceneNavigation.title(trip.kind.rawValue))"}
-            return trip.progress(store.data.totalFocus)>=1 ? "领取收获":"继续专注"
+            return trip.progress(store.gameFocus)>=1 ? "领取收获":"继续专注"
         }
         return journey == .fishing ? "抛竿":"出发"
     }
@@ -258,9 +256,9 @@ struct MapPage: View {
                     ZStack {
                         RoomBackdrop(name:journey.scene).frame(width:w,height:h)
                         ObjectButton(label:actionLabel,action:act,caption:actionLabel) {GameSprite(sheet:"Equipment",index:journey.icon,size:w*0.13)}
-                            .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.51:0.64),y:h*(journey == .fishing ? 0.54:0.73))
+                            .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.48:0.64),y:h*(journey == .fishing ? 0.51:0.73))
                         if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"户外地图"){SceneNavigation.open("户外地图",store:store)}}
-                        if matching {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
+                        if trip != nil {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
                         if !unlocked {
                             Palette.paper.opacity(0.55).allowsHitTesting(false)
                             Label("等级 \(journey.level) 解锁",systemImage:"lock.fill").font(.headline).padding(14).magicSurface(Palette.paper)
@@ -286,9 +284,9 @@ struct MapPage: View {
                     }
                 }
                 if journey == .fishing {Button("渔具店") {showingTackleShop=true}}
-                if let trip,matching {
-                    PixelProgress(value:trip.progress(store.data.totalFocus))
-                    Text(trip.progress(store.data.totalFocus)>=1 ? "收获已备好":"还需 \(Int(ceil(max(0,trip.duration-(store.data.totalFocus-trip.startedAt))/60))) 分钟专注")
+                if let trip {
+                    PixelProgress(value:trip.progress(store.gameFocus))
+                    Text(trip.progress(store.gameFocus)>=1 ? "收获已备好":"还需 \(Int(ceil(max(0,trip.duration-(store.gameFocus-trip.startedAt))/60))) 分钟专注")
                         .font(.caption).foregroundStyle(Palette.goldLight).fixedSize(horizontal:false,vertical:true)
                 }
                 if !hint.isEmpty {Text(hint).font(.caption).foregroundStyle(Palette.goldLight).fixedSize(horizontal:false,vertical:true)}
@@ -351,10 +349,9 @@ struct MapPage: View {
     private func act() {
         guard unlocked else{return}
         if let trip {
-            guard matching else{hint="\(SceneNavigation.title(trip.kind.rawValue))还未结束。";return}
-            guard trip.progress(store.data.totalFocus)>=1 else {SceneNavigation.open("计时器",store:store);return}
+            guard trip.progress(store.gameFocus)>=1 else {SceneNavigation.open("计时器",store:store);return}
             var result:String?
-            if store.commitGameChange({result=$0.collectJourney();return result != nil}),let result {store.message=result;hint=""}
-        } else if store.commitGameChange({$0.embark(journey)}) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}
+            if store.commitGameChange({result=$0.collectJourney(journey,at:store.now);return result != nil}),let result {store.message=result;hint=""}
+        } else if store.commitGameChange({$0.embark(journey,at:store.now)}) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}
     }
 }

@@ -49,8 +49,8 @@ extension AppData {
         let query=search.trimmingCharacters(in:.whitespacesAndNewlines)
         return inventory.filter {(category == .all || $0.category == category) && (query.isEmpty || $0.name.localizedStandardContains(query))}
     }
-    mutating func unstock(_ id:UUID)->Bool {
-        guard let order=garden.orders.first(where:{$0.id == id}),!order.ready(totalFocus) else{return false}
+    mutating func unstock(_ id:UUID, at date:Date=Date())->Bool {
+        guard let order=garden.orders.first(where:{$0.id == id}),!order.ready(gameFocus(at:date)) else{return false}
         if garden.order?.id == id {garden.order=nil}
         else {garden.economy.extraOrders.removeAll{$0.id == id}}
         garden.dishes[order.dish.id,default:0]+=1

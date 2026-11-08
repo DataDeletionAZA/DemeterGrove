@@ -100,6 +100,7 @@ final class GardenStore: ObservableObject {
             }
             if data.timer != nil {
                 data.timer?.pause(at: data.savedAt)
+                if data.savedAt > now { data.timer?.shiftDates(by: now.timeIntervalSince(data.savedAt)) }
                 message = "上次的计时已暂停，保留至最近一次保存的进度。"
             }
         } catch {
@@ -148,7 +149,7 @@ final class GardenStore: ObservableObject {
         guard !storageLocked else { saveStatus = "保存失败"; return false }
         saveWork?.cancel()
         var snapshot = data
-        snapshot.savedAt = Date()
+        snapshot.savedAt = max(Date(), now)
         do {
             try SaveFile.write(snapshot, to: file)
             saveStatus = "已保存"
@@ -168,7 +169,7 @@ final class GardenStore: ObservableObject {
         guard !storageLocked else { return }
         if let run = data.timer, run.id != blockedFocusFinishID, run.resumedAt != nil, run.kind != .stopwatch, run.elapsed(at: date) >= run.target {
             finishTimer(at: date)
-        }
+        } else { deliverGameReminders(at: date) }
         if !preview, data.preferences.notifications, date.timeIntervalSince(lastReminderRefresh) >= 6*3600 { refreshReminders() }
         if date.timeIntervalSince(lastCheckpoint) >= 20 {
             lastCheckpoint = date
@@ -181,6 +182,10 @@ final class GardenStore: ObservableObject {
 
     private var fixedDayBoundary: DayBoundary { DayBoundary(timeZoneID: calendar.timeZone.identifier, rolloverMinutes: dayBoundary.rolloverMinutes, firstWeekday: calendar.firstWeekday) }
     private func updateClock(_ date: Date) {
+        if !storageLocked, date < now, data.timer != nil {
+            // Keep the in-flight timer's elapsed time when the system clock moves back.
+            data.timer?.shiftDates(by: date.timeIntervalSince(now))
+        }
         let current = fixedDayBoundary
         if let old = observedDayBoundary, old != current {
             let key = old.key(for: date)
@@ -224,6 +229,7 @@ final class GardenStore: ObservableObject {
         return true
     }
     var todayActions: Int { todayKeys + todayClicks }
+    var gameFocus: Double { data.gameFocus(at: now) }
     func openJournal(date: Date) {
         journalDate = date
         selectedPage = "日记"
@@ -491,16 +497,21 @@ final class GardenStore: ObservableObject {
     }
 
     @discardableResult
-    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil, at date: Date = Date()) -> Bool {
+    func startTimer(kind: TimerKind, minutes: Int, task: GardenTask?, title: String? = nil, occurrenceID: String? = nil, gameReminders: GameReminderOptions? = nil, at date: Date = Date()) -> Bool {
         guard !storageLocked else { return false }
         guard data.timer == nil else { message = "先结束或继续当前计时，再开始下一段。"; return false }
         guard kind != .rest || canStartBreak else { message = "完成一段番茄钟后，可以开始休息。"; return false }
+        updateClock(date)
         let previous = data
+        let options = gameReminders ?? data.preferences.gameReminders ?? GameReminderOptions()
+        let alreadyReady = data.gameReadyEvents(at: date).map(\.id)
         data.pomodoroBreakReady = false
         data.timer = TimerRun(kind: kind, target: Double(max(1, minutes)) * 60,
                               taskID: kind == .rest ? nil : task?.id,
                               taskTitle: kind == .rest ? "休息" : (task?.title ?? title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? "自由专注"),
-                              startedAt: date, resumedAt: date, occurrenceID: kind == .rest ? nil : occurrenceID, segments: [], pauseIntervals: [])
+                              startedAt: date, resumedAt: date, occurrenceID: kind == .rest ? nil : occurrenceID, segments: [], pauseIntervals: [],
+                              gameReminders: kind == .rest ? nil : options, notifiedGameEvents: kind == .rest ? nil : alreadyReady)
+        if kind != .rest { data.preferences.gameReminders = options }
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
         now = date
         blockedFocusFinishID = nil
@@ -511,6 +522,7 @@ final class GardenStore: ObservableObject {
     @discardableResult
     func pauseTimer(at date: Date = Date()) -> Bool {
         guard !storageLocked, data.timer?.resumedAt != nil else { return false }
+        updateClock(date)
         let previous = data
         data.timer?.pause(at: date)
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
@@ -521,6 +533,7 @@ final class GardenStore: ObservableObject {
     @discardableResult
     func resumeTimer(at date: Date = Date()) -> Bool {
         guard !storageLocked, data.timer != nil, data.timer?.resumedAt == nil else { return false }
+        updateClock(date)
         let previous = data
         data.timer?.resume(at: date)
         guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return false }
@@ -531,6 +544,8 @@ final class GardenStore: ObservableObject {
     @discardableResult
     func finishTimer(at date: Date = Date()) -> Bool {
         guard !storageLocked, let run = data.timer else { return false }
+        updateClock(date)
+        let gameNotices = deliverGameReminders(at: date)
         let previous = data
         let previousLevel = data.levelProgress.level
         guard let result = data.finishTimer(at: date) else { return false }
@@ -547,6 +562,7 @@ final class GardenStore: ObservableObject {
         if data.preferences.sound { NSSound(named: "Glass")?.play() }
         if run.kind == .pomodoro && canStartBreak { message += " 可以开始 \(data.preferences.breakMinutes) 分钟休息。" }
         if data.levelProgress.level > previousLevel { message += " 升到 \(data.levelProgress.level) 级了。" }
+        if !gameNotices.isEmpty { message += "\n" + gameNotices.map(\.text).joined(separator: "\n") }
         refreshTimerReminder()
         if result.seconds > 0 { triggerPetDialogue(result.rest ? .restEnd : .focusEnd, at: date) }
         return true
@@ -657,6 +673,30 @@ final class GardenStore: ObservableObject {
             return false
         }
         return true
+    }
+
+    @discardableResult
+    func deliverGameReminders(at date: Date) -> [GameReadyNotice] {
+        guard !storageLocked else { return [] }
+        var candidate = data
+        let notices = candidate.takeGameNotices(at: date)
+        guard !notices.isEmpty else { return [] }
+        let previous = data
+        data = candidate
+        guard save() else { data = previous; saveWork?.cancel(); saveStatus = "保存失败"; return [] }
+        message = notices.map(\.text).joined(separator: "\n")
+        if !preview, data.preferences.notifications {
+            for notice in notices {
+                let content = UNMutableNotificationContent()
+                content.title = notice.kind.title; content.body = notice.text
+                if data.preferences.sound { content.sound = .default }
+                let request = UNNotificationRequest(identifier: "garden-ready-" + UUID().uuidString, content: content, trigger: nil)
+                UNUserNotificationCenter.current().add(request) { [weak self] failure in
+                    if let failure { DispatchQueue.main.async { self?.error = "提醒未发送成功：\(failure.localizedDescription)" } }
+                }
+            }
+        }
+        return notices
     }
 
     func triggerPetDialogue(_ event: PetDialogueEvent, at date: Date = Date()) {

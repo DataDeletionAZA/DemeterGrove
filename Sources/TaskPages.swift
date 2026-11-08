@@ -69,6 +69,7 @@ struct TaskRow: View {
     @State private var editing = false
     @State private var deleting = false
     @State private var more = false
+    @State private var startingFocus = false
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Button { store.toggleTaskOccurrence(occurrence) } label: {
@@ -89,9 +90,9 @@ struct TaskRow: View {
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(.plain).help("编辑任务")
             if occurrence.completedAt == nil {
-                Button { store.startTimer(kind: .pomodoro, minutes: store.data.preferences.focusMinutes, task: task, occurrenceID: occurrence.id) } label: {
+                Button { startingFocus = true } label: {
                     Image(systemName: "play.circle").font(.system(size: 20))
-                }.buttonStyle(.plain).foregroundStyle(Palette.sage).help("为这件任务开始番茄钟")
+                }.buttonStyle(.plain).foregroundStyle(Palette.sage).help("为这件任务开始番茄钟").accessibilityLabel("为\(task.title)开始番茄钟")
             }
             Button { more.toggle() } label: {
                 Image(systemName: "ellipsis").frame(width: 24, height: 26)
@@ -103,6 +104,7 @@ struct TaskRow: View {
                     }.padding(14).frame(width: 180).magicSurface(Palette.paper, strong: true).magicControls()
                 }
         }.padding(.vertical, 6)
+            .sheet(isPresented: $startingFocus) { TaskFocusStart(store: store, occurrence: occurrence) }
             .sheet(isPresented: $editing) { TaskEditor(store: store, task: task) }
             .alert(task.scheduleRevisions == nil ? "删除这件任务？" : "删除整个周期计划？", isPresented: $deleting) {
                 Button("取消", role: .cancel) { }
@@ -229,9 +231,11 @@ struct TimerControls: View {
     @State private var occurrenceID: String?
     @State private var customTitle = "自由专注"
     @State private var selectingTask = false
+    @State private var gameReminders: GameReminderOptions
     init(store: GardenStore, compact: Bool) {
         self.store = store
         self.compact = compact
+        _gameReminders = State(initialValue: store.data.preferences.gameReminders ?? GameReminderOptions())
     }
     var body: some View {
         VStack(spacing: compact ? 17 : 24) {
@@ -268,9 +272,10 @@ struct TimerControls: View {
                         Image(systemName: "chevron.right")
                     }.frame(maxWidth: compact ? 290 : 380)
                 }.buttonStyle(PixelButtonStyle()).accessibilityLabel("选择专注事项").help("选择现有任务、新建任务或填写本次名称")
+                GameReminderPicker(options: $gameReminders, title: "本次提醒").frame(maxWidth: 400)
                 HStack(spacing: 12) {
                     Button("开始专注", systemImage: "play.fill") {
-                        store.startTimer(kind: kind, minutes: minutes, task: store.data.tasks.first { $0.id == taskID }, title: customTitle, occurrenceID: occurrenceID)
+                        store.startTimer(kind: kind, minutes: minutes, task: store.data.tasks.first { $0.id == taskID }, title: customTitle, occurrenceID: occurrenceID, gameReminders: gameReminders)
                     }.buttonStyle(PixelButtonStyle(primary: true)).controlSize(.large)
                     if store.canStartBreak {
                         Button("休息 \(store.data.preferences.breakMinutes) 分钟") {
@@ -285,6 +290,47 @@ struct TimerControls: View {
                     taskID = occurrence?.task.id; occurrenceID = occurrence?.id; customTitle = title; selectingTask = false
                 }
             }
+    }
+}
+
+struct GameReminderPicker: View {
+    @Binding var options: GameReminderOptions
+    var title: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title).font(.callout).foregroundStyle(Palette.goldLight)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), alignment: .leading)], alignment: .leading, spacing: 8) {
+                ForEach(GameReminderKind.allCases) { kind in
+                    Toggle(kind.title, isOn: Binding(get: { options.enabled.contains(kind) }, set: { enabled in
+                        if enabled { options.enabled.insert(kind) } else { options.enabled.remove(kind) }
+                    })).font(.caption).toggleStyle(PixelToggleStyle()).accessibilityLabel(title + "：" + kind.title)
+                }
+            }
+        }
+    }
+}
+
+private struct TaskFocusStart: View {
+    @ObservedObject var store: GardenStore
+    var occurrence: TaskOccurrence
+    @State private var reminders: GameReminderOptions
+    @Environment(\.dismiss) private var dismiss
+    init(store: GardenStore, occurrence: TaskOccurrence) {
+        self.store = store; self.occurrence = occurrence
+        _reminders = State(initialValue: store.data.preferences.gameReminders ?? GameReminderOptions())
+    }
+    var body: some View {
+        SceneDialog(preferred: CGSize(width: 400, height: 350)) {
+            HStack { Text("开始专注").font(.title2); Spacer(); Button("关闭") { dismiss() } }
+        } content: {
+            Text(occurrence.task.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+            PixelStepper(title: "时长", value: $store.focusDraftMinutes, range: 1...180)
+            GameReminderPicker(options: $reminders, title: "本次提醒")
+        } footer: {
+            Button("开始专注") {
+                if store.startTimer(kind: .pomodoro, minutes: store.focusDraftMinutes, task: occurrence.task, occurrenceID: occurrence.id, gameReminders: reminders) { dismiss() }
+            }.buttonStyle(PixelButtonStyle(primary: true))
+        }
     }
 }
 

@@ -440,6 +440,66 @@ enum CasualSkinChecks {
             }
         }
         try check(changed > 0, "Rest eye frames are identical")
+        let blinkTimes: [(Double,Int)] = [(2.69,0),(2.72,1),(2.82,2),(2.91,1),(2.96,0),(7.42,1),(7.52,2),(7.7,0),(7.8,1),(7.9,2)]
+        var blinkFrames: [(String,CGImage)] = []
+        let eyeBounds: [ChibiBody:CGRect] = [
+            .stand:CGRect(x:200,y:515,width:440,height:145),
+            .sit:CGRect(x:247,y:517,width:435,height:164),
+            .focus:CGRect(x:616,y:578,width:384,height:105)
+        ]
+        let fringePoints: [ChibiBody:[CGPoint]] = [
+            .stand:[CGPoint(x:350,y:130),CGPoint(x:361,y:146),CGPoint(x:374,y:167),CGPoint(x:420,y:145)],
+            .sit:[CGPoint(x:337,y:113),CGPoint(x:350,y:136),CGPoint(x:363,y:158),CGPoint(x:419,y:153)],
+            .focus:[CGPoint(x:316,y:106),CGPoint(x:330,y:123),CGPoint(x:338,y:141),CGPoint(x:386,y:132)]
+        ]
+        for (name,phase,idle,body) in configurations where eyeBounds[body] != nil {
+            for stage in [1,2] {
+                let patch = try sourceImage(resourceFolder.appendingPathComponent("Blink/\(name)\(stage).png")), bytes = pixels(patch)
+                for point in fringePoints[body]! {
+                    try check(bytes[(Int(point.y)*patch.width+Int(point.x))*4+3] == 0,"Blink patch covers the original fringe: \(name), \(point)")
+                }
+            }
+            for (time,stage) in blinkTimes {
+                let pose = ChibiPose(phase:phase,time:time,elapsed:10,idlePose:idle)
+                try check(ChibiSkins.blinkStage(for:pose) == stage,"Incorrect blink stage: \(name), \(time)")
+                var suppressed = pose
+                suppressed.reduceMotion = true
+                try check(ChibiSkins.blinkStage(for:suppressed) == 0,"Reduced motion blinks: \(name)")
+                suppressed = pose; suppressed.expressionActive = true
+                try check(ChibiSkins.blinkStage(for:suppressed) == 0,"Blink replaces active expression: \(name)")
+                suppressed = pose; suppressed.phase = 20; suppressed.basePhase = phase; suppressed.elapsed = 0.1
+                try check(ChibiSkins.blinkStage(for:suppressed) == 0,"Blink replaces click reaction: \(name)")
+                for right in [false,true] { for grounded in [false,true] {
+                    let image = try render(ChibiSprite(phase:phase,time:time,elapsed:10,idlePose:idle,facingRight:right,grounded:grounded,skin:.casual))
+                    let baseline = try render(ChibiSprite(phase:phase,time:time,elapsed:10,idlePose:idle,expressionActive:true,facingRight:right,grounded:grounded,skin:.casual))
+                    if stage == 0 {
+                        try check(pixels(image) == pixels(baseline),"Open blink frame changes pose: \(name)")
+                    } else {
+                        try checkFace(pixels(image),baseline:pixels(baseline),width:image.width,
+                            rect:mapped(eyeBounds[body]!,body:body,right:right,grounded:grounded).insetBy(dx:-2,dy:-2),label:"Blink \(name) \(stage)")
+                        try checkFurniture(pixels(image),baseline:pixels(baseline),width:image.width,body:body,right:right,grounded:grounded,label:"Blink \(name)")
+                    }
+                    try checkEdges(image,grounded:grounded,label:"Blink \(name)")
+                    if !right && !grounded && time < 3 {
+                        try write(image,to:output.appendingPathComponent("blink-\(name)-\(time).png"))
+                        blinkFrames.append(("\(name) \(stage)",image))
+                    }
+                }}
+            }
+        }
+        for phase in [10,11,31] {
+            try check(ChibiSkins.blinkStage(for:ChibiPose(phase:phase,time:2.82,elapsed:0.1)) == 0,"Blink changes drag/rest")
+        }
+        try contactSheet(blinkFrames,to:output.appendingPathComponent("blink-contact-sheet.png"),columns:5)
+        for index in 0..<72 {
+            let time = 1.7+Double(index)/24
+            var row: [CGImage] = []
+            for (_,phase,idle,body) in configurations where eyeBounds[body] != nil {
+                row.append(try render(ChibiSprite(phase:phase,time:time,elapsed:10,idlePose:idle,skin:.casual)))
+            }
+            try write(animationRow(row),to:output.appendingPathComponent(String(format:"blink-animation-%03d.png",index)))
+        }
+        print("PASS: open/half/closed/half/open blink timing, \(blinkTimes.count*12) Canvas frame invariants, 72 animation rows, original fringe, expression priority, drag/rest and reduced motion")
         try capture("Rest-open", ChibiSprite(phase: 31, time: 3.2, skin: .casual))
         try contactSheet(frames, to: output.appendingPathComponent("contact-sheet.png"))
         print("PASS: \(frames.count) actual sprite renders, two directions, docked/floating edges, maximum swing/spring, no old clothes, fixed furniture during character motion, eye-only frame differences")
