@@ -16,6 +16,33 @@ import Foundation
     }
     @MainActor static func main() throws {
         let now = Date()
+        check(MineLayer.areas.count == 4 && MineLayer.all.count == 10)
+        check(Set(MineLayer.all.map(\.artworkName)).count == MineLayer.all.count)
+        for area in MineLayer.areas {
+            let layers = MineLayer.layers(in: area)
+            check(!layers.isEmpty)
+            check(MineLayer.visible(in: area, highlighted: nil, selected: nil).id == layers.first!.id)
+            check(layers.first!.adjacent(-1) == nil && layers.last!.adjacent(1) == nil)
+            for (index, layer) in layers.enumerated() {
+                check(layer.depth == index + 1)
+                check(MineLayer.visible(in: area, highlighted: layer.id, selected: layers.first!.id).id == layer.id)
+                check(MineLayer.visible(in: area, highlighted: "invalid", selected: layer.id).id == layer.id)
+                check(layer.adjacent(-1)?.id == (index > 0 ? layers[index - 1].id : nil))
+                check(layer.adjacent(1)?.id == (index + 1 < layers.count ? layers[index + 1].id : nil))
+                if let below = layer.adjacent(1) { check(below.adjacent(-1)?.id == layer.id) }
+            }
+        }
+        check(MineLayer.visible(in: "旧矿场", highlighted: "polar_starlight", selected: "mountain_gold").id == "quarry_coal")
+        check(MineLayer.visible(in: "invalid", highlighted: nil, selected: nil).id == "quarry_coal")
+        for viewport in [CGSize(width: 560, height: 420), CGSize(width: 1000, height: 680), CGSize(width: 1500, height: 900)] {
+            let width = SceneSizing.canvasWidth(viewportWidth: viewport.width)
+            let height = SceneSizing.height(width: width, viewportHeight: viewport.height)
+            let stage = SceneSizing.fitted(in: CGSize(width: width - SceneSizing.sidebar(width: width) - SceneSizing.gap, height: height))
+            check(stage.width > 52 && stage.height > 78)
+            check(stage.width * 0.64 - stage.width * 0.07 > 43)
+            check(stage.width * 0.64 + stage.width * 0.07 < stage.width - 9)
+            check(stage.height * 0.56 + stage.width * 0.07 < stage.height - 39)
+        }
         var fresh = fixture()
         let baseline = fresh.totalFocus
         check(!fresh.advanceMining(to: baseline) && fresh.garden.economy.mining == nil)
@@ -131,6 +158,6 @@ import Foundation
         check(!store.commitGameChange { $0.advanceMining(to: $0.totalFocus) })
         check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
         try manager.removeItem(at: store.file); try manager.moveItem(at: backup, to: store.file)
-        print("PASS: mining unlock deadlines and all area prerequisites, passive layers, one resident multiplier, switching preserves partial work, long-step equivalence, rollback and invalid clocks, pause/rest freeze, 10:1 diamonds, invalid imports, persistence and failed-save rollback")
+        print("PASS: four-area ten-layer vertical navigation, unique artwork routes, bounded wide/narrow scene controls, mining unlock deadlines and all area prerequisites, passive layers, one resident multiplier, switching preserves partial work, long-step equivalence, rollback and invalid clocks, pause/rest freeze, 10:1 diamonds, invalid imports, persistence and failed-save rollback")
     }
 }

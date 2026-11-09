@@ -180,3 +180,47 @@ invalid = decoded.garden.autoShopState
 invalid.receivables = -1
 assert(!invalid.isValid(in: decoded.garden, focus: 300))
 print("PASS: automatic shop timing, pauses/rest, old orders, priorities, unstock, frozen proceeds, large batches and conservation")
+
+var batches=fixture(0)
+var lowBatch=soup,highBatch=soup
+lowBatch.recipeID=soup.id;lowBatch.quality=35;lowBatch.id=Dish.batchID(recipeID:soup.id,quality:35)
+highBatch.recipeID=soup.id;highBatch.quality=95;highBatch.id=Dish.batchID(recipeID:soup.id,quality:95)
+batches.garden.recipes[soup.id]=soup
+batches.garden.recipes[lowBatch.id]=lowBatch;batches.garden.recipes[highBatch.id]=highBatch
+batches.garden.dishes=[lowBatch.id:2,highBatch.id:3]
+assert(batches.toggleAutoShopDish(highBatch.id,at:now))
+assert(batches.garden.autoShopState.dishIDs == [soup.id])
+assert(batches.setAutoShop(enabled:true,at:now))
+assert(batches.garden.orders[0].dish.id == lowBatch.id)
+focus(300,in:&batches);batches.advanceAutoShop(to:300)
+assert(batches.garden.orders[0].dish.id == lowBatch.id)
+focus(600,in:&batches);batches.advanceAutoShop(to:600)
+assert(batches.garden.orders[0].dish.id == highBatch.id)
+assert(batches.garden.orders[0].price == batches.salePrice(highBatch))
+assert(batches.stopRestockingAndUnstock(batches.garden.orders[0].id,at:now))
+assert(batches.garden.autoShopState.dishIDs.isEmpty && batches.garden.dishes[highBatch.id] == 3)
+var oldBatchSetting=fixture(0)
+oldBatchSetting.garden.recipes[soup.id]=soup
+oldBatchSetting.garden.recipes[lowBatch.id]=lowBatch;oldBatchSetting.garden.recipes[highBatch.id]=highBatch
+oldBatchSetting.garden.dishes=[highBatch.id:1]
+oldBatchSetting.garden.economy.autoShop=AutoShopState(enabled:true,dishIDs:[lowBatch.id,highBatch.id])
+oldBatchSetting.advanceAutoShop(to:0)
+assert(oldBatchSetting.garden.autoShopState.dishIDs == [soup.id])
+assert(oldBatchSetting.garden.orders.first?.dish.id == highBatch.id)
+_ = try oldBatchSetting.validated(at:now)
+
+var mixed=fixture(50,slots:3)
+mixed.garden.economy.expedition=ExpeditionState(gear:["copper_sickle":1])
+assert(mixed.stockEquipment("copper_sickle",at:now))
+assert(mixed.toggleAutoShopDish(soup.id,at:now))
+assert(mixed.setAutoShop(enabled:true,at:now))
+assert(mixed.garden.shopOrderCount == 3)
+var mixedSteps=mixed
+mixed.advanceAutoShop(to:3000)
+for time in stride(from:1,through:3000,by:59) {mixedSteps.advanceAutoShop(to:Double(time))}
+mixedSteps.advanceAutoShop(to:3000)
+assert(mixed.garden.autoShopState.receivables == mixedSteps.garden.autoShopState.receivables)
+assert(mixed.garden.autoShopState.soldCount == mixedSteps.garden.autoShopState.soldCount)
+assert(mixed.garden.dishes == mixedSteps.garden.dishes)
+assert(mixed.garden.orders.map(\.placedAt) == mixedSteps.garden.orders.map(\.placedAt))
+print("PASS: recipe restocking across quality batches, deterministic quality order, legacy batch setting migration, mixed equipment/dish timing and frozen quality prices")

@@ -84,16 +84,18 @@ shop.garden.ingredients = [:]
 shop.garden.coins = 14
 check(shop.buyIngredient(.cookedRice) && shop.buyIngredient(.egg) && shop.garden.coins == 0,"fried rice purchased ingredients cost fourteen copper")
 check(shop.salePrice(fried) == 27,"ordinary fried rice sale is twenty-seven copper")
-check(shop.cook(fried) && shop.stock(fried),"cook and stock purchased ingredients")
+check(shop.cook(fried,natural:16),"cook purchased ingredients")
+let cooked=shop.garden.economy.kitchenResult!.output!
+check(shop.stock(cooked),"stock produced quality batch")
 let frozen = shop.garden.orders[0]
-check(frozen.price == 27 && !shop.stock(fried),"one inventory unit can only be stocked once")
+check(frozen.price == 28 && !shop.stock(cooked),"one inventory unit can only be stocked once")
 shop.garden.economy.upgrades[Upgrade.shop.rawValue] = 3
 shop.garden.economy.upgrades[Upgrade.kitchen.rawValue] = 3
-check(shop.garden.orders[0].price == 27,"existing order remains frozen after upgrades")
+check(shop.garden.orders[0].price == 28,"existing order remains frozen after upgrades")
 check(!shop.collectSale(frozen.id),"sale requires focus")
 finish(&shop,300)
-check(shop.collectSale(frozen.id) && shop.garden.coins == 37,"sale and focus income settle once")
-check(!shop.collectSale(frozen.id) && shop.garden.coins == 37,"repeated collect cannot mint coins")
+check(shop.collectSale(frozen.id) && shop.garden.coins == 38,"sale and focus income settle once")
+check(!shop.collectSale(frozen.id) && shop.garden.coins == 38,"repeated collect cannot mint coins")
 for dish in Dish.allCases where dish.outputIngredient == nil {
     let cost = dish.ingredients.reduce(0) { $0 + Ingredient(rawValue:$1.key)!.purchasePrice * $1.value }
     let price = AppData().salePrice(dish)

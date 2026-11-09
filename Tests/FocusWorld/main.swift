@@ -61,9 +61,9 @@ import Foundation
             ("ranch purchase",{$0.buyRanchFeed(at:now)}),
             ("fishing purchase",{$0.buyFishingBait("earthworm")} ),
             ("mining selection",{$0.selectMine("quarry_coal",at:now)}),
-            ("equipment crafting",{$0.craftExpeditionGear("copper_sickle")} ),
+            ("equipment crafting",{$0.forgeGear(moldID:"sickle",materialIDs:["copper","copper"],natural:12)} ),
             ("expedition return",{$0.returnExpedition(at:now)}),
-            ("cooking",{$0.cook(.soup)}),
+            ("cooking",{$0.cook(.soup,natural:16)}),
             ("potion brewing",{$0.embark(.potions,recipe:"dew",at:now)})
         ]
         for (_,edit) in actions {
@@ -162,7 +162,7 @@ import Foundation
         reopened.now=now
         check(reopened.startTimer(kind:.stopwatch,minutes:30,task:nil,at:now.addingTimeInterval(-600)))
         reopened.now=now
-        check(reopened.commitGameChange{$0.cook(.soup)})
+        check(reopened.commitGameChange{$0.cook(.soup,natural:16)})
         let cookedAt=reopened.gameFocus
         check(reopened.data.garden.sales == 0 && reopened.data.garden.orders.first?.placedAt == cookedAt)
         reopened.tick(now.addingTimeInterval(299))

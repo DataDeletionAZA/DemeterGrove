@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct KitchenSelection {
     struct Portion: Identifiable {
@@ -72,17 +73,19 @@ enum CookingIntent: String, CaseIterable, Identifiable {
                 Dish.allCases.contains { $0.outputIngredient != nil && $0.ingredients == ingredients && $0.method == method }
             }
         case .drink:
-            let allowed: Set<String> = Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","蜂蜜","砂糖","可可","咖啡豆","草莓","羊奶","椰子","香荚兰果荚"]).union(berries)
-            guard names.isSubset(of: allowed), !names.isDisjoint(with: Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","可可","咖啡豆","草莓","羊奶","椰子"]).union(berries)) else { return [] }
+            let fruit: Set<String> = ["苹果","梨","飞天李","缩皱无花果","苹果酱"]
+            let allowed: Set<String> = Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","蜂蜜","砂糖","可可","咖啡豆","草莓","羊奶","椰子","香荚兰果荚","黄油","甜菜糖"]).union(berries).union(fruit)
+            guard names.isSubset(of: allowed), !names.isDisjoint(with: Set(["牛奶","茶叶","焙炒茶叶","薄荷","柠檬","可可","咖啡豆","草莓","羊奶","椰子"]).union(berries).union(fruit)) else { return [] }
             var result: [CookingMethod] = [.brew,.boil]
             if names.isDisjoint(with:["茶叶","焙炒茶叶","咖啡豆"]) { result.append(.mix) }
             return result
         case .dessert:
-            let allowed: Set<String> = Set(["小麦","牛奶","鸡蛋","蜂蜜","砂糖","可可","草莓","南瓜","胡萝卜","玉米","柠檬","薄荷","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子","香荚兰果荚"]).union(berries)
-            guard names.isSubset(of: allowed), !names.isDisjoint(with:Set(["小麦","牛奶","鸡蛋","草莓","南瓜","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子"]).union(berries)) else { return [] }
+            let fruit: Set<String> = ["苹果","梨","飞天李","缩皱无花果","苹果酱","月豆泥","黄油","晴根薯","甜菜糖"]
+            let allowed: Set<String> = Set(["小麦","牛奶","鸡蛋","蜂蜜","砂糖","可可","草莓","南瓜","胡萝卜","玉米","柠檬","薄荷","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子","香荚兰果荚"]).union(berries).union(fruit)
+            guard names.isSubset(of: allowed), !names.isDisjoint(with:Set(["小麦","牛奶","鸡蛋","草莓","南瓜","蛋糕胚","面包","羊奶","鸭蛋","榛子","椰子"]).union(berries).union(fruit)) else { return [] }
             var result: [CookingMethod] = [.bake]
             if !names.isDisjoint(with:["牛奶","羊奶"]) && !names.isDisjoint(with:["鸡蛋","鸭蛋"]) { result += [.boil,.steam] }
-            if names.isDisjoint(with:["小麦","鸡蛋","鸭蛋","南瓜"]) { result.append(.mix) }
+            if names.isDisjoint(with:["小麦","鸡蛋","鸭蛋","南瓜","晴根薯"]) { result.append(.mix) }
             return result
         case .dish:
             guard names.isDisjoint(with:["茶叶","焙炒茶叶","咖啡豆","可可"]),
@@ -129,15 +132,17 @@ enum CookingIntent: String, CaseIterable, Identifiable {
 
 enum Ingredient: String, Codable, CaseIterable, Identifiable {
     case roastedTea = "焙炒茶叶", carrot = "胡萝卜", wheat = "小麦", tomato = "番茄", potato = "土豆", cucumber = "黄瓜", cabbage = "卷心菜", mushroom = "蘑菇", corn = "玉米", pumpkin = "南瓜", strawberry = "草莓", mint = "薄荷", lemon = "柠檬", rice = "大米", egg = "鸡蛋", milk = "牛奶", honey = "蜂蜜", tea = "茶叶", sugar = "砂糖", cocoa = "可可", coffee = "咖啡豆", cookedRice = "米饭", noodles = "面条", cakeBase = "蛋糕胚", bread = "面包", silverFish = "银鳞鱼", moonFish = "月光鱼", goldFish = "金纹鱼", fishFillet = "鱼肉", duckEgg = "鸭蛋", goatMilk = "羊奶", bilberry = "欧洲越橘", raspberry = "覆盆子", hazelnut = "榛子", rosehip = "犬蔷薇果", cloudberry = "云莓", lingonberry = "红果越橘", vanilla = "香荚兰果荚", coconut = "椰子"
+    case onion = "洋葱", spinach = "菠菜", pea = "豌豆", eggplant = "茄子", beet = "甜菜", apple = "苹果", pear = "梨", shrivelfig = "缩皱无花果", dirigiblePlum = "飞天李", moonbean = "月豆", sunroot = "晴根薯"
+    case butter = "黄油", appleJam = "苹果酱", beetSugar = "甜菜糖", moonbeanPaste = "月豆泥"
     var id: String { rawValue }
     var category:IngredientCategory {
         if self == .wheat {return .grain}
         if Crop(rawValue:rawValue) != nil { return .farm }
         switch self {
         case .silverFish,.moonFish,.goldFish,.fishFillet:return .fish
-        case .egg,.milk,.duckEgg,.goatMilk:return .dairy
+        case .egg,.milk,.duckEgg,.goatMilk,.butter:return .dairy
         case .bilberry,.raspberry,.hazelnut,.rosehip,.cloudberry,.lingonberry,.coconut:return .farm
-        case .rice,.cookedRice,.noodles,.cakeBase,.bread:return .grain
+        case .rice,.cookedRice,.noodles,.cakeBase,.bread,.moonbeanPaste:return .grain
         default:return .seasoning
         }
     }
@@ -145,7 +150,12 @@ enum Ingredient: String, Codable, CaseIterable, Identifiable {
     var purchasePrice: Int {
         switch self {
         case .carrot,.cucumber,.cabbage,.mint,.sugar,.rice,.egg:return 6
-        case .wheat,.tomato,.potato,.corn,.tea,.cookedRice:return 8
+        case .onion,.spinach,.pea,.beet:return 6
+        case .eggplant,.tea:return 8
+        case .apple,.pear,.sunroot:return 10
+        case .moonbean,.appleJam,.beetSugar:return 12
+        case .shrivelfig,.dirigiblePlum,.butter,.moonbeanPaste:return 18
+        case .wheat,.tomato,.potato,.corn,.cookedRice:return 8
         case .mushroom,.lemon:return 10
         case .pumpkin,.strawberry,.milk,.roastedTea:return 12
         case .honey,.cocoa,.coffee:return 14
@@ -193,15 +203,22 @@ struct Dish: Codable, Identifiable, Equatable {
     var sprite: Int
     var quality: Int = 50
     var kitchenBonus = 0
+    var recipeID: String? = nil
+    var canonicalID: String { recipeID ?? id }
+    static func batchID(recipeID: String, quality: Int) -> String {
+        let hash = SHA256.hash(data: Data(recipeID.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "dish:" + hash + ":" + String(quality)
+    }
+    static func validSprite(_ index: Int) -> Bool { (0..<25).contains(index) || FoodContent.spriteKeys[index] != nil }
     var methodID:CookingMethod? = nil
     var method:CookingMethod { methodID ?? CookingMethod.legacy(baseID) }
     var outputIngredient:Ingredient? {
-        switch id {case "米饭":return .cookedRice;case "面条":return .noodles;case "蛋糕胚":return .cakeBase;case "面包":return .bread;case "焙炒茶叶":return .roastedTea;default:return nil}
+        switch canonicalID {case "米饭":return .cookedRice;case "面条":return .noodles;case "蛋糕胚":return .cakeBase;case "面包":return .bread;case "焙炒茶叶":return .roastedTea;case "黄油":return .butter;case "苹果酱":return .appleJam;case "甜菜糖":return .beetSugar;case "月豆泥":return .moonbeanPaste;default:return nil}
     }
     var rawValue: String { id }
     var price: Int { id == "胡萝卜浓汤" ? 12 : id == "番茄面" ? 16 : 6 + ingredients.reduce(0) { $0 + (Ingredient(rawValue: $1.key)?.price ?? 2) * $1.value } + quality / 10 }
     var stars: Int { min(5, max(1, quality / 20 + 1)) }
-    var isDiscovery: Bool { Self.allCases.contains { $0.id == id } }
+    var isDiscovery: Bool { Self.allCases.contains { $0.id == canonicalID } }
     var recipeText: String { ingredients.sorted { $0.key < $1.key }.map { "\($0.key) ×\($0.value)" }.joined(separator: " · ") }
 
     static let allCases: [Dish] = {
@@ -249,11 +266,12 @@ struct Dish: Codable, Identifiable, Equatable {
             var dish=Dish(id:name,name:name,category:category,baseID:baseID,ingredients:ingredients,sprite:sprite,quality:60)
             dish.methodID=method;result.append(dish)
         }
-        for (name,ingredient,sprite,method) in [("清蒸银鳞鱼","银鳞鱼",7,CookingMethod.steam),("柠檬月光鱼","月光鱼",8,CookingMethod.bake),("香煎金纹鱼","金纹鱼",6,CookingMethod.fry)] {
+        for (name,ingredient,sprite,method) in [("清蒸银鳞鱼","银鳞鱼",49,CookingMethod.steam),("柠檬月光鱼","月光鱼",50,CookingMethod.bake),("香煎金纹鱼","金纹鱼",51,CookingMethod.fry)] {
             var ingredients=[ingredient:1];if ingredient == "月光鱼" { ingredients["柠檬"]=1 }
             var dish=Dish(id:name,name:name,category:.hot,baseID:"soup",ingredients:ingredients,sprite:sprite,quality:70)
             dish.methodID=method;result.append(dish)
         }
+        result += FoodContent.recipes
         return result
     }()
     static var soup: Dish { allCases[5] }
@@ -291,7 +309,7 @@ struct Dish: Codable, Identifiable, Equatable {
         dish.methodID=method;return dish
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, category, baseID, ingredients, sprite, quality, kitchenBonus, methodID }
+    enum CodingKeys: String, CodingKey { case id, name, category, baseID, ingredients, sprite, quality, kitchenBonus, methodID, recipeID }
     init(id: String, name: String, category: FoodCategory, baseID: String, ingredients: [String:Int], sprite: Int, quality: Int = 50) {
         self.id=id; self.name=name; self.category=category; self.baseID=baseID; self.ingredients=ingredients; self.sprite=sprite; self.quality=quality
     }
@@ -314,10 +332,14 @@ struct Dish: Codable, Identifiable, Equatable {
         quality = try c.decode(Int.self, forKey: .quality)
         kitchenBonus = try c.decodeIfPresent(Int.self, forKey: .kitchenBonus) ?? 0
         methodID = try c.decodeIfPresent(CookingMethod.self, forKey:.methodID)
+        recipeID = try c.decodeIfPresent(String.self, forKey: .recipeID)
+        if let fishSprite = ["清蒸银鳞鱼":49,"柠檬月光鱼":50,"香煎金纹鱼":51][canonicalID] {sprite=fishSprite}
     }
     var isValid: Bool {
         !id.isEmpty && id.count <= 512 && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 60 &&
-        (0..<25).contains(sprite) && (0...100).contains(quality) && (0...15).contains(kitchenBonus) && kitchenBonus <= quality && FoodBase.all.contains { $0.id == baseID && $0.category == category } &&
+        Self.validSprite(sprite) && (0...100).contains(quality) && (0...15).contains(kitchenBonus) && kitchenBonus <= quality &&
+        (recipeID.map { !$0.isEmpty && $0.count <= 512 && $0 != id && id == Self.batchID(recipeID: $0, quality: quality) } ?? true) &&
+        FoodBase.all.contains { $0.id == baseID && $0.category == category } &&
         !ingredients.isEmpty && ingredients.values.allSatisfy { (1...6).contains($0) } && ingredients.values.reduce(0,+) <= 6 && ingredients.keys.allSatisfy { Ingredient(rawValue: $0) != nil }
     }
 }

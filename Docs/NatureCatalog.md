@@ -2,6 +2,35 @@
 
 本目录包含 48 种鱼、10 种鱼饵、12 种牧场动物、34 种植物与采集材料，以及 17 种野外观察对象。每项都有稳定英文标识、中文名称、来源类别和独立图像标识。
 
+农场有 25 种可种作物，其中 24 种进入种子市场；星露胡萝卜收获为胡萝卜。厨房共有 57 个固定配方，涵盖主食、热菜、冷菜、甜点、饮品与原料加工。固定配方通过实际研制收入配方册。
+
+## 农作物与厨房
+
+洋葱、菠菜、豌豆、茄子、甜菜、苹果、梨和茶树属于现实作物。洋葱的食用部分是鳞茎；菠菜采收叶片；豌豆荚内的是种子，根部可与固氮细菌共生；茄子在植物学上属于浆果。甜菜的根能储藏糖，嫩叶也可作叶菜。苹果实生后代的果实不保证与亲本品种相同；梨肉中的石细胞会形成细微砂质感。不同茶类可由同一茶树物种经过不同加工制得。农场统一采用播种、幼苗、生长、成熟、收获五套图像；专注生长时间、果树的单次收获与加工份数均属于游戏规则。
+
+缩皱无花果来自哈利·波特：官方百科记载它源自阿比西尼亚，果实可产紫色魔法汁液并用于缩身药剂。飞天李的身份与卢娜的同形耳饰可由官方角色百科确认。两者在农场中的种植和厨房用途属于本游戏的幻想编排；果塔、特调和拌碟是农庄自制配方。月豆、晴根薯和星露胡萝卜属于原创作物。黄油奶饮是农庄自制的魔法酒馆风格饮品。
+
+黄油、苹果酱、甜菜糖与月豆泥可以通过原料加工获得，再用于后续烹饪。牛奶到黄油、甜菜到糖的多道现实工序被合并为一次加工。配方所需份数是厨房库存单位。
+
+物品短说明由 `ItemLore` 提供，覆盖作物、食材、固定料理、鱼、饵、牧场动物与产物、采集物、观察对象、矿物、装备、钓竿、魔药、同行者、服饰和露水。现实知识、食物风味、幻想设定与少量冷幽默按条目各自组织。
+
+| 资料 | 支持内容 |
+|---|---|
+| [RHS · Onions](https://www.rhs.org.uk/vegetables/onions/grow-your-own) | 洋葱栽培与鳞茎 |
+| [RHS · Spinach](https://www.rhs.org.uk/vegetables/spinach/grow-your-own) | 菠菜叶片与温凉生长条件 |
+| [Kew · Pea](https://www.kew.org/plants/pea) | 豌豆食用部分与根部固氮共生 |
+| [Kew · Aubergine](https://www.kew.org/plants/aubergine) | 茄科、浆果与吸汁果肉 |
+| [RHS · Beetroot](https://www.rhs.org.uk/vegetables/beetroot/grow-your-own) | 甜菜根与叶片 |
+| [Iowa State University · Apple from Seed](https://yardandgarden.extension.iastate.edu/faq/can-i-grow-apple-tree-seed) | 苹果实生后代性状差异 |
+| [South Dakota State University · Apples and Pears](https://extension.sdstate.edu/picking-and-storing-apples-and-pears) | 梨的石细胞 |
+| [Kew · Tea Plant](https://www.kew.org/plants/tea-plant) | 茶树常绿灌木与茶叶加工 |
+| [Harry Potter · Shrivelfig](https://www.harrypotter.com/fact-file/plants-and-potions/shrivelfig) | 缩皱无花果的原作身份与魔药用途 |
+| [Harry Potter · Luna Lovegood](https://www.harrypotter.com/fact-file/characters-and-pets/luna-lovegood) | 飞天李与卢娜耳饰的关系 |
+| [USGS · Coal](https://www.usgs.gov/faqs/what-coal) | 煤由古老植物遗存转变而成 |
+| [GIA · Moonstone](https://www.gia.edu/moonstone) | 月长石的长石身份与光学现象 |
+| [GIA · Diamond Chipping](https://www.gia.edu/gia-news-research/how-protect-diamond-chipping) | 钻石硬度与抗破裂能力的区别 |
+| [USGS · Obsidian](https://volcanoes.usgs.gov/vsc/glossary/obsidian.html) | 黑曜石的火山玻璃身份 |
+
 ## 资料与游戏规则
 
 现实物种的学名、基本栖地、外形与食性取自渔业机构、自然保护机构、植物园、博物馆和动物园资料。哈利·波特条目以官方百科和专题为准。原创条目在类别和说明中明确标为原创。

@@ -4,8 +4,8 @@ cd "$(dirname "$0")"
 checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/demetergrove-checks.XXXXXX")"
 trap 'rm -rf "$checks_dir"' EXIT
 model=(Sources/EconomyBalance.swift Sources/PetDialogue.swift Sources/Model.swift Sources/Cooking.swift Sources/Progression.swift Sources/HabitProgress.swift Sources/ActionCounts.swift Sources/PotionSelection.swift Sources/SceneGeometry.swift Sources/ToastLifetime.swift Sources/CalendarDates.swift Sources/Recurrence.swift Sources/ReminderPlanner.swift Sources/AIConfiguration.swift Sources/AIPrompts.swift Sources/FocusRecords.swift Sources/Inventory.swift)
-model+=(Sources/AutoShop.swift Sources/Ranch.swift Sources/NatureCatalog.swift Sources/Fishing.swift Sources/Mining.swift Sources/Expedition.swift Sources/FocusWorld.swift)
-for suite in Model Kitchen Habits Scenes Feedback Recurrence Focus Inventory Economy AutoShop Expedition PotionMaterials; do
+model+=(Sources/AutoShop.swift Sources/Ranch.swift Sources/NatureCatalog.swift Sources/Fishing.swift Sources/Mining.swift Sources/Expedition.swift Sources/FocusWorld.swift Sources/Forging.swift Sources/CraftRoll.swift Sources/FoodContent.swift Sources/ItemLore.swift)
+for suite in Model Kitchen Crafting FoodContent Forge Habits Scenes Feedback Recurrence Focus Inventory Economy AutoShop Expedition PotionMaterials; do
     file="Tests/$suite/main.swift"
     [[ "$suite" != Model ]] || file=Tests/main.swift
     xcrun swiftc -swift-version 5 "${model[@]}" "$file" -o "$checks_dir/$suite"

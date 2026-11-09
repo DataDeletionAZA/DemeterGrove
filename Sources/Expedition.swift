@@ -23,7 +23,7 @@ struct Companion:Identifiable {
 }
 
 enum GearSlot:String,Codable,CaseIterable {case tool="工具",coat="外衣",charm="饰物"}
-struct CraftedGear:Identifiable {
+struct CraftedGear:Identifiable,Codable,Equatable {
     let id:String
     let name:String
     let slot:GearSlot
@@ -34,7 +34,10 @@ struct CraftedGear:Identifiable {
     let scouting:Int
     let guarding:Int
     var materials:[String:Int]=[:]
-    var spriteKey:String {"gear_"+id}
+    var forgeSprite:String? = nil
+    var saleValue:Int? = nil
+    var spriteKey:String {forgeSprite ?? "gear_"+id}
+    var salePrice:Int {saleValue ?? max(1,price*2)}
     static let all:[CraftedGear]=[
         .init(id:"copper_sickle",name:"铜刃采集镰",slot:.tool,level:5,minerals:["copper":4,"coal":2],price:12,gathering:1,scouting:0,guarding:0),
         .init(id:"iron_staff",name:"铁箍行路杖",slot:.tool,level:8,minerals:["iron":4,"coal":3],price:20,gathering:0,scouting:1,guarding:1),
@@ -76,6 +79,7 @@ struct ExpeditionState:Codable,Equatable {
     var team:[String]=[]
     var equipment:[String:[String:String]]=[:]
     var gear:[String:Int]=[:]
+    var generatedGear:[String:CraftedGear]? = nil
     var trip:ExpeditionTrip?
     var inventory:[String:Int]=[:]
     var discoveries:Set<String>=[]
@@ -114,12 +118,20 @@ extension ExpeditionState {
               (1...1440).contains(preferredMinutes), locations.contains(preferredLocation),
               validRewards(inventory), discoveries.isSubset(of: discoveryIDs),
               history.count <= 256, Set(history.map(\.id)).count == history.count,
-              gear.allSatisfy({ id,count in CraftedGear.all.contains { $0.id == id } && (0...1_000_000_000).contains(count) }),
+              gear.count<=4096, (generatedGear?.count ?? 0)<=4096,
+              (generatedGear ?? [:]).allSatisfy({id,item in
+                  id == item.id && id.hasPrefix("forged_") && !item.name.isEmpty && item.name.count<=60
+                    && (1...100000).contains(item.level) && item.price == 0 && item.minerals.isEmpty && item.materials.isEmpty
+                    && [item.gathering,item.scouting,item.guarding].allSatisfy{(0...30).contains($0)}
+                    && item.saleValue.map{(1...1_000_000).contains($0)} == true
+                    && ForgeMold.all.contains{$0.gearSpriteKey == item.spriteKey && $0.slot == item.slot}
+              }),
+              gear.allSatisfy({ id,count in resolveGear(id) != nil && (0...1_000_000_000).contains(count) }),
               Set(equipment.keys).isSubset(of: hired) else { return false }
         var worn: [String:Int] = [:]
         for slots in equipment.values {
             for (slot,id) in slots {
-                guard let item = CraftedGear.all.first(where: { $0.id == id }), item.slot.rawValue == slot else { return false }
+                guard let item = resolveGear(id), item.slot.rawValue == slot else { return false }
                 worn[id,default:0] += 1
             }
         }
@@ -155,7 +167,7 @@ extension AppData {
                 gathering += companion.gathering; scouting += companion.scouting; guarding += companion.guarding
             }
             for id in (state.equipment[id] ?? [:]).values {
-                if let item = CraftedGear.all.first(where: { $0.id == id }) {
+                if let item = state.resolveGear(id) {
                     gathering += item.gathering; scouting += item.scouting; guarding += item.guarding
                 }
             }
@@ -182,27 +194,11 @@ extension AppData {
         return true
     }
 
-    mutating func craftExpeditionGear(_ id: String) -> Bool {
-        var state = expeditionState
-        var mining = miningState
-        guard let item = CraftedGear.all.first(where: { $0.id == id }), levelProgress.level >= item.level,
-              garden.coins >= item.price, state.gear[id,default:0] < 1_000_000_000,
-              item.minerals.allSatisfy({ mining.inventory[$0.key,default:0] >= $0.value }),
-              item.materials.allSatisfy({garden.economy.finds[$0.key,default:0] >= $0.value}) else { return false }
-        for (id,count) in item.minerals { mining.inventory[id,default:0] -= count }
-        for (id,count) in item.materials {garden.economy.finds[id,default:0] -= count}
-        garden.coins -= item.price
-        state.gear[id,default:0] += 1
-        garden.economy.expedition = state
-        garden.economy.mining = mining
-        return true
-    }
-
     mutating func equipExpeditionGear(_ id: String?, companion: String, slot: GearSlot) -> Bool {
         var state = expeditionState
         guard state.hired.contains(companion) else { return false }
         if let id {
-            guard let item = CraftedGear.all.first(where: { $0.id == id }), item.slot == slot,
+            guard let item = state.resolveGear(id), item.slot == slot,
                   state.equipment[companion]?[slot.rawValue] != id else { return false }
             let used = state.equipment.values.filter { $0[slot.rawValue] == id }.count
             guard used < state.gear[id,default:0] else { return false }

@@ -41,7 +41,7 @@ enum SceneNavigation {
             return studyRoute == route ? "书房" : SceneNavigation.parent(of: route)
         }
     }
-    static let rooms=["书房","农场","牧场","厨房","商店","炼金室","酒馆","铸造"]
+    static let rooms=["书房","农场","牧场","厨房","商店","炼金室","酒馆","锻造室"]
     static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue,"矿洞"]
     static func isWild(_ route:String)->Bool {wilds.contains(route) || ["钓鱼","探险","矿洞"].contains(route.components(separatedBy:"/")[0])}
     static func isScene(_ route:String)->Bool {rooms.contains(route) || isWild(route) || ["首页","地图","户外地图","成长","衣柜"].contains(route)}

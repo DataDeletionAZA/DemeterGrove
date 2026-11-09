@@ -32,32 +32,16 @@ assert(team.toggleExpeditionCompanion("mira"))
 assert(team.toggleExpeditionCompanion("cedar"))
 assert(team.expeditionState.team == ["rowan","oswin","iris","cedar"])
 
-let minerals=team.miningState.inventory
-let coins=team.garden.coins
-assert(team.craftExpeditionGear("copper_sickle"))
-assert(team.miningState.inventory["copper"] == minerals["copper"]!-4)
-assert(team.miningState.inventory["coal"] == minerals["coal"]!-2)
-assert(team.garden.coins == coins-12)
+team.garden.economy.expedition?.gear=["copper_sickle":2,"iron_coat":1]
 assert(team.equipExpeditionGear("copper_sickle",companion:"rowan",slot:.tool))
-assert(!team.equipExpeditionGear("copper_sickle",companion:"mira",slot:.tool))
 assert(!team.equipExpeditionGear("copper_sickle",companion:"mira",slot:.coat))
-assert(team.craftExpeditionGear("copper_sickle"))
 assert(team.equipExpeditionGear("copper_sickle",companion:"mira",slot:.tool))
+assert(!team.equipExpeditionGear("copper_sickle",companion:"oswin",slot:.tool))
 assert(team.equipExpeditionGear(nil,companion:"mira",slot:.tool))
 assert(!team.equipExpeditionGear(nil,companion:"mira",slot:.tool))
-let wool=team.garden.economy.finds["sheep_wool"]!
-assert(team.craftExpeditionGear("iron_coat"))
-assert(team.garden.economy.finds["sheep_wool"] == wool-2)
 assert(team.equipExpeditionGear("iron_coat",companion:"rowan",slot:.coat))
-
-var noMaterials=fixture()
-noMaterials.garden.economy.finds["sheep_wool"]=0
-let missingMaterials=try encode(noMaterials)
-assert(!noMaterials.craftExpeditionGear("iron_coat"))
-let afterMissingMaterials=try encode(noMaterials)
-assert(afterMissingMaterials == missingMaterials)
 var low=fixture(level:1)
-assert(!low.hireCompanion("rowan") && !low.craftExpeditionGear("copper_sickle"))
+assert(!low.hireCompanion("rowan"))
 assert(!low.embarkExpedition(locationID:"forest",minutes:30,at:now))
 
 for minutes in [0,-1,1441,Int.max] {assert(!team.embarkExpedition(locationID:"forest",minutes:minutes,at:now))}
@@ -164,4 +148,4 @@ oldGarden["economy"]=oldEconomy;oldObject["garden"]=oldGarden
 let oldData=try JSONDecoder().decode(AppData.self,from:JSONSerialization.data(withJSONObject:oldObject))
 assert(oldData.garden.economy.expedition == nil && oldData.garden.coins == decoded.garden.coins)
 assert(oldData.miningState == decoded.miningState && oldData.garden.economy.finds == decoded.garden.economy.finds)
-print("PASS: expedition team cap, crafting/material conservation, equipment ownership, snapshot stats, effective-focus timing, early return, completion, all regions and save validation")
+print("PASS: expedition team cap, legacy equipment preservation, equipment ownership, snapshot stats, effective-focus timing, early return, completion, all regions and save validation")

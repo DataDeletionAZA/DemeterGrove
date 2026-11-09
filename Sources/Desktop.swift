@@ -566,7 +566,7 @@ struct ToolPanelView: View {
     private var sceneMetadata:String {
         guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","户外地图"].contains(tool) else{return ""}
         let level="等级 \(store.data.levelProgress.level)"
-        return tool == "商店" ? level+" · 栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)":level
+        return tool == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -595,7 +595,7 @@ struct ToolPanelView: View {
                     case "炼金室", "熬制魔药": MapPage(store:store,journey:.potions)
                     case "牧场": RanchScene(store:store)
                     case "酒馆": TavernScene(store:store)
-                    case "铸造": ForgeScene(store:store)
+                    case "锻造室": ForgeScene(store:store)
                     case "矿洞": MiningScene(store:store)
                     case let route where route.hasPrefix("钓鱼/"): FishingScene(store:store,initialLocation:String(route.dropFirst(3)))
                     case let route where route.hasPrefix("探险/"): ExpeditionScene(store:store,initialLocation:String(route.dropFirst(3)))

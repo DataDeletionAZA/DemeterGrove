@@ -50,12 +50,12 @@ for known in Dish.allCases {
 var data=AppData()
 data.garden.ingredients=["牛奶":2,"茶叶":1]
 let tea=CookingIntent.drink.develop(method:.brew,ingredients:milkTea)!
-assert(data.cook(tea))
+assert(data.cook(tea,natural:16))
 assert(data.ingredientCount(.milk) == 1 && data.ingredientCount(.tea) == 0)
 let afterCooking=data.garden.ingredients
-assert(!data.cook(tea) && data.garden.ingredients == afterCooking)
+assert(!data.cook(tea,natural:16) && data.garden.ingredients == afterCooking)
 data.garden.ingredients["茶叶"]=1
-assert(data.cook(roasted) && data.ingredientCount(.tea) == 0 && data.ingredientCount(.roastedTea) == 1)
+assert(data.cook(roasted,natural:16) && data.ingredientCount(.tea) == 0 && data.ingredientCount(.roastedTea) == 1)
 assert(data.garden.recipes[tea.id] != nil && data.garden.recipes[roasted.id] != nil)
 
 let oldDish=Data(#"{"id":"legacy-dish","name":"旧料理","category":"热菜","baseID":"soup","ingredients":{"胡萝卜":1},"sprite":5,"quality":65,"sweetness":20,"aroma":30,"texture":40}"#.utf8)

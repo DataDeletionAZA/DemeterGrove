@@ -118,6 +118,7 @@ struct RanchScene: View {
     private var feedShelf: some View {
         VStack(alignment: .leading, spacing: 9) {
             PixelProgress(value: Double(ranch.trough) / Double(ranch.troughCapacity))
+            if let description=ItemLore.text(for:"feed:feed_bag") {Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)}
             ForEach(RanchFeed.allCases) { feed in
                 let count = feed == .bag ? ranch.feedBags : store.data.garden.ingredients[feed.rawValue, default: 0]
                 Button { feedAnimal(feed) } label: {
@@ -173,6 +174,9 @@ struct RanchScene: View {
                         if selected == animal.id {
                             Text(status(animal)).font(.caption).foregroundStyle(Palette.goldLight)
                             Text(species.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                            if let description=ItemLore.text(for:"product:"+species.productID) {
+                                Text(species.productName+" · "+description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                            }
                             Text("每 \(species.productionMinutes) 分钟专注 · \(species.productName) ×\(species.productCount)").font(.system(size: 10)).fixedSize(horizontal: false, vertical: true)
                         }
                     }

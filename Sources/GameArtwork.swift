@@ -3,11 +3,11 @@ import AppKit
 
 enum GameImages {
     private static let aiServiceIcon: NSImage? = Bundle.main.url(forResource:"AIService",withExtension:"png",subdirectory:"Game").flatMap { NSImage(contentsOf:$0) }
-    static let backgrounds: [String:NSImage] = ["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment", "Ranch", "Tavern", "Forge", "Mine", "River", "MountainLake", "Beach", "Tropical", "Sea", "Polar", "PolarCoast", "SeaWarm"].reduce(into: [:]) { result, name in
-        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Game"), let image = NSImage(contentsOf: url) { result[name] = image }
+    static let backgrounds: [String:NSImage] = (["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment", "Ranch", "Tavern", "Forge", "Mine", "River", "MountainLake", "Beach", "Tropical", "Sea", "Polar", "PolarCoast", "SeaWarm"] + MineLayer.all.map(\.artworkName)).reduce(into: [:]) { result, name in
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: name.hasPrefix("Mine_") ? "Game/Mines" : "Game"), let image = NSImage(contentsOf: url) { result[name] = image }
     }
     static func interfaceIcon(name:String)->NSImage? {
-        let natureIcons = ["牧场":"ranch_cow", "动物商店":"ranch_chicken", "酒馆":"companion_rowan", "酒馆与装备":"companion_rowan", "铸造":"gear_iron_staff", "矿洞":"tool_pickaxe", "鱼类图鉴":"fish_common_carp", "渔具店":"rod_ash"]
+        let natureIcons = ["牧场":"ranch_cow", "动物商店":"ranch_chicken", "酒馆":"companion_rowan", "酒馆与装备":"companion_rowan", "锻造室":"gear_iron_staff", "矿洞":"tool_pickaxe", "鱼类图鉴":"fish_common_carp", "渔具店":"rod_ash"]
         if let key=natureIcons[name] {return NatureImages.image(key)}
         if name == "AI 服务" || name == "ai" {return aiServiceIcon}
         let index:[String:Int] = ["成长":0,"sparkles":0,"growth":0,"炼金室":1,"熬制魔药":1,"flask":1,"alchemy":1,
@@ -52,7 +52,9 @@ struct GameSprite: View {
     var size: CGFloat
     var body: some View {
         Group {
-            if let sprites = sheet == "Shelf" ? GameImages.shelfFoods : GameImages.sprites[sheet], sprites.indices.contains(index) {
+            if (sheet == "Foods" || sheet == "Shelf"), let key=FoodContent.spriteKeys[index],let image=NatureImages.image(key) {
+                Image(nsImage:image).resizable().interpolation(.none).scaledToFit()
+            } else if let sprites = sheet == "Shelf" ? GameImages.shelfFoods : GameImages.sprites[sheet], sprites.indices.contains(index) {
                 Image(nsImage: sprites[index]).resizable().interpolation(.none).scaledToFit()
             }
         }.frame(width: size, height: size).accessibilityHidden(true)
@@ -101,6 +103,7 @@ struct IngredientArt: View {
     }
     var body: some View {
         if let crop = Crop(rawValue:name) { PlantArt(crop:crop,stage:4,size:size) }
+        else if let index=FoodContent.processedSprites[name] {GameSprite(sheet:"Foods",index:index,size:size)}
         else if let item=NatureCatalog.forage.first(where:{$0.ingredient == name && $0.name == name}) {GameNatureSprite(key:item.spriteKey,size:size)}
         else if let item=NatureCatalog.ranchSpecies.first(where:{$0.ingredient == name && ["duck","goat"].contains($0.id)}) {GameNatureSprite(key:"product_"+item.id,size:size)}
         else { GameSprite(sheet: slot.0, index: slot.1, size: size) }
@@ -117,7 +120,8 @@ struct PlantArt: View {
     }
     var body: some View {
         Group {
-        if stage == 4 { GameSprite(sheet:slot.0,index:slot.1+4,size:size) }
+        if let key=FoodContent.cropSpriteKeys[crop] {GameNatureSprite(key:"crop_"+key+"_"+String(stage),size:size)}
+        else if stage == 4 { GameSprite(sheet:slot.0,index:slot.1+4,size:size) }
         else if let images = GameImages.sprites[slot.0], images.indices.contains(slot.1+stage) {
             let mature = images[slot.1+3].size
             let scale = size / max(mature.width,mature.height)

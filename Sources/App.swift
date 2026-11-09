@@ -15,7 +15,7 @@ struct RootView: View {
         let route=SceneNavigation.canonical(store.selectedPage)
         guard SceneNavigation.rooms.contains(route) || ["首页","户外地图"].contains(route) else{return ""}
         let level="等级 \(store.data.levelProgress.level)"
-        return route == "商店" ? level+" · 栏位 \(store.data.garden.orders.count)/\(store.data.garden.capacity)":level
+        return route == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
     }
     private var backLabel:String {store.sceneNavigation.parent(of:store.selectedPage).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
     var body: some View {
@@ -99,7 +99,7 @@ struct RootView: View {
                         case "菜单":PetMenu(store:store)
                         case "牧场": RanchScene(store:store)
                     case "酒馆": TavernScene(store:store)
-                    case "铸造": ForgeScene(store:store)
+                    case "锻造室": ForgeScene(store:store)
                     case "矿洞": MiningScene(store:store)
                     case let route where route.hasPrefix("钓鱼/"): FishingScene(store:store,initialLocation:String(route.dropFirst(3)))
                     case let route where route.hasPrefix("探险/"): ExpeditionScene(store:store,initialLocation:String(route.dropFirst(3)))

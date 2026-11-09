@@ -88,6 +88,9 @@ struct FishingScene:View {
             Text("\(bag.count) 种 · \(state.inventory.values.reduce(0,+)) 份").font(.caption).foregroundStyle(Palette.muted)
             if let selected,let item=NatureItemInfo.find(selected),state.inventory[selected,default:0]>0 {
                 Text(item.name).font(.callout)
+                if let description=ItemLore.text(for:"fishing:"+selected) {
+                    Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                }
                 HStack(spacing:5) {
                     Button("出售 ×1") {if store.commitGameChange({$0.sellFishingCatch(selected,count:1)}){store.message="获得 \(Money.text(item.price))"}}
                     if NatureCatalog.fish.first(where:{$0.id == selected})?.isCookable == true {
@@ -138,6 +141,9 @@ struct FishingScene:View {
                     .accessibilityLabel("钓鱼地点")
                 PixelSelect(selection:$rod,items:FishingRod.all.filter{ownedRods.contains($0.id)}.map{($0.id,$0.name)})
                     .accessibilityLabel("选择渔竿")
+                if let description=ItemLore.text(for:"rod:"+rod) {
+                    Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                }
                 Toggle("随专注自动钓鱼",isOn:$automatic).toggleStyle(PixelToggleStyle())
                 HStack {Text("鱼饵").font(.headline);Spacer();Button("无饵"){bait=""}.buttonStyle(PixelButtonStyle(primary:bait.isEmpty))}
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:100))],spacing:8) {
@@ -150,6 +156,9 @@ struct FishingScene:View {
                             }.frame(maxWidth:.infinity).padding(8).magicSurface(bait == item.id ? Palette.card:Palette.paper)
                         }.buttonStyle(.plain).accessibilityLabel("选择鱼饵：\(item.name)").help(item.description)
                     }
+                }
+                if let chosen=NatureCatalog.baits.first(where:{$0.id == bait}) {
+                    Text(chosen.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                 }
                 if let chosen=NatureCatalog.baits.first(where:{$0.id == bait}),state.baitStock[chosen.id,default:0] == 0 {
                     Text("\(chosen.name)已用尽 · 当前使用无饵").font(.caption).foregroundStyle(Palette.muted)
@@ -181,6 +190,7 @@ struct FishingScene:View {
                             VStack(spacing:6) {
                                 GameNatureSprite(key:item.spriteKey,size:54)
                                 Text(item.name).font(.callout)
+                                Text(item.description).font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                                 Text("拥有 \(state.baitStock[item.id,default:0]) · 等级 \(item.level)").font(.caption).foregroundStyle(Palette.muted)
                                 Button("\(quantity) 份 · \(Money.text(item.price*quantity))") {_=store.commitGameChange{$0.buyFishingBait(item.id,count:quantity)}}
                                     .disabled(store.data.levelProgress.level<item.level || store.data.garden.coins<item.price*quantity)
@@ -191,7 +201,11 @@ struct FishingScene:View {
                     ForEach(FishingRod.all) {item in
                         HStack {
                             GameNatureSprite(key:item.spriteKey,size:48)
-                            VStack(alignment:.leading,spacing:4) {Text(item.name);Text("等级 \(item.level) · 速度 \(Int(((1-item.speed)*100).rounded()))% 提升").font(.caption).foregroundStyle(Palette.muted)}
+                            VStack(alignment:.leading,spacing:4) {
+                                Text(item.name)
+                                Text("等级 \(item.level) · 速度 \(Int(((1-item.speed)*100).rounded()))% 提升").font(.caption).foregroundStyle(Palette.muted)
+                                if let description=ItemLore.text(for:"rod:"+item.id) {Text(description).font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)}
+                            }
                             Spacer()
                             Button(ownedRods.contains(item.id) ? "已拥有":Money.text(item.price)) {_=store.commitGameChange{$0.buyFishingRod(item.id)}}
                                 .disabled(ownedRods.contains(item.id) || store.data.levelProgress.level<item.level || store.data.garden.coins<item.price)

@@ -22,10 +22,12 @@ assert(result.seconds == 600 && result.water == 2)
 assert(data.finishTimer(at: start.addingTimeInterval(1001)) == nil)
 assert(data.harvest(plot))
 assert(!data.harvest(plot))
-assert(data.cook(.soup))
-assert(!data.cook(.soup))
-assert(data.stock(.soup))
-assert(!data.stock(.soup))
+assert(data.cook(.soup,natural:16))
+assert(!data.cook(.soup,natural:16))
+let madeSoup=data.garden.economy.kitchenResult!.output!
+let soupPrice=data.salePrice(madeSoup)
+assert(data.stock(madeSoup))
+assert(!data.stock(madeSoup))
 assert(!data.collectSale())
 data.timer = TimerRun(kind: .rest, target: 300, taskTitle: "休息", startedAt: start, resumedAt: start)
 _ = data.finishTimer(at: start.addingTimeInterval(300))
@@ -35,9 +37,9 @@ for seconds in [100.0, 200.0] {
     _ = data.finishTimer(at: start.addingTimeInterval(seconds))
 }
 assert(data.totalFocus == 900 && data.garden.water == 6)
-assert(data.collectSale() && data.garden.coins == 53)
+assert(data.collectSale() && data.garden.coins == 30+soupPrice)
 assert(!data.collectSale())
-assert(data.buySeeds() && data.garden.coins == 47)
+assert(data.buySeeds() && data.garden.coins == 24+soupPrice)
 var emptyGarden = AppData()
 emptyGarden.garden.seeds = 0
 emptyGarden.garden.coins = 0
@@ -57,7 +59,7 @@ defer { try? FileManager.default.removeItem(at: folder) }
 let file = folder.appendingPathComponent("save.json")
 try SaveFile.write(data, to: file)
 let restored = try SaveFile.read(file)
-assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 47)
+assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 24+soupPrice)
 var invalid = data
 invalid.sessions.append(invalid.sessions[0])
 do { _ = try invalid.validated(); fatalError("重复结算应被拒绝") } catch DataIssue.invalid { }
@@ -76,15 +78,16 @@ assert(custom.isValid && !custom.isDiscovery)
 assert(Dish.develop(base: cakeBase, additions: ["砂糖":-1]) == nil)
 assert(Dish.develop(base: cakeBase, additions: ["未知食材":1]) == nil)
 let beforeCooking = cookingData.garden.ingredients
-assert(!cookingData.cook(custom) && cookingData.garden.ingredients == beforeCooking)
+assert(!cookingData.cook(custom,natural:16) && cookingData.garden.ingredients == beforeCooking)
 for (key,value) in custom.ingredients { cookingData.garden.ingredients[key] = value }
-assert(cookingData.cook(custom))
+assert(cookingData.cook(custom,natural:16))
 assert(cookingData.garden.recipes[custom.id] == custom && cookingData.garden.crafts[custom.id] == 1)
-assert(!cookingData.cook(custom))
-assert(cookingData.stock(custom))
+assert(!cookingData.cook(custom,natural:16))
+let madeCustom=cookingData.garden.economy.kitchenResult!.output!
+assert(cookingData.stock(madeCustom))
 let full = try JSONEncoder().encode(cookingData)
 let restoredCooking = try JSONDecoder().decode(AppData.self, from: full).validated()
-assert(restoredCooking.garden.order?.dish == custom)
+assert(restoredCooking.garden.order?.dish == madeCustom)
 let improved = Dish.develop(base: cakeBase, additions: ["薄荷":1,"蜂蜜":1], practice: 3)!
 assert(improved.quality > custom.quality)
 let waterBefore = cookingData.garden.water
@@ -169,12 +172,12 @@ assert(tools.harvest(planted) && tools.garden.ingredients["胡萝卜"] == carrot
 let friedRice = Dish.allCases.first{$0.id == "蛋炒饭"}!
 for _ in 0..<2 {
     tools.garden.ingredients["米饭"] = 1; tools.garden.ingredients["鸡蛋"] = 1
-    assert(tools.cook(tools.garden.recipes[friedRice.id] ?? friedRice))
-    assert(tools.garden.recipes[friedRice.id]?.quality == friedRice.quality+5)
+    assert(tools.cook(tools.garden.recipes[friedRice.id] ?? friedRice,natural:16))
+    assert(tools.garden.economy.kitchenResult!.output!.quality == 75)
 }
-assert(tools.stock(friedRice))
+assert(tools.stock(tools.garden.economy.kitchenResult!.output!))
 let orderID = tools.garden.orders[0].id, frozenPrice = tools.garden.orders[0].price
-assert(tools.garden.orders[0].dish.quality == friedRice.quality+5)
+assert(tools.garden.orders[0].dish.quality == 75)
 assert(tools.upgrade(.shop) && tools.garden.orders[0].price == frozenPrice)
 focus(299, into:&tools)
 assert(!tools.collectSale(orderID))
@@ -393,28 +396,28 @@ var assembly = AppData()
 assembly.garden.ingredients = ["大米":1,"鸡蛋":1]
 let rice = Dish.develop(method:.boil,category:.main,ingredients:["大米":1])!
 let fried = Dish.allCases.first{$0.id == "蛋炒饭"}!
-assert(!assembly.canCook(fried) && !assembly.cook(fried))
+assert(!assembly.canCook(fried) && !assembly.cook(fried,natural:16))
 let moneyBeforeCraft = assembly.garden.coins
-assert(assembly.cook(rice) && assembly.garden.ingredients["米饭"] == 1 && assembly.garden.ingredients["大米"] == 0)
+assert(assembly.cook(rice,natural:16) && assembly.garden.ingredients["米饭"] == 1 && assembly.garden.ingredients["大米"] == 0)
 assert(assembly.garden.dishes[rice.id] == nil && assembly.garden.isDiscovered(rice))
-assert(assembly.cook(fried) && assembly.garden.ingredients["米饭"] == 0 && assembly.garden.ingredients["鸡蛋"] == 0)
-assert(assembly.garden.coins == moneyBeforeCraft && assembly.garden.dishes[fried.id] == 1 && assembly.garden.isDiscovered(fried))
-assert(!assembly.cook(fried) && assembly.garden.dishes[fried.id] == 1)
+assert(assembly.cook(fried,natural:16) && assembly.garden.ingredients["米饭"] == 0 && assembly.garden.ingredients["鸡蛋"] == 0)
+assert(assembly.garden.coins == moneyBeforeCraft && assembly.garden.dishes[Dish.batchID(recipeID:fried.id,quality:75)] == 1 && assembly.garden.isDiscovered(fried))
+assert(!assembly.cook(fried,natural:16) && assembly.garden.dishes[Dish.batchID(recipeID:fried.id,quality:75)] == 1)
 assembly.garden.coins = Ingredient.cakeBase.purchasePrice
 assert(assembly.buyIngredient(.cakeBase) && assembly.garden.ingredients["蛋糕胚"] == 1 && assembly.garden.coins == 0)
 assembly.garden.ingredients["草莓"] = 1;assembly.garden.ingredients["牛奶"] = 1
 let strawberryCake = Dish.allCases.first{$0.id == "草莓奶油蛋糕"}!
-assert(assembly.cook(strawberryCake) && assembly.garden.ingredients["蛋糕胚"] == 0 && assembly.garden.coins == 0)
+assert(assembly.cook(strawberryCake,natural:16) && assembly.garden.ingredients["蛋糕胚"] == 0 && assembly.garden.coins == 0)
 for ingredient in [Ingredient.noodles,.cakeBase,.bread] {
     let intermediate = Dish.allCases.first{$0.outputIngredient == ingredient}!
     assembly.garden.ingredients = intermediate.ingredients
-    assert(assembly.cook(intermediate) && assembly.garden.ingredients[ingredient.rawValue] == 1)
+    assert(assembly.cook(intermediate,natural:16) && assembly.garden.ingredients[ingredient.rawValue] == 1)
 }
 assembly.garden.ingredients = [:]
 assembly.garden.economy.finds["银鳞鱼"] = 1
 let steamedFish = Dish.develop(method:.steam,category:.hot,ingredients:["银鳞鱼":1])!
-assert(assembly.ingredientCount(.silverFish) == 1 && assembly.cook(steamedFish))
-assert(assembly.ingredientCount(.silverFish) == 0 && !assembly.sellFind("银鳞鱼") && !assembly.cook(steamedFish))
+assert(assembly.ingredientCount(.silverFish) == 1 && assembly.cook(steamedFish,natural:16))
+assert(assembly.ingredientCount(.silverFish) == 0 && !assembly.sellFind("银鳞鱼") && !assembly.cook(steamedFish,natural:16))
 let discoveryRoundTrip = try JSONDecoder().decode(AppData.self,from:JSONEncoder().encode(assembly)).validated()
 assert(discoveryRoundTrip.garden.isDiscovered(steamedFish) && discoveryRoundTrip.garden.recipes[steamedFish.id]?.method == .steam)
 let undiscoveredSoup = Dish.allCases.first{$0.id == "奶油玉米汤"}!

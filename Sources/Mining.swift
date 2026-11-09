@@ -27,6 +27,16 @@ struct MineLayer: Identifiable {
     let residentYield: Int
     let prerequisite: String?
     var mineral: Mineral { Mineral.all.first { $0.id == mineralID }! }
+    var artworkName: String { "Mine_" + id }
+    static let areas = ["旧矿场", "群山矿洞", "火山矿洞", "极地矿洞"]
+    static func layers(in area: String) -> [MineLayer] { all.filter { $0.area == area } }
+    static func visible(in area: String, highlighted: String?, selected: String?) -> MineLayer {
+        let layers = layers(in: area)
+        return layers.first { $0.id == highlighted } ?? layers.first { $0.id == selected } ?? layers.first ?? all[0]
+    }
+    func adjacent(_ offset: Int) -> MineLayer? {
+        MineLayer.layers(in: area).first { $0.depth == depth + offset }
+    }
     static let all: [MineLayer] = [
         .init(id:"quarry_coal",area:"旧矿场",name:"露头煤层",depth:1,level:3,mineralID:"coal",unlockMinutes:10,cycleMinutes:10,residentYield:3,prerequisite:nil),
         .init(id:"quarry_copper",area:"旧矿场",name:"赤铜矿脉",depth:2,level:5,mineralID:"copper",unlockMinutes:20,cycleMinutes:15,residentYield:3,prerequisite:"quarry_coal"),

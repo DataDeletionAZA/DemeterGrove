@@ -122,11 +122,13 @@ struct FocusSession: Codable, Identifiable, Equatable {
 
 enum Crop: String, Codable, CaseIterable, Identifiable {
     case carrot = "胡萝卜", wheat = "小麦", tomato = "番茄", potato = "土豆", cucumber = "黄瓜", cabbage = "卷心菜", mushroom = "蘑菇", corn = "玉米", pumpkin = "南瓜", strawberry = "草莓", mint = "薄荷", lemon = "柠檬", starlightCarrot = "星露胡萝卜"
+    case onion = "洋葱", spinach = "菠菜", pea = "豌豆", eggplant = "茄子", beet = "甜菜", apple = "苹果", pear = "梨", tea = "茶叶"
+    case shrivelfig = "缩皱无花果", dirigiblePlum = "飞天李", moonbean = "月豆", sunroot = "晴根薯"
     var id: String { rawValue }
     static var marketCrops: [Crop] { allCases.filter { $0 != .starlightCarrot } }
     var artCrop: Crop { self == .starlightCarrot ? .carrot : self }
     var harvestName: String { artCrop.rawValue }
-    var seconds: Double { switch self { case .mint, .carrot, .starlightCarrot: return 600; case .wheat, .cucumber, .mushroom: return 900; case .tomato, .potato, .cabbage, .corn: return 1200; default: return 1500 } }
+    var seconds: Double { switch self { case .mint, .carrot, .starlightCarrot, .spinach: return 600; case .wheat, .cucumber, .mushroom, .onion, .pea: return 900; case .tomato, .potato, .cabbage, .corn, .eggplant, .beet, .tea, .moonbean, .sunroot: return 1200; default: return 1500 } }
 }
 
 struct Plot: Codable, Identifiable {
@@ -214,12 +216,13 @@ struct Garden: Codable {
     var crafts: [String: Int] = [:]
     var economy = Economy()
     func isDiscovered(_ dish:Dish) -> Bool {
-        recipes[dish.id] != nil || crafts[dish.id,default:0]>0 || dishes[dish.id,default:0]>0 || orders.contains{$0.dish.id == dish.id}
+        recipes[dish.canonicalID] != nil || crafts[dish.canonicalID,default:0]>0 || dishes[dish.id,default:0]>0 || orders.contains{$0.dish.canonicalID == dish.canonicalID}
     }
     var menu: [Dish] {
         let builtIn = Dish.allCases.filter { recipes[$0.id] == nil }
         return (builtIn + Array(recipes.values)).sorted { $0.name < $1.name }
     }
+    var recipeMenu: [Dish] { menu.filter { $0.recipeID == nil } }
     init() { }
     enum CodingKeys: String, CodingKey { case plots, seeds, cropSeeds, water, coins, ingredients, dishes, order, sales, recipes, crafts, economy }
     init(from decoder: Decoder) throws {
@@ -356,35 +359,69 @@ struct AppData: Codable {
         garden.ingredients[ingredient.rawValue,default:0] + (ingredient.category == .fish ? garden.economy.finds[ingredient.rawValue,default:0] : 0)
     }
     func canCook(_ dish: Dish) -> Bool {
-        dish.isValid && dish.ingredients.allSatisfy { key,value in
+        if let saved=garden.recipes[dish.canonicalID],
+           saved.ingredients != dish.ingredients || saved.method != dish.method || saved.category != dish.category || saved.sprite != dish.sprite {return false}
+        return dish.isValid && dish.ingredients.allSatisfy { key,value in
             Ingredient(rawValue:key).map { ingredientCount($0) >= value } ?? false
         }
     }
 
-    mutating func cook(_ dish: Dish) -> Bool {
-        guard dish.isValid, canCook(dish) else { return false }
-        var dish=dish
-        let baseQuality = dish.quality - dish.kitchenBonus
-        dish.quality = min(100, baseQuality + garden.rank(.kitchen)*5)
-        dish.kitchenBonus = dish.quality - baseQuality
+    func cookingModifier(_ dish: Dish) -> Int {
+        let names = Set(dish.ingredients.keys)
+        let matched = Dish.allCases.contains { $0.ingredients == dish.ingredients && $0.method == dish.method && $0.category == dish.category }
+        let sweet: Set<String> = ["砂糖","甜菜糖","蜂蜜","草莓","苹果","梨","飞天李","缩皱无花果","苹果酱","可可"]
+        let savory: Set<String> = ["鱼肉","银鳞鱼","月光鱼","金纹鱼","洋葱","茄子","蘑菇","卷心菜"]
+        let clash = !names.isDisjoint(with: sweet) && !names.isDisjoint(with: savory) && !matched
+        let practice = min(2, garden.crafts[dish.canonicalID,default:0] / 5)
+        return min(6, max(-6, (matched ? 2 : 0) + garden.rank(.kitchen) + practice - (clash ? 4 : 0)))
+    }
+
+    mutating func cook(_ dish: Dish, natural: Int? = nil) -> Bool {
+        guard dish.isValid, canCook(dish), natural.map({ (1...20).contains($0) }) ?? true else { return false }
+        var recipe = garden.recipes[dish.canonicalID] ?? dish
+        recipe.id = dish.canonicalID; recipe.recipeID = nil; recipe.kitchenBonus = 0
+        let roll = CraftRoll(natural: natural ?? Int.random(in:1...20), modifier: cookingModifier(recipe))
+        var output = recipe
+        output.quality = roll.quality
+        if output.outputIngredient == nil {
+            output.recipeID = recipe.id
+            output.id = Dish.batchID(recipeID: recipe.id, quality: roll.quality)
+        }
+        guard garden.crafts[recipe.id,default:0] < 1_000_000_000,
+              output.outputIngredient.map({ garden.ingredients[$0.rawValue,default:0] < 1_000_000_000 }) ?? (garden.dishes[output.id,default:0] < 1_000_000_000) else { return false }
         for (ingredient, count) in dish.ingredients {
             let stored = min(count,garden.ingredients[ingredient,default:0])
             garden.ingredients[ingredient,default:0] -= stored
             if count > stored { garden.economy.finds[ingredient,default:0] -= count-stored }
         }
-        if let output = dish.outputIngredient { garden.ingredients[output.rawValue,default:0] += 1 }
-        else { garden.dishes[dish.id, default: 0] += 1 }
-        garden.recipes[dish.id] = dish
-        garden.crafts[dish.id, default: 0] += 1
+        garden.economy.kitchenResult = KitchenResult(recipe: recipe, output: roll.criticalFailure ? nil : output, roll: roll)
+        if roll.criticalFailure { return true }
+        if let ingredient = output.outputIngredient { garden.ingredients[ingredient.rawValue,default:0] += 1 }
+        else {
+            garden.dishes[output.id,default:0] += 1
+            garden.recipes[output.id] = output
+        }
+        if garden.recipes[recipe.id] == nil { garden.recipes[recipe.id] = recipe }
+        garden.crafts[recipe.id,default:0] += 1
         return true
     }
 
     mutating func stock(_ dish: Dish, at date: Date = Date()) -> Bool {
         guard let dish = garden.recipes[dish.id] ?? Dish.allCases.first(where: { $0.id == dish.id }),
-              dish.isValid, garden.orders.count < garden.capacity, garden.dishes[dish.rawValue, default: 0] > 0 else { return false }
+              dish.isValid, garden.shopOrderCount < garden.capacity, garden.dishes[dish.rawValue, default: 0] > 0 else { return false }
         garden.dishes[dish.rawValue, default: 0] -= 1
         let order=ShopOrder(dish:dish,placedAt:gameFocus(at:date),proceeds:salePrice(dish))
         if garden.order == nil {garden.order=order} else {garden.economy.extraOrders.append(order)}
+        return true
+    }
+
+    mutating func renameRecipe(_ id:String,to name:String)->Bool {
+        let clean=String(name.trimmingCharacters(in:.whitespacesAndNewlines).prefix(60))
+        guard !clean.isEmpty,garden.recipes[id] != nil else{return false}
+        for key in garden.recipes.keys where garden.recipes[key]?.canonicalID == id {garden.recipes[key]?.name=clean}
+        if var result=garden.economy.kitchenResult,result.recipe.id == id {
+            result.recipe.name=clean;result.output?.name=clean;garden.economy.kitchenResult=result
+        }
         return true
     }
 
@@ -477,6 +514,8 @@ struct AppData: Codable {
         try require(garden.economy.fishing?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.expedition?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.mining?.isValid(focus:availableGameFocus) ?? true)
+        try require(garden.economy.forge?.isValid(in:expeditionState) ?? true)
+        try require(garden.economy.kitchenResult?.isValid ?? true)
         try require(garden.plots.allSatisfy { $0.plantedAt.isFinite && $0.plantedAt >= 0 && $0.plantedAt <= availableGameFocus })
         try require(garden.plots.allSatisfy { $0.bonus.isFinite && (0...1_000_000_000).contains($0.bonus) && ($0.duration.map{$0.isFinite && $0>0 && $0<=1500} ?? true) })
         try require((1...180).contains(preferences.focusMinutes) && (1...60).contains(preferences.breakMinutes))
@@ -490,8 +529,13 @@ struct AppData: Codable {
             try require((timer.notifiedGameEvents?.count ?? 0) <= 256 && (timer.notifiedGameEvents ?? []).allSatisfy { $0.count <= 160 })
         }
         try require(garden.recipes.allSatisfy { $0.key == $0.value.id && $0.value.isValid })
+        try require(garden.recipes.values.allSatisfy { dish in
+            guard let baseID = dish.recipeID else { return true }
+            guard let base = garden.recipes[baseID], base.recipeID == nil else { return false }
+            return base.ingredients == dish.ingredients && base.method == dish.method && base.category == dish.category && base.sprite == dish.sprite
+        })
         try require(garden.crafts.values.allSatisfy { (0...1_000_000_000).contains($0) })
-        try require(garden.orders.count <= garden.capacity && Set(garden.orders.map(\.id)).count == garden.orders.count)
+        try require(garden.shopOrderCount <= garden.capacity && Set(garden.orders.map(\.id)).count == garden.orders.count)
         for order in garden.orders { try require(order.dish.isValid && order.placedAt.isFinite && order.placedAt >= 0 && order.placedAt <= availableGameFocus && (1...1_000_000).contains(order.price)) }
         let cosmetics=Set(Cosmetic.all.map(\.id))
         try require(garden.economy.owned.isSubset(of:cosmetics))

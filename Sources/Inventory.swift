@@ -16,7 +16,7 @@ struct InventoryEntry:Identifiable,Equatable {
 
 extension AppData {
     var inventory:[InventoryEntry] {
-        let prepared=Set([Ingredient.cookedRice,.noodles,.cakeBase,.bread,.roastedTea])
+        let prepared=Set([Ingredient.cookedRice,.noodles,.cakeBase,.bread,.roastedTea,.butter,.appleJam,.beetSugar,.moonbeanPaste])
         var result:[InventoryEntry]=Ingredient.allCases.compactMap {ingredient in
             let count=ingredientCount(ingredient)
             guard count>0 else{return nil}
@@ -50,7 +50,7 @@ extension AppData {
             let count=garden.economy.fishing?.baitStock[bait.id,default:0] ?? 0
             return count>0 ? InventoryEntry(id:"bait:"+bait.id,name:bait.name,category:.item,count:count,artwork:.nature(bait.spriteKey)):nil
         }
-        result += CraftedGear.all.compactMap {gear in
+        result += expeditionState.ownedGear.compactMap {gear in
             let count=garden.economy.expedition?.gear[gear.id,default:0] ?? 0
             return count>0 ? InventoryEntry(id:"gear:"+gear.id,name:gear.name,category:.item,count:count,artwork:.nature(gear.spriteKey)):nil
         }

@@ -162,6 +162,8 @@ struct Economy: Codable {
     var fishing: FishingState? = nil
     var expedition: ExpeditionState? = nil
     var mining: MiningState? = nil
+    var forge: ForgeState? = nil
+    var kitchenResult: KitchenResult? = nil
     var activeJourneys: [Journey] {
         get { journeys ?? journey.map { [$0] } ?? [] }
         set { journeys = newValue; journey = nil }
