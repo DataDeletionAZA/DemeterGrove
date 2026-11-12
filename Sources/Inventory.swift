@@ -63,6 +63,7 @@ extension AppData {
         result += Cosmetic.all.filter{garden.economy.owned.contains($0.id)}.map {item in
             InventoryEntry(id:"clothing:"+item.id,name:item.name,category:.clothing,count:1,artwork:.clothing(item.asset))
         }
+        if let pond=garden.economy.pond,pond.feed>0 {result.append(.init(id:"pond:feed",name:"鱼粮",category:.item,count:pond.feed,artwork:.ingredient("小麦")))}
         if garden.water>0 {result.append(.init(id:"water",name:"露水",category:.item,count:garden.water,artwork:.item))}
         return result.sorted {($0.category.rawValue,$0.name,$0.id)<($1.category.rawValue,$1.name,$1.id)}
     }

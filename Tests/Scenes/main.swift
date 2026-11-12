@@ -16,7 +16,17 @@ for viewportWidth:CGFloat in [240,380,800,1500,2600] {
     }
 }
 assert(SceneSizing.sidebar(width:1500)>SceneSizing.sidebar(width:500))
-assert(SceneNavigation.rooms == ["书房","农场","牧场","厨房","商店","炼金室","酒馆","锻造室"])
+assert(Set(SceneNavigation.rooms) == Set(["书房","农场","牧场","池塘","厨房","商店","炼金室","酒馆","锻造室"]))
+assert(SceneNavigation.neighbors(of:"后院") == nil)
+assert(SceneNavigation.neighbors(of:"池塘")!.1 == "农场")
+assert(SceneNavigation.neighbors(of:"农场")!.0 == "池塘")
+assert(SceneNavigation.canonical("小屋") == "首页")
+for entrances in [HomeEntrance.house,HomeEntrance.backyard] {
+    assert(Set(entrances.map(\.id)).count == entrances.count)
+    for entrance in entrances {assert(CGRect(x:0,y:0,width:1,height:1).contains(entrance.rect))}
+}
+assert(Set(HomeEntrance.house.map(\.id)) == Set(SceneNavigation.indoorRooms+["后院","户外地图"]))
+assert(Set(HomeEntrance.backyard.map(\.id)) == Set(SceneNavigation.outdoorRooms+["首页"]))
 assert(SceneNavigation.neighbors(of:"首页") == nil)
 assert(SceneNavigation.neighbors(of:"其他") == nil)
 assert(SceneNavigation.neighbors(of:"书房")!.0 == "锻造室")

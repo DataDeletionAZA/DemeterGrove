@@ -11,7 +11,24 @@ struct Mineral: Identifiable {
         .init(id:"gold",name:"金矿石",price:16), .init(id:"quartz",name:"石英",price:5),
         .init(id:"moonstone",name:"月长石",price:12), .init(id:"diamond_shard",name:"钻石碎片",price:8),
         .init(id:"diamond",name:"钻石",price:80), .init(id:"obsidian",name:"黑曜石",price:12),
-        .init(id:"starlight_ore",name:"星辉矿",price:18)
+        .init(id:"starlight_ore",name:"星辉矿",price:18),
+        .init(id:"tin",name:"锡石",price:9), .init(id:"zinc",name:"闪锌矿",price:11),
+        .init(id:"fluorite",name:"萤石",price:14), .init(id:"platinum",name:"铂矿石",price:28),
+        .init(id:"meteor_iron",name:"陨铁",price:36), .init(id:"sunstone",name:"日光石",price:20)
+    ]
+}
+
+struct MiningTool: Identifiable {
+    let id: String
+    let name: String
+    let level: Int
+    let price: Int
+    let bonus: Int
+    static let all: [MiningTool] = [
+        .init(id:"tool_pickaxe",name:"铁镐",level:1,price:0,bonus:0),
+        .init(id:"pickaxe_steel",name:"钢镐",level:8,price:180,bonus:1),
+        .init(id:"pickaxe_alloy",name:"合金镐",level:24,price:580,bonus:2),
+        .init(id:"pickaxe_meteor",name:"陨铁镐",level:38,price:1400,bonus:3)
     ]
 }
 
@@ -28,7 +45,7 @@ struct MineLayer: Identifiable {
     let prerequisite: String?
     var mineral: Mineral { Mineral.all.first { $0.id == mineralID }! }
     var artworkName: String { "Mine_" + id }
-    static let areas = ["旧矿场", "群山矿洞", "火山矿洞", "极地矿洞"]
+    static let areas = ["旧矿场", "群山矿洞", "火山矿洞", "极地矿洞", "潮汐矿窟", "高地矿洞", "遗迹矿井"]
     static func layers(in area: String) -> [MineLayer] { all.filter { $0.area == area } }
     static func visible(in area: String, highlighted: String?, selected: String?) -> MineLayer {
         let layers = layers(in: area)
@@ -47,7 +64,16 @@ struct MineLayer: Identifiable {
         .init(id:"volcanic_obsidian",area:"火山矿洞",name:"黑曜岩台",depth:1,level:20,mineralID:"obsidian",unlockMinutes:60,cycleMinutes:30,residentYield:4,prerequisite:nil),
         .init(id:"volcanic_diamond",area:"火山矿洞",name:"古老金伯利岩层",depth:2,level:26,mineralID:"diamond_shard",unlockMinutes:120,cycleMinutes:60,residentYield:5,prerequisite:"volcanic_obsidian"),
         .init(id:"polar_moonstone",area:"极地矿洞",name:"冰下长石层",depth:1,level:25,mineralID:"moonstone",unlockMinutes:90,cycleMinutes:45,residentYield:4,prerequisite:nil),
-        .init(id:"polar_starlight",area:"极地矿洞",name:"星辉结晶洞",depth:2,level:30,mineralID:"starlight_ore",unlockMinutes:150,cycleMinutes:60,residentYield:4,prerequisite:"polar_moonstone")
+        .init(id:"polar_starlight",area:"极地矿洞",name:"星辉结晶洞",depth:2,level:30,mineralID:"starlight_ore",unlockMinutes:150,cycleMinutes:60,residentYield:4,prerequisite:"polar_moonstone"),
+        .init(id:"reef_tin",area:"潮汐矿窟",name:"潮口砂锡层",depth:1,level:28,mineralID:"tin",unlockMinutes:90,cycleMinutes:40,residentYield:4,prerequisite:nil),
+        .init(id:"reef_fluorite",area:"潮汐矿窟",name:"蓝萤晶廊",depth:2,level:31,mineralID:"fluorite",unlockMinutes:120,cycleMinutes:55,residentYield:4,prerequisite:"reef_tin"),
+        .init(id:"reef_platinum",area:"潮汐矿窟",name:"沉潮铂脉",depth:3,level:35,mineralID:"platinum",unlockMinutes:165,cycleMinutes:90,residentYield:5,prerequisite:"reef_fluorite"),
+        .init(id:"highland_zinc",area:"高地矿洞",name:"雾口锌脉",depth:1,level:29,mineralID:"zinc",unlockMinutes:100,cycleMinutes:45,residentYield:4,prerequisite:nil),
+        .init(id:"highland_fluorite",area:"高地矿洞",name:"翠萤晶穴",depth:2,level:33,mineralID:"fluorite",unlockMinutes:135,cycleMinutes:65,residentYield:4,prerequisite:"highland_zinc"),
+        .init(id:"highland_sunstone",area:"高地矿洞",name:"金辉长石穹窟",depth:3,level:37,mineralID:"sunstone",unlockMinutes:170,cycleMinutes:85,residentYield:5,prerequisite:"highland_fluorite"),
+        .init(id:"ruins_tin",area:"遗迹矿井",name:"旧井锡层",depth:1,level:32,mineralID:"tin",unlockMinutes:105,cycleMinutes:55,residentYield:4,prerequisite:nil),
+        .init(id:"ruins_meteor_iron",area:"遗迹矿井",name:"藏陨砖廊",depth:2,level:39,mineralID:"meteor_iron",unlockMinutes:180,cycleMinutes:120,residentYield:5,prerequisite:"ruins_tin"),
+        .init(id:"ruins_platinum",area:"遗迹矿井",name:"封井铂库",depth:3,level:45,mineralID:"platinum",unlockMinutes:210,cycleMinutes:80,residentYield:5,prerequisite:"ruins_meteor_iron")
     ]
 }
 
@@ -65,8 +91,20 @@ struct MiningState: Codable, Equatable {
     var selectedLayer: String?
     var inventory: [String:Int] = [:]
     var lifetime: [String:Int] = [:]
+    var toolRank: Int?
+    var tool: MiningTool {
+        let rank = toolRank ?? 0
+        return MiningTool.all.indices.contains(rank) ? MiningTool.all[rank] : MiningTool.all[0]
+    }
+    var nextTool: MiningTool? {
+        let rank = toolRank ?? 0
+        guard MiningTool.all.indices.contains(rank) else { return nil }
+        return MiningTool.all.dropFirst(rank + 1).first
+    }
+    func residentRate(_ layer: MineLayer) -> Int { layer.residentYield + tool.bonus }
     func isValid(focus: Double) -> Bool {
-        guard selectedLayer.map({layers[$0] != nil}) ?? true,
+        guard MiningTool.all.indices.contains(toolRank ?? 0),
+              selectedLayer.map({layers[$0] != nil}) ?? true,
               inventory.values.allSatisfy({(0...1_000_000_000).contains($0)}),
               Set(inventory.keys).isSubset(of:Set(Mineral.all.map(\.id))),
               lifetime.allSatisfy({(0...1_000_000_000).contains($0.value)}),
@@ -101,7 +139,7 @@ extension AppData {
         }
         for id in state.layers.keys.sorted() {
             guard let layer=MineLayer.all.first(where:{$0.id == id}),var progress=state.layers[id],focus>progress.lastFocus else {continue}
-            let rate=state.selectedLayer == id ? Double(layer.residentYield):1
+            let rate=state.selectedLayer == id ? Double(state.residentRate(layer)):1
             let duration=Double(layer.cycleMinutes*60)
             let work=progress.work+(focus-progress.lastFocus)*rate
             let earned=min(1_000_000_000,Int(min(1_000_000_000,floor(work/duration))))
@@ -131,6 +169,15 @@ extension AppData {
         var state=miningState
         guard id.map({state.layers[$0] != nil}) ?? true else {return false}
         state.selectedLayer=id;garden.economy.mining=state
+        return true
+    }
+    mutating func upgradeMiningTool(at date: Date = Date()) -> Bool {
+        guard let next = miningState.nextTool, levelProgress.level >= next.level, garden.coins >= next.price else { return false }
+        advanceMining(to: gameFocus(at: date))
+        var state = miningState
+        state.toolRank = (state.toolRank ?? 0) + 1
+        garden.economy.mining = state
+        garden.coins -= next.price
         return true
     }
     mutating func combineDiamond()->Bool {

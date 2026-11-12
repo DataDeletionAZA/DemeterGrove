@@ -5,15 +5,15 @@ struct RootView: View {
     @ObservedObject var store: GardenStore
     @State private var sidebarShown = true
     private let pages = [("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
-                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
-                         ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
+                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("池塘", "fish"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
+                         ("小屋", "home"), ("后院", "garden"), ("户外地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
     private var sidebarPage:String {
         let route=SceneNavigation.canonical(store.selectedPage)
-        return route == "首页" || route == "户外地图" || SceneNavigation.isWild(route) ? "地图":route
+        return route == "首页" ? "小屋" : SceneNavigation.isWild(route) ? "户外地图":route
     }
     private var sceneMetadata:String {
         let route=SceneNavigation.canonical(store.selectedPage)
-        guard SceneNavigation.rooms.contains(route) || ["首页","户外地图"].contains(route) else{return ""}
+        guard SceneNavigation.rooms.contains(route) || ["首页","后院","户外地图"].contains(route) else{return ""}
         let level="等级 \(store.data.levelProgress.level)"
         return route == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
     }
@@ -78,7 +78,7 @@ struct RootView: View {
                 PixelScrollView {
                     Group {
                         switch store.selectedPage {
-                        case "首页": HomeScene(store: store)
+                        case "首页", "小屋": HomeScene(store: store)
                         case "书房": StudyScene(store: store)
                         case "任务", "四象限": TasksPage(store: store)
                         case "专注": FocusPage(store: store)
@@ -91,7 +91,9 @@ struct RootView: View {
                         case "商店": FarmPage(store: store, section: "商店")
                         case "成长": GrowthPage(store: store)
                         case "地图":HomeScene(store:store)
-                        case "户外地图":WorldMapScene(store:store)
+                        case "后院": HomeScene(store:store,backyard:true)
+                    case "池塘": PondScene(store:store)
+                    case "户外地图":WorldMapScene(store:store)
                         case "湖畔钓鱼", "钓鱼": FishingScene(store:store)
                         case "林间冒险", "探险": ExpeditionScene(store:store)
                         case "炼金室", "熬制魔药": MapPage(store: store, journey: .potions)

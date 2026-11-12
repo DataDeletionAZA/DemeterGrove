@@ -58,7 +58,7 @@ struct MiningScene: View {
             }.position(x: w * 0.64, y: h * 0.56)
             if (mining.selectedLayer == layer.id || opening) && working {
                 TimelineView(.animation(minimumInterval: 0.08, paused: reduceMotion)) { timeline in
-                    GameNatureSprite(key: "tool_pickaxe", size: w * 0.12)
+                    GameNatureSprite(key: opening ? MiningTool.all[0].id : mining.tool.id, size: w * 0.12)
                         .rotationEffect(.degrees(reduceMotion ? -12 : sin(timeline.date.timeIntervalSinceReferenceDate * 5) * 23 - 12), anchor: .bottomTrailing)
                 }.position(x: w * 0.73, y: h * 0.58).allowsHitTesting(false)
             }
@@ -86,11 +86,12 @@ struct MiningScene: View {
         VStack(alignment: .leading, spacing: 9) {
             Text(area).font(.headline).foregroundStyle(Palette.goldLight)
             Text("第\(inspected.depth) / \(layers.count)层").font(.system(size: 11)).foregroundStyle(Palette.muted)
-            PixelTabs(selection: $tab, items: [("矿层", "矿层"), ("矿石", "矿石")])
+            PixelTabs(selection: $tab, items: [("矿层", "矿层"), ("矿石", "矿石"), ("矿镐", "矿镐")])
             PixelScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if tab == "矿层" { detail(inspected) }
-                    else { mineralShelf }
+                    else if tab == "矿石" { mineralShelf }
+                    else { toolShelf }
                 }.padding(.trailing, 2)
             }
             if tab == "矿石" { diamondButton }
@@ -108,7 +109,7 @@ struct MiningScene: View {
             if opened {
                 PixelProgress(value: progress(layer))
                 Text("常规产出 · \(layer.cycleMinutes) 分钟 / 份").font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
-                Text(active ? "驻留加成 ×\(layer.residentYield)" : "可驻留 · 产出 ×\(layer.residentYield)").font(.system(size: 11)).foregroundStyle(Palette.goldLight)
+                Text(active ? "驻留加成 ×\(mining.residentRate(layer))" : "可驻留 · 产出 ×\(mining.residentRate(layer))").font(.system(size: 11)).foregroundStyle(Palette.goldLight)
                 Button(active ? "结束驻留" : "在此驻留") {
                     if store.commitGameChange({ $0.selectMine(active ? nil : layer.id, at: store.now) }) { store.message = active ? "结束驻留" : "驻留 · " + layer.name }
                 }.frame(maxWidth: .infinity)
@@ -139,6 +140,35 @@ struct MiningScene: View {
                     }
                     Spacer(minLength: 0)
                 }.padding(.vertical, 2)
+            }
+        }
+    }
+
+    private var toolShelf: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            toolDetails(mining.tool)
+            if let next = mining.nextTool {
+                Divider().overlay(Palette.line)
+                toolDetails(next)
+                Text("等级 \(next.level) · \(Money.text(next.price))").font(.caption).foregroundStyle(Palette.goldLight)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("升级为\(next.name)") {
+                    if store.commitGameChange({ $0.upgradeMiningTool(at: store.now) }) { store.message = "已换上\(next.name)" }
+                }.buttonStyle(PixelButtonStyle(primary: true))
+                    .disabled(store.data.levelProgress.level < next.level || store.data.garden.coins < next.price)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func toolDetails(_ tool: MiningTool) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            GameNatureSprite(key: tool.id, size: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(tool.name).font(.system(size: 12, weight: .medium))
+                if let lore = ItemLore.text(for: "pickaxe:" + tool.id) {
+                    Text(lore).font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                }
+                Text("驻留产出倍率 +\(tool.bonus)").font(.caption).foregroundStyle(Palette.goldLight)
             }
         }
     }

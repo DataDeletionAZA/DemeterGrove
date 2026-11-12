@@ -12,7 +12,7 @@ struct TavernScene: View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
             SceneHeader {
                 HStack {
-                    Text("酒馆 · 伙伴 \(state.hired.count)/8 · 同行 \(state.team.count)/4")
+                    Text("酒馆 · 伙伴 \(state.hired.count)/\(Companion.all.count) · 同行 \(state.team.count)/4")
                         .font(.system(size:13)).lineLimit(1).minimumScaleFactor(0.75)
                     Spacer(minLength:0)
                     WalletView(coins:store.data.garden.coins)
@@ -21,7 +21,7 @@ struct TavernScene: View {
                     SceneToolbarItem("出发探险"){SceneNavigation.open("探险",store:store,from:"酒馆")},
                     SceneToolbarItem("锻造室"){SceneNavigation.open("锻造室",store:store,from:"酒馆")},
                     SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"酒馆")},
-                    SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store,from:"酒馆")}
+                    SceneToolbarItem("小屋"){SceneNavigation.open("首页",store:store,from:"酒馆")}
                 ])
             }
             SceneCanvas(hasSidebar:true) { size in
@@ -32,16 +32,20 @@ struct TavernScene: View {
 
     private func tavern(_ size:CGSize) -> some View {
         let w=size.width,h=size.height
+        let topCount=(Companion.all.count+1)/2
+        let spriteSize=min(w*0.115,h*0.17)
         return ZStack {
             RoomBackdrop(name:"Tavern").frame(width:w,height:h)
             ForEach(Array(Companion.all.enumerated()),id:\.element.id) { index,person in
-                let row=index/4,column=index%4
-                let x=w*(0.20+Double(column)*0.20)
-                let y=h*(row == 0 ? 0.58:0.78)
+                let topRow=index<topCount
+                let column=topRow ? index:index-topCount
+                let rowCount=topRow ? topCount:Companion.all.count-topCount
+                let x=w*(0.12+0.76*(Double(column)+0.5)/Double(rowCount))
+                let y=h*(topRow ? 0.56:0.78)
                 ObjectButton(label:"\(person.name)，\(person.role)",action:{selected=person.id},caption:person.name + (state.team.contains(person.id) ? " · 同行":"")) {
-                    GameNatureSprite(key:person.spriteKey,size:w*0.12)
+                    GameNatureSprite(key:person.spriteKey,size:spriteSize)
                         .background(alignment:.bottom) {
-                            Ellipse().fill(selected == person.id ? Palette.gold.opacity(0.45):Color.black.opacity(0.12)).frame(width:w*0.11,height:h*0.025)
+                            Ellipse().fill(selected == person.id ? Palette.gold.opacity(0.45):Color.black.opacity(0.12)).frame(width:spriteSize*0.9,height:h*0.025)
                         }.opacity(store.data.levelProgress.level >= person.level ? 1:0.55)
                 }.position(x:x,y:y)
             }

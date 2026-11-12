@@ -1,6 +1,6 @@
 # DemeterGrove 自然图鉴
 
-本目录包含 48 种鱼、10 种鱼饵、12 种牧场动物、34 种植物与采集材料，以及 17 种野外观察对象。每项都有稳定英文标识、中文名称、来源类别和独立图像标识。
+本目录包含 64 种鱼、15 种鱼饵、13 种牧场动物、47 种植物与采集材料，以及 21 种野外观察对象。每项都有稳定英文标识、中文名称、来源类别和独立图像标识。
 
 农场有 25 种可种作物，其中 24 种进入种子市场；星露胡萝卜收获为胡萝卜。厨房共有 57 个固定配方，涵盖主食、热菜、冷菜、甜点、饮品与原料加工。固定配方通过实际研制收入配方册。
 
@@ -43,7 +43,7 @@
 
 月痴兽的外形、满月出穴起舞和银色粪肥有官方依据。牧场等级、价格和专注生产周期是本游戏规则。鳃囊草原作产于地中海；流液草的满月采集要求、曼德拉草成熟叫声与恢复药剂用途、护树罗锅的树栖特征来自官方资料；游戏区域和获得方式属于地图编排。
 
-稀有度抽取权重：常见 64、少见 28、珍稀 9、奇遇 2。鱼类基础售价分别为 14、22、38、62；采集材料基础售价分别为 8、14、25、40。
+稀有度抽取权重：常见 64、少见 28、珍稀 9、奇遇 2。鱼类基础售价分别为 6、9、15、27 铜币，采集材料基础售价分别为 4、7、12、22 铜币。
 
 ## 钓点生境
 
@@ -61,8 +61,26 @@
 | coast | 河口与近岸 | beach | 半咸水或海水 |
 | cool_shelf | 冷水大陆架 | sea | 海水 |
 | warm_pelagic | 暖水远洋 | sea | 海水 |
+| reed_marsh | 芦苇湿地 | marsh | 淡水 |
+| coral_lagoon | 珊瑚潟湖 | reef | 海水 |
+| mist_highland | 云雾高地 | highland | 淡水 |
+| abyss | 深海崖岸 | abyss | 海水 |
 
 湖红点鲑分配给高山湖和冰湖；北极红点鲑分配给冰湖；毛鳞鱼和大西洋鳕分配给极地近岸或冷水大陆架；鲯鳅、黄鳍金枪鱼和剑鱼分配给暖水远洋。这些分配沿用对应资料中的基本生境，再简化为游戏钓点。
+
+## 钓鱼与探险路线
+
+| 等级 | 地点 | 可进行的活动 |
+|---|---|---|
+| 8 | 芦苇湿地 | 钓鱼、采集、观察美洲麻鳽 |
+| 28 | 珊瑚潟湖 | 钓鱼、采集、观察阿氏前口蝠鲼 |
+| 35 | 云雾高地 | 钓鱼、采集、观察阿尔卑斯北山羊 |
+| 40 | 古塔遗迹 | 采集、观察残卷蛾 |
+| 45 | 深海崖岸 | 钓鱼 |
+
+每个新钓点都有四种鱼。芦晶钓竿、风纹钓竿和深渊钓竿可分别在等级 30、40、45 到湖畔渔具店购买。以柳木钓竿为基准，它们分别减少每竿用时 23%、26%、29%。珠纱鱼至少需要芦晶钓竿，云岫锦鲤至少需要风纹钓竿，深渊彗鱼需要深渊钓竿。旋纹亮片在等级 30 上架，可在珊瑚潟湖、云雾高地和深海崖岸使用。
+
+等级 30 可在酒馆结识珂拉莉，等级 35 可结识阿登，等级 40 可结识塞布尔。珊瑚潟湖的礁丝与古塔遗迹的回声藤可用于锻造。
 
 ## 鱼类
 
@@ -116,39 +134,60 @@
 | tidal_bell | 潮铃鱼 | 原创幻想 | 海滩 | 15 / 少见 | 鲜虾饵、星露团饵 | 食材 |  |
 | star_sail | 星帆鱼 | 原创幻想 | 远海 | 20 / 珍稀 | 小鱼饵、星露团饵 | 食材 |  |
 | ink_ribbon | 墨绸鱼 | 原创幻想 | 远海 | 20 / 奇遇 | 鱿鱼条、星露团饵 | 观赏 |  |
+| grass_pickerel | 草狗鱼 · *Esox americanus vermiculatus* | 现实物种 | 芦苇湿地 | 8 / 常见 | 芦节虫饵 | 食材 | [dfo_grass_pickerel](https://publications.gc.ca/collections/collection_2021/mpo-dfo/Fs97-4-3218-eng.pdf) |
+| mudminnow | 中央泥狗鱼 · *Umbra limi* | 现实物种 | 芦苇湿地 | 8 / 常见 | 芦节虫饵 | 收藏 | [usfs_mudminnow](https://www.srs.fs.usda.gov/pubs/chap/chap_2019_warren_019.pdf) |
+| marsh_sunfish | 蓝斑太阳鱼 · *Enneacanthus gloriosus* | 现实物种 | 芦苇湿地 | 8 / 少见 | 芦节虫饵 | 收藏 | [usgs_bluespotted_sunfish](https://nas.er.usgs.gov/queries/factsheet.aspx?Species_ID=377) |
+| reed_lantern | 苇灯鱼 | 原创幻想 | 芦苇湿地 | 10 / 珍稀 | 芦节虫饵 | 食材 |  |
+| bluegreen_chromis | 蓝绿光鳃鱼 · *Chromis viridis* | 现实物种 | 珊瑚潟湖 | 28 / 常见 | 礁纹蟹饵 | 收藏 | [study_chromis](https://www.sciencedirect.com/science/article/pii/S0022098106005545) |
+| convict_tang | 条纹刺尾鱼 · *Acanthurus triostegus* | 现实物种 | 珊瑚潟湖 | 28 / 常见 | 礁纹蟹饵 | 收藏 | [museum_convict_tang](https://australian.museum/learn/animals/fishes/convict-surgeonfish-acanthurus-triostegus/) |
+| bullethead_parrotfish | 钝头鹦嘴鱼 · *Chlorurus spilurus* | 现实物种 | 珊瑚潟湖 | 28 / 少见 | 礁纹蟹饵、旋纹亮片 | 食材 | [study_bullethead](https://link.springer.com/article/10.1186/s42523-020-0024-0) |
+| pearl_mantle | 珠纱鱼 | 原创幻想 | 珊瑚潟湖 | 30 / 珍稀 | 旋纹亮片 | 收藏 |  |
+| alpine_minnow | 欧洲鱥 · *Phoxinus phoxinus* | 现实物种 | 云雾高地 | 35 / 常见 | 冷溪幼虫饵 | 食材 | [ea_minnow](https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/291545/scho1204bilg-e-e.pdf) |
+| stone_loach | 欧洲须鳅 · *Barbatula barbatula* | 现实物种 | 云雾高地 | 35 / 常见 | 冷溪幼虫饵 | 食材 | [zsl_loach](https://cms.zsl.org/sites/default/files/2022-09/ZSL%20estuarine%20fish%20web%20guide.pdf) |
+| mist_darter | 雾梭鱼 | 原创幻想 | 云雾高地 | 35 / 少见 | 冷溪幼虫饵、旋纹亮片 | 食材 |  |
+| cloud_koi | 云岫锦鲤 | 原创幻想 | 云雾高地 | 40 / 奇遇 | 旋纹亮片 | 收藏 |  |
+| lanternfish | 灯笼鱼 · *Myctophidae* | 现实物种 | 深海崖岸 | 45 / 常见 | 深光饵 | 收藏 | [study_lanternfish](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0310976) |
+| marine_hatchetfish | 透明银斧鱼 · *Sternoptyx diaphana* | 现实物种 | 深海崖岸 | 45 / 常见 | 深光饵 | 收藏 | [study_hatchetfish](https://pubmed.ncbi.nlm.nih.gov/32517614/) |
+| roundnose_grenadier | 圆吻长尾鳕 · *Coryphaenoides rupestris* | 现实物种 | 深海崖岸 | 45 / 少见 | 深光饵、旋纹亮片 | 收藏 | [cosewic_grenadier](https://www.canada.ca/en/environment-climate-change/services/species-risk-public-registry/cosewic-assessments-status-reports/roundnose-grenadier.html) |
+| abyssal_comet | 深渊彗鱼 | 原创幻想 | 深海崖岸 | 45 / 奇遇 | 旋纹亮片 | 收藏 |  |
 
 ## 鱼饵
 
 | 标识 | 名称 | 类别 | 区域 | 等级 / 单价 | 说明 |
 |---|---|---|---|---|---|
-| earthworm | 蚯蚓饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林 | 3 / 2 | 适合多种淡水鱼的小份虫饵。 |
-| sweetcorn | 甜玉米饵 | 现实物种 | 湖畔、河谷、雨林 | 3 / 2 | 偏向鲤鱼和取食植物的淡水鱼。 |
-| dough | 麦香面团 | 现实物种 | 湖畔、河谷、雨林 | 3 / 3 | 柔软的谷物饵，适合缓水区。 |
-| insect | 昆虫饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林 | 5 / 3 | 模仿水面落虫和水生昆虫幼体。 |
-| dry_fly | 仿生毛钩 | 现实物种 | 河谷、群山、极地 | 10 / 4 | 用羽毛和纤维模仿昆虫的人工鱼饵。 |
-| minnow | 小鱼饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林、海滩、远海 | 8 / 4 | 为捕食性鱼类准备的小鱼形饵。 |
-| shrimp | 鲜虾饵 | 现实物种 | 海滩、远海 | 15 / 4 | 适合河口和近岸的海水鱼。 |
-| squid | 鱿鱼条 | 现实物种 | 海滩、远海、极地 | 15 / 5 | 偏向近海与远海的捕食性鱼。 |
-| spoon | 银色亮片 | 现实物种 | 湖畔、河谷、群山、极地、海滩、远海 | 10 / 5 | 金属反光与摆动模仿游动的小鱼。 |
-| glow_paste | 星露团饵 | 原创幻想 | 湖畔、河谷、群山、极地、雨林、海滩、远海 | 8 / 6 | 原创。揉入星露的微光团饵，吸引幻想鱼。 |
+| earthworm | 蚯蚓饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林 | 3 / 1 | 适合多种淡水鱼的小份虫饵。 |
+| sweetcorn | 甜玉米饵 | 现实物种 | 湖畔、河谷、雨林 | 3 / 1 | 偏向鲤鱼和取食植物的淡水鱼。 |
+| dough | 麦香面团 | 现实物种 | 湖畔、河谷、雨林 | 3 / 2 | 柔软的谷物饵，适合缓水区。 |
+| insect | 昆虫饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林 | 5 / 2 | 模仿水面落虫和水生昆虫幼体。 |
+| dry_fly | 仿生毛钩 | 现实物种 | 河谷、群山、极地 | 10 / 2 | 用羽毛和纤维模仿昆虫的人工鱼饵。 |
+| minnow | 小鱼饵 | 现实物种 | 湖畔、河谷、群山、极地、雨林、海滩、远海 | 8 / 2 | 为捕食性鱼类准备的小鱼形饵。 |
+| shrimp | 鲜虾饵 | 现实物种 | 海滩、远海 | 15 / 2 | 适合河口和近岸的海水鱼。 |
+| squid | 鱿鱼条 | 现实物种 | 海滩、远海、极地 | 15 / 3 | 偏向近海与远海的捕食性鱼。 |
+| spoon | 银色亮片 | 现实物种 | 湖畔、河谷、群山、极地、海滩、远海 | 10 / 3 | 金属反光与摆动模仿游动的小鱼。 |
+| glow_paste | 星露团饵 | 原创幻想 | 湖畔、河谷、群山、极地、雨林、海滩、远海 | 8 / 3 | 原创。揉入星露的微光团饵，吸引幻想鱼。 |
+| reed_nymph | 芦节虫饵 | 原创幻想 | 芦苇湿地 | 8 / 2 | 原创。纤维缠成小虫的形状，细足轻颤，适合湿地浅水。 |
+| reef_crab | 礁纹蟹饵 | 原创幻想 | 珊瑚潟湖 | 28 / 2 | 原创。小软饵带两只折叠蟹钳，收线时贴着水底侧行。 |
+| spiral_spoon | 旋纹亮片 | 原创幻想 | 珊瑚潟湖、云雾高地、深海崖岸 | 30 / 3 | 原创。弧面刻着旋纹，随水流翻出间歇的冷光。 |
+| alpine_grub | 冷溪幼虫饵 | 原创幻想 | 云雾高地 | 35 / 2 | 原创。浅灰软饵藏在石纹里，贴底时只有尾节缓缓摆动。 |
+| abyss_light | 深光饵 | 原创幻想 | 深海崖岸 | 45 / 3 | 原创。封在壳里的蓝光每隔几息亮一次，在深水中也很清楚。 |
 
 ## 牧场
 
 | 标识 | 动物 | 类别 | 等级 / 价格 | 产物 | 专注分钟 | 资料 |
 |---|---|---|---|---|---|---|
-| chicken | 母鸡 | 现实物种 | 1 / 90 | 鸡蛋 ×1 | 15 | [zoo_chicken](https://nationalzoo.si.edu/animals/chicken) |
-| cow | 奶牛 | 现实物种 | 1 / 180 | 牛奶 ×1 | 25 | [zoo_cow](https://nationalzoo.si.edu/animals/cow) |
-| duck | 家鸭 | 现实物种 | 2 / 130 | 鸭蛋 ×1 | 20 | [duck_domestication](https://www.allaboutbirds.org/guide/mallard) |
-| goat | 奶山羊 | 现实物种 | 3 / 180 | 羊奶 ×1 | 25 | [zoo_goat](https://nationalzoo.si.edu/animals/goat) |
-| sheep | 绵羊 | 现实物种 | 4 / 210 | 羊毛 ×1 | 35 | [sheep_wool](https://www.fao.org/livestock-systems/global-distributions/sheep/en/) |
-| rabbit | 安哥拉兔 | 现实物种 | 4 / 190 | 兔绒 ×1 | 30 | [rabbit_fibre](https://www.fao.org/4/v9384e/v9384e05.htm) |
-| cashmere_goat | 绒山羊 | 现实物种 | 5 / 260 | 羊绒 ×1 | 35 | [ucanr_cashmere](https://ucanr.edu/program/uc-small-farms-network/cashmere-goats) |
-| alpaca | 羊驼 | 现实物种 | 5 / 280 | 羊驼绒 ×1 | 40 | [zoo_alpaca](https://nationalzoo.si.edu/animals/alpaca) |
-| honeybee | 西方蜜蜂 | 现实物种 | 5 / 200 | 蜂蜜 ×1 | 30 | [bee_pollination](https://www.nrcs.usda.gov/sites/default/files/2024-06/Honey%20Bee%20SD-FS-94%206-24.pdf) |
-| mooncalf | 月痴兽 | 哈利·波特 | 6 / 360 | 银色粪肥 ×1 | 40 | [hp_mooncalf](https://www.harrypotter.com/fact-file/creatures/mooncalf) |
-| cloud_sheep | 云团羊 | 原创幻想 | 7 / 400 | 云绒 ×1 | 45 |  |
-| lantern_hen | 灯笼鸡 | 原创幻想 | 8 / 420 | 暖光蛋 ×1 | 35 |  |
-| moss_deer | 苔背鹿 | 原创幻想 | 9 / 500 | 柔苔团 ×1 | 50 |  |
+| chicken | 母鸡 | 现实物种 | 1 / 58 | 鸡蛋 ×1 | 15 | [zoo_chicken](https://nationalzoo.si.edu/animals/chicken) |
+| cow | 奶牛 | 现实物种 | 1 / 116 | 牛奶 ×1 | 25 | [zoo_cow](https://nationalzoo.si.edu/animals/cow) |
+| duck | 家鸭 | 现实物种 | 2 / 87 | 鸭蛋 ×1 | 20 | [duck_domestication](https://www.allaboutbirds.org/guide/mallard) |
+| goat | 奶山羊 | 现实物种 | 3 / 116 | 羊奶 ×1 | 25 | [zoo_goat](https://nationalzoo.si.edu/animals/goat) |
+| sheep | 绵羊 | 现实物种 | 4 / 116 | 羊毛 ×1 | 35 | [sheep_wool](https://www.fao.org/livestock-systems/global-distributions/sheep/en/) |
+| rabbit | 安哥拉兔 | 现实物种 | 4 / 116 | 兔绒 ×1 | 30 | [rabbit_fibre](https://www.fao.org/4/v9384e/v9384e05.htm) |
+| cashmere_goat | 绒山羊 | 现实物种 | 5 / 174 | 羊绒 ×1 | 35 | [ucanr_cashmere](https://ucanr.edu/program/uc-small-farms-network/cashmere-goats) |
+| alpaca | 羊驼 | 现实物种 | 5 / 203 | 羊驼绒 ×1 | 40 | [zoo_alpaca](https://nationalzoo.si.edu/animals/alpaca) |
+| honeybee | 西方蜜蜂 | 现实物种 | 5 / 145 | 蜂蜜 ×1 | 30 | [bee_pollination](https://www.nrcs.usda.gov/sites/default/files/2024-06/Honey%20Bee%20SD-FS-94%206-24.pdf) |
+| mooncalf | 月痴兽 | 哈利·波特 | 6 / 190 | 银色粪肥 ×1 | 40 | [hp_mooncalf](https://www.harrypotter.com/fact-file/creatures/mooncalf) |
+| cloud_sheep | 云团羊 | 原创幻想 | 7 / 290 | 云绒 ×1 | 45 |  |
+| lantern_hen | 灯笼鸡 | 原创幻想 | 8 / 230 | 暖光蛋 ×1 | 35 |  |
+| moss_deer | 苔背鹿 | 原创幻想 | 9 / 260 | 柔苔团 ×1 | 50 |  |
 
 ## 植物与采集材料
 
@@ -174,6 +213,7 @@
 | quartz | 石英晶簇 | 现实物种 | 群山、河谷 | 10 / 少见 | 常见的二氧化硅矿物，可形成有平直晶面的晶体。 | [smithsonian_quartz](https://naturalhistory.si.edu/explore/collections/geogallery/10026259) |
 | amethyst | 紫水晶 | 现实物种 | 群山 | 12 / 珍稀 | 带紫色的石英变种。 | [smithsonian_quartz](https://naturalhistory.si.edu/explore/collections/geogallery/10026259) |
 | amber | 琥珀石 | 现实物种 | 森林、海滩 | 5 / 珍稀 | 古老树脂形成的有机宝石，常呈金黄到棕色。 | [smithsonian_amber](https://www.si.edu/object/amber-fossilized-tree-resin%3Anmnheducation_14538139) |
+| rattan | 藤条 | 现实物种 | 雨林 | 18 / 常见 | 棕榈科攀援植物的长茎，坚韧的藤芯可以劈成细条来编织。 | [kew_rattan](https://www.kew.org/science/our-science/projects/sustainable-rattan) |
 | cacao | 可可果 · *Theobroma cacao* | 现实物种 | 雨林 | 18 / 少见 | 果实直接长在树干和粗枝上，种子经加工可制成可可。 | [kew_cacao](https://www.kew.org/plants/cacao-tree) |
 | vanilla | 香荚兰果荚 · *Vanilla planifolia* | 现实物种 | 雨林 | 18 / 珍稀 | 攀缘兰科植物的果实，香气在采收后的加工中逐渐形成。 | [cornell_vanilla](https://conservatory.cals.cornell.edu/plants/vanilla-planifolia/) |
 | coconut | 椰子 · *Cocos nucifera* | 现实物种 | 雨林、海滩 | 15 / 少见 | 热带椰树的果实，厚纤维外层适应海岸环境。 | [kew_coconut](https://www.kew.org/plants/coconut-palm) |
@@ -188,6 +228,18 @@
 | gillyweed | 鳃囊草 | 哈利·波特 | 海滩、远海 | 15 / 珍稀 | 原作中的地中海魔法植物，能让食用者短暂适应水下呼吸。 | [hp_gillyweed](https://www.harrypotter.com/fact-file/plants-and-potions/gillyweed) |
 | fluxweed | 流液草 | 哈利·波特 | 森林、河谷 | 10 / 珍稀 | 原作中的复方汤剂材料，需要在满月时采集。 | [hp_plants](https://www.harrypotter.com/features/harry-potter-101-wizarding-plants) · [hp_moon](https://www.harrypotter.com/features/the-importance-of-the-moon-in-the-wizarding-world) |
 | mandrake | 曼德拉草 | 哈利·波特 | 森林 | 12 / 奇遇 | 原作中的人形魔法植物，成熟后叫声致命，可用于配制恢复药剂。 | [hp_mandrake](https://www.harrypotter.com/fact-file/plants-and-potions/mandrake) |
+| cattail_fibre | 宽叶香蒲纤维 · *Typha latifolia* | 现实物种 | 芦苇湿地 | 8 / 常见 | 湿地里的香蒲有密集的棕色圆柱形花序；这里收的是干叶上能拆出的长纤维。 | [usda_cattail](https://www.nrcs.usda.gov/plantmaterials/idpmctn380201.pdf) |
+| bog_myrtle | 香杨梅枝 · *Myrica gale* | 现实物种 | 芦苇湿地 | 8 / 少见 | 生在湿地的矮灌木。叶片或枝条折断时能闻到香气。 | [pa_sweet_gale](https://www.naturalheritage.dcnr.pa.gov/factsheets/14167.pdf) |
+| bog_glass | 沼辉珠 | 原创幻想 | 芦苇湿地 | 10 / 珍稀 | 原创。泥底的小珠夹着淡紫光，擦净后能看见里面弯弯的草影。 |  |
+| sea_grape | 海葡萄 · *Caulerpa lentillifera* | 现实物种 | 珊瑚潟湖 | 28 / 常见 | 学名长茎葡萄蕨藻，是海水里的绿藻。直立藻枝长满圆粒，像一串小葡萄。 | [study_sea_grape](https://www.sciencedirect.com/science/article/pii/S2352513424002539) |
+| reef_silk | 礁丝 | 原创幻想 | 珊瑚潟湖 | 28 / 少见 | 原创。潮水退去后挂在礁边的蓝绿丝带，晒干还能弯折，可带去锻造。 |  |
+| tide_glass | 潮纹晶片 | 原创幻想 | 珊瑚潟湖 | 28 / 珍稀 | 原创。浅绿断面上有并行的白线，每一道像一条退去的潮痕。 |  |
+| alpine_juniper | 欧刺柏枝 · *Juniperus communis* | 现实物种 | 云雾高地 | 35 / 常见 | 带针形叶的常绿灌木，能在裸露山坡上生长，成熟球果多为蓝黑色。 | [ec_juniper](https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Juniperus_communis.pdf) |
+| cloud_lichen | 云枝衣 | 原创幻想 | 云雾高地 | 35 / 少见 | 原创。灰白的细枝伏在岩石背风面，起雾时绒尖会凝出小水珠。 |  |
+| wind_silver | 风银薄片 | 原创幻想 | 云雾高地 | 35 / 珍稀 | 原创。山脊裂石中剥落的银片，薄边被风吹动时会响一声。 |  |
+| echo_vine | 回声藤 | 原创幻想 | 古塔遗迹 | 40 / 常见 | 原创。沿石阶缝隙攀缘，干燥后的藤茎仍然柔韧，可带去锻造。 |  |
+| archive_moss | 卷页苔 | 原创幻想 | 古塔遗迹 | 40 / 少见 | 原创。成片覆在旧墙下，赭色叶缘一层层翘起，像受潮的纸页。 |  |
+| rune_shard | 符刻碎石 | 原创幻想 | 古塔遗迹 | 40 / 珍稀 | 原创。断石留着半道刻纹，斜照时沟底泛出淡紫。 |  |
 
 ## 野外观察
 
@@ -210,6 +262,10 @@
 | pebble_tortoise | 卵石龟 | 原创幻想 | 河谷、群山 | 10 |  |
 | rain_sprite | 雨枝灵 | 原创幻想 | 雨林 | 18 |  |
 | tidal_mouse | 潮沫鼠 | 原创幻想 | 海滩 | 15 |  |
+| american_bittern | 美洲麻鳽 · *Botaurus lentiginosus* | 现实物种 | 芦苇湿地 | 8 | [fws_american_bittern](https://www.fws.gov/story/2024-01/american-bittern) |
+| reef_manta | 阿氏前口蝠鲼 · *Mobula alfredi* | 现实物种 | 珊瑚潟湖 | 28 | [study_reef_manta](https://onlinelibrary.wiley.com/doi/10.1002/ece3.7464) |
+| alpine_ibex | 阿尔卑斯北山羊 · *Capra ibex* | 现实物种 | 云雾高地 | 35 | [park_alpine_ibex](https://www.pngp.it/en/nature-and-research/fauna/grasslands-and-rocky-environments/alpine-ibex) |
+| archive_moth | 残卷蛾 | 原创幻想 | 古塔遗迹 | 40 |  |
 
 ## 图像标识
 
@@ -286,3 +342,22 @@
 - `hp_bowtruckle`：[Harry Potter Official Encyclopedia · Bowtruckle](https://www.harrypotter.com/fact-file/creatures/bowtruckle)
 - `hp_plants`：[Harry Potter Official · Wizarding Plants](https://www.harrypotter.com/features/harry-potter-101-wizarding-plants)
 - `hp_moon`：[Harry Potter Official · The Importance of the Moon](https://www.harrypotter.com/features/the-importance-of-the-moon-in-the-wizarding-world)
+- `kew_rattan`：[Royal Botanic Gardens, Kew · Sustainable Rattan](https://www.kew.org/science/our-science/projects/sustainable-rattan)
+- `dfo_grass_pickerel`：[加拿大渔业及海洋部 · 草狗鱼栖地研究](https://publications.gc.ca/collections/collection_2021/mpo-dfo/Fs97-4-3218-eng.pdf)
+- `usfs_mudminnow`：[美国林务局 · 北美泥狗鱼](https://www.srs.fs.usda.gov/pubs/chap/chap_2019_warren_019.pdf)
+- `usgs_bluespotted_sunfish`：[美国地质调查局 · 蓝斑太阳鱼](https://nas.er.usgs.gov/queries/factsheet.aspx?Species_ID=377)
+- `study_chromis`：[实验海洋生物学与生态学期刊 · 蓝绿光鳃鱼的幼鱼栖地选择](https://www.sciencedirect.com/science/article/pii/S0022098106005545)
+- `museum_convict_tang`：[澳大利亚博物馆 · 条纹刺尾鱼](https://australian.museum/learn/animals/fishes/convict-surgeonfish-acanthurus-triostegus/)
+- `study_bullethead`：[钝头鹦嘴鱼在团块滨珊瑚上的啃食实验](https://link.springer.com/article/10.1186/s42523-020-0024-0)
+- `ea_minnow`：[英国环境署 · 河流鱼类的繁殖与栖地](https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/291545/scho1204bilg-e-e.pdf)
+- `zsl_loach`：[伦敦动物学会 · 河口鱼类野外辨识手册](https://cms.zsl.org/sites/default/files/2022-09/ZSL%20estuarine%20fish%20web%20guide.pdf)
+- `study_lanternfish`：[灯笼鱼发光器结构的比较研究](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0310976)
+- `study_hatchetfish`：[深海银斧鱼发光器的显微断层成像研究](https://pubmed.ncbi.nlm.nih.gov/32517614/)
+- `cosewic_grenadier`：[加拿大濒危野生动物状况委员会 · 圆吻长尾鳕评估](https://www.canada.ca/en/environment-climate-change/services/species-risk-public-registry/cosewic-assessments-status-reports/roundnose-grenadier.html)
+- `usda_cattail`：[美国自然资源保护局 · 宽叶香蒲](https://www.nrcs.usda.gov/plantmaterials/idpmctn380201.pdf)
+- `pa_sweet_gale`：[宾夕法尼亚州自然遗产计划 · 香杨梅](https://www.naturalheritage.dcnr.pa.gov/factsheets/14167.pdf)
+- `study_sea_grape`：[长茎葡萄蕨藻的盐度与施肥培养实验](https://www.sciencedirect.com/science/article/pii/S2352513424002539)
+- `ec_juniper`：[欧盟联合研究中心 · 欧洲森林树木图集：欧刺柏](https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Juniperus_communis.pdf)
+- `fws_american_bittern`：[美国鱼类及野生动植物管理局 · 美洲麻鳽](https://www.fws.gov/story/2024-01/american-bittern)
+- `study_reef_manta`：[阿氏前口蝠鲼在珊瑚礁清洁站的观测研究](https://onlinelibrary.wiley.com/doi/10.1002/ece3.7464)
+- `park_alpine_ibex`：[大帕拉迪索国家公园 · 阿尔卑斯北山羊](https://www.pngp.it/en/nature-and-research/fauna/grasslands-and-rocky-environments/alpine-ibex)

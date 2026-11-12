@@ -46,8 +46,8 @@ struct RanchScene: View {
         let w = size.width, h = size.height
         return ZStack {
             RoomBackdrop(name: "Ranch").frame(width: w, height: h)
-            SceneImageHotspot(background: "Ranch", rect: CGRect(x: 0.05, y: 0.12, width: 0.14, height: 0.24), size: size, label: "回到小院") {
-                SceneNavigation.open("首页", store: store, from: "牧场")
+            SceneImageHotspot(background: "Ranch", rect: CGRect(x: 0.05, y: 0.12, width: 0.14, height: 0.24), size: size, label: "回到后院") {
+                SceneNavigation.open("后院", store: store, from: "牧场")
             }
             TimelineView(.animation(minimumInterval: 1 / 10, paused: reduceMotion)) { timeline in
                 let animals = Array(ranch.animals.enumerated()).sorted { left, right in

@@ -36,7 +36,15 @@ struct ForgeMaterial:Identifiable {
         .init(id:"cashmere",name:"羊绒",kind:"纤维",gathering:0,scouting:0,guarding:2),
         .init(id:"rattan",name:"藤条",kind:"藤材",gathering:1,scouting:0,guarding:2),
         .init(id:"willow_twig",name:"白柳落枝",kind:"木材",gathering:1,scouting:0,guarding:0),
-        .init(id:"driftwood",name:"海漂木",kind:"木材",gathering:0,scouting:1,guarding:1)
+        .init(id:"driftwood",name:"海漂木",kind:"木材",gathering:0,scouting:1,guarding:1),
+        .init(id:"tin",name:"锡石",kind:"软金属",gathering:0,scouting:1,guarding:1),
+        .init(id:"zinc",name:"闪锌矿",kind:"金属",gathering:1,scouting:0,guarding:2),
+        .init(id:"fluorite",name:"萤石",kind:"晶石",gathering:0,scouting:2,guarding:1),
+        .init(id:"platinum",name:"铂矿石",kind:"金属",gathering:0,scouting:2,guarding:2),
+        .init(id:"meteor_iron",name:"陨铁",kind:"金属",gathering:1,scouting:0,guarding:3),
+        .init(id:"sunstone",name:"日光石",kind:"晶石",gathering:1,scouting:3,guarding:0),
+        .init(id:"reef_silk",name:"礁丝",kind:"纤维",gathering:0,scouting:1,guarding:2),
+        .init(id:"echo_vine",name:"回声藤",kind:"藤材",gathering:2,scouting:1,guarding:1)
     ]
 }
 struct ForgePart:Identifiable {
@@ -94,10 +102,20 @@ struct ForgeMold:Identifiable {
         return specialName(materialIDs:materialIDs) ?? main.name+name
     }
 
+    var specialRecipes: [(name:String, materials:[String])] {
+        switch id {
+        case "sword": return [("牧途守望剑",["iron","copper","sheep_wool"])]
+        case "coat": return [("月云护行衣",["cloud_fleece","alpaca_fibre","moonstone"]),
+                            ("潮绸远行衣",["reef_silk","alpaca_fibre","platinum"])]
+        case "pendant": return [("潮灯坠",["fluorite","tin"])]
+        case "staff": return [("曦石寻路杖",["echo_vine","sunstone","platinum"])]
+        case "longsword": return [("陨纹长剑",["meteor_iron","zinc","reef_silk"])]
+        default: return []
+        }
+    }
+
     func specialName(materialIDs:[String])->String? {
-        if id == "sword" && materialIDs == ["iron","copper","sheep_wool"] {return "牧途守望剑"}
-        if id == "coat" && materialIDs == ["cloud_fleece","alpaca_fibre","moonstone"] {return "月云护行衣"}
-        return nil
+        specialRecipes.first{$0.materials == materialIDs}?.name
     }
 
     func outputSprite(material:ForgeMaterial)->String {
@@ -127,35 +145,35 @@ struct ForgeMold:Identifiable {
 
     private static let salePercents=[15:60,35:90,55:110,75:130,95:155,100:180]
 
-    private static let grip=ForgePart(id:"grip",name:"握柄",preferred:["copper","iron","willow_twig","driftwood"])
-    private static let wrap=ForgePart(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre","rabbit_fibre","cashmere"])
-    private static let core=ForgePart(id:"gem",name:"杖芯",preferred:["quartz","moonstone","diamond","starlight_ore"])
-    private static let lining=ForgePart(id:"lining",name:"衬里",preferred:["sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere"])
-    private static let bodyMaterials=["iron","copper","rattan","sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere"]
+    private static let grip=ForgePart(id:"grip",name:"握柄",preferred:["copper","iron","willow_twig","driftwood","zinc","platinum"])
+    private static let wrap=ForgePart(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre","rabbit_fibre","cashmere","reef_silk","echo_vine"])
+    private static let core=ForgePart(id:"gem",name:"杖芯",preferred:["quartz","moonstone","diamond","starlight_ore","fluorite","sunstone"])
+    private static let lining=ForgePart(id:"lining",name:"衬里",preferred:["sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere","reef_silk"])
+    private static let bodyMaterials=["iron","copper","rattan","sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere","reef_silk"]
     static let all:[ForgeMold]=[
         .init(id:"machete",name:"砍刀",station:.furnace,slot:.tool,level:5,
-              parts:[.init(id:"blade",name:"厚刃",preferred:["iron","copper","obsidian"]),grip],gathering:3,scouting:0,guarding:1),
+              parts:[.init(id:"blade",name:"厚刃",preferred:["iron","copper","obsidian","meteor_iron"]),grip],gathering:3,scouting:0,guarding:1),
         .init(id:"saber",name:"弯刀",station:.furnace,slot:.tool,level:5,
-              parts:[.init(id:"blade",name:"弯刃",preferred:["iron","silver","obsidian"]),grip],gathering:2,scouting:0,guarding:2),
+              parts:[.init(id:"blade",name:"弯刃",preferred:["iron","silver","obsidian","meteor_iron"]),grip],gathering:2,scouting:0,guarding:2),
         .init(id:"longsword",name:"长剑",station:.furnace,slot:.tool,level:5,
-              parts:[.init(id:"blade",name:"长剑刃",preferred:["iron","starlight_ore"]),grip,wrap],gathering:0,scouting:0,guarding:4),
+              parts:[.init(id:"blade",name:"长剑刃",preferred:["iron","starlight_ore","meteor_iron"]),grip,wrap],gathering:0,scouting:0,guarding:4),
         .init(id:"shortsword",name:"短剑",station:.furnace,slot:.tool,level:5,
               parts:[.init(id:"blade",name:"短剑刃",preferred:["iron","copper","obsidian"]),grip,wrap],gathering:1,scouting:1,guarding:2),
         .init(id:"wand",name:"魔杖",station:.furnace,slot:.tool,level:5,
               parts:[.init(id:"shaft",name:"细杖身",preferred:["willow_twig","driftwood"]),core],gathering:1,scouting:3,guarding:0),
         .init(id:"staff",name:"法杖",station:.furnace,slot:.tool,level:5,
-              parts:[.init(id:"shaft",name:"长杖身",preferred:["driftwood","willow_twig"]),core,
-                     .init(id:"frame",name:"杖箍",preferred:["copper","silver","iron"])],gathering:0,scouting:3,guarding:2),
+              parts:[.init(id:"shaft",name:"长杖身",preferred:["driftwood","willow_twig","echo_vine"]),core,
+                     .init(id:"frame",name:"杖箍",preferred:["copper","silver","iron","platinum"])],gathering:0,scouting:3,guarding:2),
         .init(id:"sword",name:"单手剑",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"剑刃",preferred:["iron","obsidian"]),.init(id:"grip",name:"剑柄",preferred:["copper","iron"]),.init(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre"])],gathering:1,scouting:0,guarding:1),
         .init(id:"sickle",name:"镰刀",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"镰刃",preferred:["copper","obsidian"]),.init(id:"grip",name:"握柄",preferred:["iron","copper"])],gathering:2,scouting:0,guarding:0),
-        .init(id:"pendant",name:"吊坠",station:.furnace,slot:.charm,level:5,parts:[.init(id:"gem",name:"坠心",preferred:["quartz","moonstone","diamond"]),.init(id:"frame",name:"镶框",preferred:["silver","gold"])],gathering:0,scouting:2,guarding:0),
+        .init(id:"pendant",name:"吊坠",station:.furnace,slot:.charm,level:5,parts:[.init(id:"gem",name:"坠心",preferred:["quartz","moonstone","diamond","fluorite","sunstone"]),.init(id:"frame",name:"镶框",preferred:["silver","gold","tin","platinum"])],gathering:0,scouting:2,guarding:0),
         .init(id:"top",name:"上衣",station:.sewing,slot:.coat,level:5,
               parts:[.init(id:"body",name:"衣身",preferred:bodyMaterials),lining,
                      .init(id:"buckle",name:"衣扣",preferred:["copper","iron","moonstone","rattan"])],gathering:0,scouting:0,guarding:2),
         .init(id:"trousers",name:"下装",station:.sewing,slot:.trousers,level:5,
               parts:[.init(id:"body",name:"裤身",preferred:bodyMaterials),lining,
                      .init(id:"wrap",name:"系带",preferred:wrap.preferred+["rattan"])],gathering:0,scouting:0,guarding:2),
-        .init(id:"coat",name:"外套",station:.sewing,slot:.coat,level:5,parts:[.init(id:"cloth",name:"衣身",preferred:["sheep_wool","cloud_fleece"]),.init(id:"lining",name:"衬里",preferred:["rabbit_fibre","alpaca_fibre"]),.init(id:"buckle",name:"衣扣",preferred:["copper","moonstone"])],gathering:0,scouting:0,guarding:2)
+        .init(id:"coat",name:"外套",station:.sewing,slot:.coat,level:5,parts:[.init(id:"cloth",name:"衣身",preferred:["sheep_wool","cloud_fleece","reef_silk"]),.init(id:"lining",name:"衬里",preferred:["rabbit_fibre","alpaca_fibre"]),.init(id:"buckle",name:"衣扣",preferred:["copper","moonstone","platinum"])],gathering:0,scouting:0,guarding:2)
     ]
 }
 
@@ -188,7 +206,10 @@ extension EconomyBalance {
 }
 
 extension CraftedGear {
-    var description:String? {ItemLore.text(for:"gear:"+(forgeSprite ?? id))}
+    var description:String? {
+        let baseName = name.components(separatedBy:" · ").first ?? name
+        return ItemLore.text(for:"gear:"+baseName) ?? ItemLore.text(for:"gear:"+(forgeSprite ?? id))
+    }
 }
 struct ForgeResult:Codable,Equatable,Identifiable {
     var id=UUID()
@@ -260,9 +281,9 @@ extension AppData {
             let scale=max(1,roll.quality/20)
             let id=result.expectedGearID
             let item=expedition.generatedGear?[id] ?? CraftedGear(id:id,name:name,slot:mold.slot,level:mold.level,minerals:[:],price:0,
-                gathering:max(0,(mold.gathering+materials.reduce(0){$0+$1.gathering})*scale/2+specialBonus),
-                scouting:max(0,(mold.scouting+materials.reduce(0){$0+$1.scouting})*scale/2+specialBonus),
-                guarding:max(0,(mold.guarding+materials.reduce(0){$0+$1.guarding})*scale/2+specialBonus),
+                gathering:min(30,(mold.gathering+materials.reduce(0){$0+$1.gathering})*scale/2+specialBonus),
+                scouting:min(30,(mold.scouting+materials.reduce(0){$0+$1.scouting})*scale/2+specialBonus),
+                guarding:min(30,(mold.guarding+materials.reduce(0){$0+$1.guarding})*scale/2+specialBonus),
                 forgeSprite:mold.outputSprite(material:main),saleValue:mold.salePrice(materials:materials,quality:roll.quality))
             expedition.generatedGear=expedition.generatedGear ?? [:]
             expedition.generatedGear?[id]=item

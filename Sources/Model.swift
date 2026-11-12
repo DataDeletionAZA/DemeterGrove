@@ -516,6 +516,7 @@ struct AppData: Codable {
         try require(availableGameFocus.isFinite && availableGameFocus < 1_000_000_000_000)
         try require(garden.economy.autoShop?.isValid(in:garden,focus:availableGameFocus) ?? true)
         try require(garden.economy.ranch?.isValid(focus:availableGameFocus) ?? true)
+        try require(garden.economy.pond?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.fishing?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.expedition?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.mining?.isValid(focus:availableGameFocus) ?? true)

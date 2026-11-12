@@ -114,6 +114,16 @@ enum ItemLore {
         "mineral:diamond":"碳原子形成紧密晶格的宝石。很硬，但并非不会破裂。",
         "mineral:obsidian":"熔岩迅速冷却形成的火山玻璃，锋利断口有着贝壳般的弧面。",
         "mineral:starlight_ore":"原创。深色矿体里夹着细亮晶面，熄灯以后仍不急着黯淡。",
+        "mineral:tin":"锡石的主要成分是二氧化锡。颗粒密度较大，岩石风化后常随水流在砂砾间富集。",
+        "mineral:zinc":"闪锌矿以硫化锌为主，是提炼锌的常见矿石。含铁较多时，颜色往往更深。",
+        "mineral:fluorite":"萤石是氟化钙晶体，常见绿色或紫色，有些样品在紫外光下会发出荧光。",
+        "mineral:platinum":"铂在自然界很稀少，可与其他金属形成天然合金。它的密度大，同样大小的一块拿在手里更沉。",
+        "mineral:meteor_iron":"铁陨石以铁和镍为主，有些切面经过酸蚀会显出交错的条纹。",
+        "mineral:sunstone":"日光石是会闪光的一类长石。细小片状包裹体反射光线，转动石头时闪点也跟着变换。",
+        "pickaxe:tool_pickaxe":"寻常的铁镐，镐尖磨钝后还可以再磨，握柄也容易更换。",
+        "pickaxe:pickaxe_steel":"钢镐经过淬火，刃口磨损得更慢，适合在同一矿层持续采掘。",
+        "pickaxe:pickaxe_alloy":"合金钢镐的尖端经过加固，凿开紧实岩缝时更耐磕碰。",
+        "pickaxe:pickaxe_meteor":"原创。陨铁镐头在暗处泛着淡光，沿着矿脉凿下去时很容易找准落点。",
         "gear:copper_sickle":"弯刃贴着草茎收割，小心避开还要继续生长的部分。",
         "gear:iron_staff":"铁箍保护杖端，在泥地和石路上替膝盖承担一点争执。",
         "gear:iron_coat":"厚实外衣用铁扣固定，御风，也挡住路旁不太友好的枝条。",
@@ -140,11 +150,18 @@ enum ItemLore {
         "gear:forge_gear_trousers_rattan":"编紧的藤片护住小腿，屈膝处留出活动的空隙。",
         "gear:forge_gear_trousers_cloth":"布面沿裤线缝合，宽松的裤脚便于蹲下拾东西。",
         "gear:forge_gear_trousers_cashmere":"山羊绒织出一双软暖的裤腿，弹性的裤口贴住脚踝。",
+        "gear:潮灯坠":"原创。锡制镶框围住一粒萤石，坠心映着潮湿石壁上的细光。",
+        "gear:潮绸远行衣":"原创。礁丝衣身配柔软的羊驼绒衬里，雨水顺着铂扣两边滑落。",
+        "gear:曦石寻路杖":"原创。回声藤绞成杖身，日光石装在铂箍里，随着落地的节奏轻闪。",
+        "gear:陨纹长剑":"原创。陨铁刃上留有细密的交错纹路，礁丝缠带在潮气里仍便于握持。",
         "rod:willow":"轻巧的入门钓竿，适合第一次把安静带到湖边。",
         "rod:ash":"结实的竿身传来水下轻震，握稳比握紧更有用。",
         "rod:river":"为河流中的长久等待准备，收线时也经得住一点急脾气。",
         "rod:ocean":"适合沿岸远投的钓竿，能把鱼线送远，不能把烦恼一起甩掉。",
         "rod:star":"原创。竿节嵌着细细星纹，夜间垂钓时也容易辨认。",
+        "rod:reedglass":"透明竿节夹着一线芦纤，轻微的水下震动也会传到手边。",
+        "rod:storm":"加固的导线环能承受高地的乱风，起雾时仍好找准落点。",
+        "rod:abyssal":"重坠让鱼线越过近岸暗流，竿尖上的微光能读出深水的动静。",
         "potion:dew":"原创。薄荷与月光草酿成的清亮药液，把一点湿润还给农田。",
         "potion:seed":"原创。南瓜与琥珀的暖色混在瓶里，晃一晃，像藏着尚未展开的春天。",
         "potion:bloom":"原创。草莓与星砂酿成的药剂，能为已经播下的作物添一点生长进度。"
@@ -177,7 +194,10 @@ enum ItemLore {
         "cedar":"山地勘察员，擅长在看似相同的石坡里找出可走的路。",
         "brann":"远行护卫，行囊简洁，遇事时比平常更安静。",
         "linnet":"研究雨林生物的同伴，笔记本总比衣服更需要防水。",
-        "vesper":"星夜领航员，能把遥远天光与脚下道路放在同一幅图里。"
+        "vesper":"星夜领航员，能把遥远天光与脚下道路放在同一幅图里。",
+        "coralie":"常在退潮前记下鱼群和潮线，腰包里有几张画满潮汐的纸。",
+        "arden":"靠岩面水痕分辨雨后能走的山路，返程总比预定时间略早。",
+        "sable":"给遗迹里的碎陶和石片做记录，先记位置，再决定是否收进包里。"
     ]
 
     static let clothingDescriptions: [String:String] = [
@@ -224,7 +244,7 @@ enum ItemLore {
         case "wildlife": return NatureCatalog.wildlife.first{$0.id == value}?.description
         case "product": return product(value)
         case "mineral","mining": return equipmentDescriptions["mineral:"+value]
-        case "gear","rod","potion": return equipmentDescriptions[key]
+        case "gear","rod","pickaxe","potion": return equipmentDescriptions[key]
         case "companion": return companionDescriptions[value]
         case "clothing": return clothingDescriptions[value]
         case "find": return equipmentDescriptions["potion:"+value] ?? natural(value)

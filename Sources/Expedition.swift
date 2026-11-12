@@ -18,7 +18,10 @@ struct Companion:Identifiable {
         .init(id:"cedar",name:"西达",role:"山地勘察员",level:12,price:115,gathering:1,scouting:3,guarding:1),
         .init(id:"brann",name:"布兰",role:"远行护卫",level:14,price:110,gathering:1,scouting:1,guarding:3),
         .init(id:"linnet",name:"林奈特",role:"雨林博物学者",level:18,price:190,gathering:3,scouting:3,guarding:1),
-        .init(id:"vesper",name:"维斯珀",role:"星夜领航员",level:25,price:260,gathering:2,scouting:4,guarding:3)
+        .init(id:"vesper",name:"维斯珀",role:"星夜领航员",level:25,price:260,gathering:2,scouting:4,guarding:3),
+        .init(id:"coralie",name:"珂拉莉",role:"礁湾观察员",level:30,price:290,gathering:3,scouting:4,guarding:2),
+        .init(id:"arden",name:"阿登",role:"高地向导",level:35,price:330,gathering:2,scouting:3,guarding:5),
+        .init(id:"sable",name:"塞布尔",role:"遗迹修护师",level:40,price:380,gathering:4,scouting:3,guarding:3)
     ]
 }
 
@@ -101,11 +104,15 @@ struct ExpeditionLocation: Identifiable {
     let backdrop: String
     static let all: [ExpeditionLocation] = [
         .init(id:"forest",name:"森林",level:5,backdrop:"Forest"),
+        .init(id:"marsh",name:"芦苇湿地",level:8,backdrop:"ReedMarsh"),
         .init(id:"river",name:"河谷",level:10,backdrop:"River"),
         .init(id:"mountains",name:"群山",level:12,backdrop:"MountainLake"),
         .init(id:"beach",name:"海滩",level:15,backdrop:"Beach"),
         .init(id:"tropical",name:"雨林",level:18,backdrop:"Tropical"),
-        .init(id:"polar",name:"极地",level:25,backdrop:"Polar")
+        .init(id:"polar",name:"极地",level:25,backdrop:"Polar"),
+        .init(id:"reef",name:"珊瑚潟湖",level:28,backdrop:"CoralLagoon"),
+        .init(id:"highland",name:"云雾高地",level:35,backdrop:"MistHighland"),
+        .init(id:"ruins",name:"古塔遗迹",level:40,backdrop:"Ruins")
     ]
 }
 

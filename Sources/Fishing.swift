@@ -24,7 +24,10 @@ struct FishingRod:Identifiable {
         .init(id:"ash",name:"白蜡木钓竿",level:5,price:30,rank:1,speed:0.95),
         .init(id:"river",name:"河行钓竿",level:10,price:60,rank:2,speed:0.90),
         .init(id:"ocean",name:"潮汐钓竿",level:15,price:100,rank:3,speed:0.85),
-        .init(id:"star",name:"星纹钓竿",level:25,price:180,rank:4,speed:0.80)
+        .init(id:"star",name:"星纹钓竿",level:25,price:180,rank:4,speed:0.80),
+        .init(id:"reedglass",name:"芦晶钓竿",level:30,price:225,rank:5,speed:0.77),
+        .init(id:"storm",name:"风纹钓竿",level:40,price:315,rank:6,speed:0.74),
+        .init(id:"abyssal",name:"深渊钓竿",level:45,price:425,rank:7,speed:0.71)
     ]
 }
 
@@ -77,6 +80,7 @@ struct FishingLocation:Identifiable {
     var baits:[NatureBait] {NatureCatalog.baits.filter{accepts($0)}}
     static let all:[FishingLocation]=[
         .init(id:"lake",regionID:"lake",habitatID:"temperate_lake",waterType:.fresh,name:"暮色湖",level:3,minimum:120,maximum:300,background:"Lake"),
+        .init(id:"reed_marsh",regionID:"marsh",habitatID:"reed_marsh",waterType:.fresh,name:"芦苇湿地",level:8,minimum:210,maximum:360,background:"ReedMarsh"),
         .init(id:"river",regionID:"river",habitatID:"lowland_river",waterType:.fresh,name:"河谷缓流",level:10,minimum:150,maximum:330,background:"River"),
         .init(id:"river_cool",regionID:"river",habitatID:"cool_river",waterType:.fresh,name:"清流上游",level:10,minimum:150,maximum:330,background:"River"),
         .init(id:"mountains",regionID:"mountains",habitatID:"mountain_lake",waterType:.fresh,name:"高山湖区",level:12,minimum:150,maximum:360,background:"MountainLake"),
@@ -85,7 +89,10 @@ struct FishingLocation:Identifiable {
         .init(id:"sea",regionID:"sea",habitatID:"cool_shelf",waterType:.salt,name:"冷流海域",level:20,minimum:210,maximum:420,background:"Sea"),
         .init(id:"sea_warm",regionID:"sea",habitatID:"warm_pelagic",waterType:.salt,name:"暖流远洋",level:20,minimum:360,maximum:600,background:"SeaWarm"),
         .init(id:"polar",regionID:"polar",habitatID:"polar_lake",waterType:.fresh,name:"冰原湖",level:25,minimum:210,maximum:420,background:"Polar"),
-        .init(id:"polar_coast",regionID:"polar",habitatID:"polar_coast",waterType:.salt,name:"极地近岸",level:25,minimum:210,maximum:420,background:"PolarCoast")
+        .init(id:"polar_coast",regionID:"polar",habitatID:"polar_coast",waterType:.salt,name:"极地近岸",level:25,minimum:210,maximum:420,background:"PolarCoast"),
+        .init(id:"coral_lagoon",regionID:"reef",habitatID:"coral_lagoon",waterType:.salt,name:"珊瑚潟湖",level:28,minimum:225,maximum:435,background:"CoralLagoon"),
+        .init(id:"mist_highland",regionID:"highland",habitatID:"mist_highland",waterType:.fresh,name:"云雾高地",level:35,minimum:240,maximum:420,background:"MistHighland"),
+        .init(id:"abyss",regionID:"abyss",habitatID:"abyss",waterType:.salt,name:"深海崖岸",level:45,minimum:360,maximum:600,background:"AbyssCoast")
     ]
 }
 
@@ -114,7 +121,7 @@ extension FishingState {
         let usable=baitID.flatMap {id in location.baits.first{$0.id == id && baitStock[id,default:0]>0}}
         if let usable {baitStock[usable.id,default:0]-=1}
         let speed:Double
-        switch usable?.id {case "glow_paste":speed=0.85;case "earthworm","shrimp","squid","minnow":speed=0.90;case nil:speed=1;default:speed=0.95}
+        switch usable?.id {case "glow_paste":speed=0.85;case "earthworm","shrimp","squid","minnow","reed_nymph","reef_crab","alpine_grub","abyss_light":speed=0.90;case nil:speed=1;default:speed=0.95}
         let seconds=Double(location.minimum+random.next(location.maximum-location.minimum+1))*rod.speed*speed
         cast=FishingCast(startedFocus:focus,duration:max(60,seconds.rounded()),locationID:locationID,baitID:usable?.id,rodID:rodID)
     }
@@ -122,9 +129,9 @@ extension FishingState {
         guard let rod=FishingRod.all.first(where:{$0.id == cast.rodID}),
               let location=FishingLocation.all.first(where:{$0.id == cast.locationID}) else{return nil}
         let usableBait=cast.baitID.flatMap{id in location.baits.first{$0.id == id}?.id}
-        let roll=random.next(100),fishChance=55+(usableBait == nil ? 0:15)+rod.rank*2
+        let roll=random.next(100),fishChance=55+(usableBait == nil ? 0:15)+min(10,rod.rank*2)
         if roll<fishChance {
-            let choices=location.fish.filter {$0.level<=level && ($0.rarity != .legendary || rod.rank>=3)}
+            let choices=location.fish.filter {$0.level<=level && rod.rank >= $0.minimumRodRank}
             let weights=choices.map {fish in fish.rarity.weight*(fish.baitIDs.contains(usableBait ?? "") ? 3:1)}
             let total=weights.reduce(0,+)
             guard total>0 else{return "waterweed"}

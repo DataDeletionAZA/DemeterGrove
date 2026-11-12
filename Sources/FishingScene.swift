@@ -23,6 +23,10 @@ struct FishingScene:View {
     private var bag:[String] {state.inventory.keys.filter{state.inventory[$0,default:0]>0}.sorted{(NatureItemInfo.fishingCatch($0)?.name ?? $0)<(NatureItemInfo.fishingCatch($1)?.name ?? $1)}}
     private var rodPosition:CGPoint {
         switch location.background {
+        case "ReedMarsh":return CGPoint(x:0.77,y:0.67)
+        case "CoralLagoon":return CGPoint(x:0.80,y:0.55)
+        case "MistHighland":return CGPoint(x:0.79,y:0.70)
+        case "AbyssCoast":return CGPoint(x:0.78,y:0.70)
         case "Lake":return CGPoint(x:0.465,y:0.435)
         case "Beach":return CGPoint(x:0.43,y:0.36)
         case "Tropical":return CGPoint(x:0.45,y:0.45)
@@ -154,7 +158,7 @@ struct FishingScene:View {
                     .onChange(of:configurationLocationID) { _,_ in
                         if !configurationLocation.baits.contains(where:{$0.id == bait}) { bait="" }
                     }
-                PixelSelect(selection:$rod,items:FishingRod.all.filter{ownedRods.contains($0.id)}.map{($0.id,$0.name)})
+                PixelSelect(selection:$rod,items:FishingRod.all.filter{ownedRods.contains($0.id) && $0.level<=store.data.levelProgress.level}.map{($0.id,$0.name)})
                     .accessibilityLabel("选择渔竿")
                 if let description=ItemLore.text(for:"rod:"+rod) {
                     Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
@@ -224,7 +228,9 @@ struct FishingScene:View {
                             GameNatureSprite(key:item.spriteKey,size:48)
                             VStack(alignment:.leading,spacing:4) {
                                 Text(item.name)
-                                Text("等级 \(item.level) · 速度 \(Int(((1-item.speed)*100).rounded()))% 提升").font(.caption).foregroundStyle(Palette.muted)
+                                let reduction=Int(((1-item.speed)*100).rounded())
+                                Text(reduction == 0 ? "等级 \(item.level) · 基础竿" : "等级 \(item.level) · 每竿用时 −\(reduction)%")
+                                    .font(.caption).foregroundStyle(Palette.muted)
                                 if let description=ItemLore.text(for:"rod:"+item.id) {Text(description).font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)}
                             }
                             Spacer()
@@ -247,11 +253,33 @@ struct FishingScene:View {
                         GameNatureSprite(key:fish.spriteKey,size:96).frame(maxWidth:.infinity)
                         Text(fish.name).font(.headline)
                         Text("\(fish.origin.name) · \(fish.rarity.name)").font(.caption).foregroundStyle(Palette.muted)
+                        if fish.minimumRodRank > 0, let required=FishingRod.all.first(where:{$0.rank == fish.minimumRodRank}) {
+                            Text("等级 \(fish.level) · \(required.name)或更高").font(.caption).foregroundStyle(Palette.goldLight)
+                        } else if fish.level > store.data.levelProgress.level {
+                            Text("等级 \(fish.level)").font(.caption).foregroundStyle(Palette.goldLight)
+                        }
                         Text(fish.description).font(.system(size:12)).fixedSize(horizontal:false,vertical:true)
+                        let baits=location.baits.filter{fish.baitIDs.contains($0.id)}.map(\.name)
+                        if !baits.isEmpty {
+                            Text("偏好的鱼饵 · "+baits.joined(separator:"、")).font(.caption).foregroundStyle(Palette.muted)
+                        }
+                        NatureSourceLinks(ids:fish.sourceIDs)
                         Text(state.lifetime[fish.id,default:0]>0 ? "累计钓获 \(state.lifetime[fish.id,default:0])":"尚未钓获").font(.caption).foregroundStyle(Palette.goldLight)
                     }.frame(maxWidth:.infinity,alignment:.topLeading).padding(10).magicSurface(Palette.card)
                 }
             }
         } footer:{EmptyView()}
+    }
+}
+
+struct NatureSourceLinks: View {
+    let ids:[String]
+
+    var body: some View {
+        ForEach(NatureCatalog.sources.filter{ids.contains($0.id)}) {source in
+            if let url=URL(string:source.url) {
+                Link(source.title,destination:url).font(.caption).fixedSize(horizontal:false,vertical:true)
+            }
+        }
     }
 }

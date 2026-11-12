@@ -35,6 +35,14 @@ struct NatureFish: Identifiable, Equatable {
     var sourceIDs: [String]
     var spriteKey: String { "fish_" + id }
     var salePrice: Int { switch rarity { case .common: return 6; case .uncommon: return 9; case .rare: return 15; case .legendary: return 27 } }
+    var minimumRodRank: Int {
+        switch id {
+        case "pearl_mantle": return 5
+        case "cloud_koi": return 6
+        case "abyssal_comet": return 7
+        default: return rarity == .legendary ? 3 : 0
+        }
+    }
     var cookingIngredient: Ingredient? {
         guard isCookable else { return nil }
         switch id {
@@ -96,6 +104,14 @@ extension NatureFish {
             return ["lowland_river"]
         case "aurora_ray":
             return ["polar_coast"]
+        case "grass_pickerel", "mudminnow", "marsh_sunfish", "reed_lantern":
+            return ["reed_marsh"]
+        case "bluegreen_chromis", "convict_tang", "bullethead_parrotfish", "pearl_mantle":
+            return ["coral_lagoon"]
+        case "alpine_minnow", "stone_loach", "mist_darter", "cloud_koi":
+            return ["mist_highland"]
+        case "lanternfish", "marine_hatchetfish", "roundnose_grenadier", "abyssal_comet":
+            return ["abyss"]
         default:
             return []
         }
@@ -188,7 +204,12 @@ extension NatureCatalog {
         .init(id:"shrimp",name:"鲜虾饵",origin:.real,locations:["beach","sea"],waterTypes:[.brackish,.salt],level:15,price:2,description:"适合河口和近岸的海水鱼。",sourceIDs:["fwc_red_drum"]),
         .init(id:"squid",name:"鱿鱼条",origin:.real,locations:["beach","sea","polar"],waterTypes:[.salt],level:15,price:3,description:"偏向近海与远海的捕食性鱼。",sourceIDs:["noaa_flounder","noaa_swordfish"]),
         .init(id:"spoon",name:"银色亮片",origin:.real,locations:["lake","river","mountains","polar","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:10,price:3,description:"靠金属反光与摆动模仿小鱼。水下的广告，也讲究投放位置。",sourceIDs:["ny_fishing"]),
-        .init(id:"glow_paste",name:"星露团饵",origin:.original,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:3,description:"原创。揉入星露的微光团饵，吸引幻想鱼。",sourceIDs:[])
+        .init(id:"glow_paste",name:"星露团饵",origin:.original,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:3,description:"原创。揉入星露的微光团饵，吸引幻想鱼。",sourceIDs:[]),
+        .init(id:"reed_nymph",name:"芦节虫饵",origin:.original,locations:["marsh"],waterTypes:[.fresh],level:8,price:1,description:"原创。纤维缠成小虫的形状，细足轻颤，适合湿地浅水。",sourceIDs:[]),
+        .init(id:"reef_crab",name:"礁纹蟹饵",origin:.original,locations:["reef"],waterTypes:[.salt],level:28,price:1,description:"原创。小软饵带两只折叠蟹钳，收线时贴着水底侧行。",sourceIDs:[]),
+        .init(id:"spiral_spoon",name:"旋纹亮片",origin:.original,locations:["reef","highland","abyss"],waterTypes:[.fresh,.salt],level:30,price:2,description:"原创。弧面刻着旋纹，随水流翻出间歇的冷光。",sourceIDs:[]),
+        .init(id:"alpine_grub",name:"冷溪幼虫饵",origin:.original,locations:["highland"],waterTypes:[.fresh],level:35,price:1,description:"原创。浅灰软饵藏在石纹里，贴底时只有尾节缓缓摆动。",sourceIDs:[]),
+        .init(id:"abyss_light",name:"深光饵",origin:.original,locations:["abyss"],waterTypes:[.salt],level:45,price:1,description:"原创。封在壳里的蓝光每隔几息亮一次，在深水中也很清楚。",sourceIDs:[])
     ]
 
     static let fish: [NatureFish] = [
@@ -239,7 +260,23 @@ extension NatureCatalog {
         .init(id:"lotus_fan",name:"莲扇鱼",scientificName:nil,origin:.original,locations:["tropical"],waterTypes:[.fresh],baitIDs:["dough","glow_paste"],rarity:.uncommon,level:18,foodKind:.river,isCookable:true,description:"原创。尾鳍像一把小莲叶，在暖水湾里舒展。",sourceIDs:[]),
         .init(id:"tidal_bell",name:"潮铃鱼",scientificName:nil,origin:.original,locations:["beach"],waterTypes:[.brackish,.salt],baitIDs:["shrimp","glow_paste"],rarity:.uncommon,level:15,foodKind:.sea,isCookable:true,description:"原创。鳍边有贝壳一样的纹路，常跟着涨潮靠岸。",sourceIDs:[]),
         .init(id:"star_sail",name:"星帆鱼",scientificName:nil,origin:.original,locations:["sea"],waterTypes:[.salt],baitIDs:["minnow","glow_paste"],rarity:.rare,level:20,foodKind:.sea,isCookable:true,description:"原创。高背鳍像绣着星点的帆，追逐漂浮海藻。",sourceIDs:[]),
-        .init(id:"ink_ribbon",name:"墨绸鱼",scientificName:nil,origin:.original,locations:["sea"],waterTypes:[.salt],baitIDs:["squid","glow_paste"],rarity:.legendary,level:20,foodKind:.sea,isCookable:false,description:"原创。深蓝长尾像展开的绸带，转身时散出星点微光。",sourceIDs:[])
+        .init(id:"ink_ribbon",name:"墨绸鱼",scientificName:nil,origin:.original,locations:["sea"],waterTypes:[.salt],baitIDs:["squid","glow_paste"],rarity:.legendary,level:20,foodKind:.sea,isCookable:false,description:"原创。深蓝长尾像展开的绸带，转身时散出星点微光。",sourceIDs:[]),
+        .init(id:"grass_pickerel",name:"草狗鱼",scientificName:"Esox americanus vermiculatus",origin:.real,locations:["marsh"],waterTypes:[.fresh],baitIDs:["reed_nymph"],rarity:.common,level:8,foodKind:.river,isCookable:true,description:"在水浅、流速慢而水草茂盛的水域活动，修长的身体容易藏在草间。",sourceIDs:["dfo_grass_pickerel"]),
+        .init(id:"mudminnow",name:"中央泥狗鱼",scientificName:"Umbra limi",origin:.real,locations:["marsh"],waterTypes:[.fresh],baitIDs:["reed_nymph"],rarity:.common,level:8,foodKind:.river,isCookable:false,description:"常出现在水草茂密的低地湿地和河湾缓水，背上的暗纹与泥底相近。",sourceIDs:["usfs_mudminnow"]),
+        .init(id:"marsh_sunfish",name:"蓝斑太阳鱼",scientificName:"Enneacanthus gloriosus",origin:.real,locations:["marsh"],waterTypes:[.fresh],baitIDs:["reed_nymph"],rarity:.uncommon,level:8,foodKind:.river,isCookable:false,description:"身上散着浅蓝小点，喜欢有大量水草的浅水，会吃小型水生无脊椎动物。",sourceIDs:["usgs_bluespotted_sunfish"]),
+        .init(id:"reed_lantern",name:"苇灯鱼",scientificName:nil,origin:.original,locations:["marsh"],waterTypes:[.fresh],baitIDs:["reed_nymph"],rarity:.rare,level:10,foodKind:.river,isCookable:true,description:"原创。尾端浮着一点翠绿，天暗后会停在芦秆的倒影里。",sourceIDs:[]),
+        .init(id:"bluegreen_chromis",name:"蓝绿光鳃鱼",scientificName:"Chromis viridis",origin:.real,locations:["reef"],waterTypes:[.salt],baitIDs:["reef_crab"],rarity:.common,level:28,foodKind:.sea,isCookable:false,description:"在珊瑚礁实验中，幼鱼更常选择有同类生活的活珊瑚丛落脚。",sourceIDs:["study_chromis"]),
+        .init(id:"convict_tang",name:"条纹刺尾鱼",scientificName:"Acanthurus triostegus",origin:.real,locations:["reef"],waterTypes:[.salt],baitIDs:["reef_crab"],rarity:.common,level:28,foodKind:.sea,isCookable:false,description:"浅色身躯上排着细长的深色竖带，其中一道从眼睛穿过。",sourceIDs:["museum_convict_tang"]),
+        .init(id:"bullethead_parrotfish",name:"钝头鹦嘴鱼",scientificName:"Chlorurus spilurus",origin:.real,locations:["reef"],waterTypes:[.salt],baitIDs:["reef_crab","spiral_spoon"],rarity:.uncommon,level:28,foodKind:.sea,isCookable:true,description:"也会啃食活珊瑚。研究者曾记录它在团块滨珊瑚上留下的齿痕。",sourceIDs:["study_bullethead"]),
+        .init(id:"pearl_mantle",name:"珠纱鱼",scientificName:nil,origin:.original,locations:["reef"],waterTypes:[.salt],baitIDs:["spiral_spoon"],rarity:.rare,level:30,foodKind:.sea,isCookable:false,description:"原创。淡粉色长鳍会随着转身泛起珍珠光，远看像一小片松开的纱。",sourceIDs:[]),
+        .init(id:"alpine_minnow",name:"欧洲鱥",scientificName:"Phoxinus phoxinus",origin:.real,locations:["highland"],waterTypes:[.fresh],baitIDs:["alpine_grub"],rarity:.common,level:35,foodKind:.river,isCookable:true,description:"常成群在溪流里活动，繁殖时会把卵产在小石砾间。",sourceIDs:["ea_minnow"]),
+        .init(id:"stone_loach",name:"欧洲须鳅",scientificName:"Barbatula barbatula",origin:.real,locations:["highland"],waterTypes:[.fresh],baitIDs:["alpine_grub"],rarity:.common,level:35,foodKind:.river,isCookable:true,description:"靠近溪床活动，嘴边有短须，斑驳的身体在碎石间不显眼。",sourceIDs:["zsl_loach"]),
+        .init(id:"mist_darter",name:"雾梭鱼",scientificName:nil,origin:.original,locations:["highland"],waterTypes:[.fresh],baitIDs:["alpine_grub","spiral_spoon"],rarity:.uncommon,level:35,foodKind:.river,isCookable:true,description:"原创。蓝灰色长鳍掠过水面，晨雾散开前几乎只能看见波纹。",sourceIDs:[]),
+        .init(id:"cloud_koi",name:"云岫锦鲤",scientificName:nil,origin:.original,locations:["highland"],waterTypes:[.fresh],baitIDs:["spiral_spoon"],rarity:.legendary,level:40,foodKind:.river,isCookable:false,description:"原创。白鳞上浮着浅蓝斑纹，像山脊旁一阵散不开的云。",sourceIDs:[]),
+        .init(id:"lanternfish",name:"灯笼鱼",scientificName:"Myctophidae",origin:.real,locations:["abyss"],waterTypes:[.salt],baitIDs:["abyss_light"],rarity:.common,level:45,foodKind:.sea,isCookable:false,description:"灯笼鱼科的许多成员在腹面排列着发光器，暗水中能看见一串小亮点。",sourceIDs:["study_lanternfish"]),
+        .init(id:"marine_hatchetfish",name:"透明银斧鱼",scientificName:"Sternoptyx diaphana",origin:.real,locations:["abyss"],waterTypes:[.salt],baitIDs:["abyss_light"],rarity:.common,level:45,foodKind:.sea,isCookable:false,description:"体侧很薄，轮廓像小斧头。腹部向下发光，有助于淡化从下方看到的剪影。",sourceIDs:["study_hatchetfish"]),
+        .init(id:"roundnose_grenadier",name:"圆吻长尾鳕",scientificName:"Coryphaenoides rupestris",origin:.real,locations:["abyss"],waterTypes:[.salt],baitIDs:["abyss_light","spiral_spoon"],rarity:.uncommon,level:45,foodKind:.sea,isCookable:false,description:"生活在大陆坡等深水地带，身体从圆钝的头部逐渐细成细长的尾巴。",sourceIDs:["cosewic_grenadier"]),
+        .init(id:"abyssal_comet",name:"深渊彗鱼",scientificName:nil,origin:.original,locations:["abyss"],waterTypes:[.salt],baitIDs:["spiral_spoon"],rarity:.legendary,level:45,foodKind:.sea,isCookable:false,description:"原创。深紫色长尾拖着几缕微光，游到海崖背后才一并熄灭。",sourceIDs:[])
     ]
 }
 
@@ -279,7 +316,19 @@ extension NatureCatalog {
         .init(id:"cloud_seed",name:"云絮种",scientificName:nil,origin:.original,locations:["mountains"],level:12,rarity:.rare,isCookable:false,ingredient:nil,description:"原创。带着蓬松白绒的种子，在山风里缓慢飘落。",sourceIDs:[]),
         .init(id:"gillyweed",name:"鳃囊草",scientificName:nil,origin:.harryPotter,locations:["beach","sea"],level:15,rarity:.rare,isCookable:false,ingredient:nil,description:"原作中的地中海魔法植物，能让食用者短暂适应水下呼吸。",sourceIDs:["hp_gillyweed"]),
         .init(id:"fluxweed",name:"流液草",scientificName:nil,origin:.harryPotter,locations:["forest","river"],level:10,rarity:.rare,isCookable:false,ingredient:nil,description:"原作中的复方汤剂材料，需要在满月时采集。",sourceIDs:["hp_plants","hp_moon"]),
-        .init(id:"mandrake",name:"曼德拉草",scientificName:nil,origin:.harryPotter,locations:["forest"],level:12,rarity:.legendary,isCookable:false,ingredient:nil,description:"原作中的人形魔法植物，成熟后叫声致命，可用于配制恢复药剂。",sourceIDs:["hp_mandrake"])
+        .init(id:"mandrake",name:"曼德拉草",scientificName:nil,origin:.harryPotter,locations:["forest"],level:12,rarity:.legendary,isCookable:false,ingredient:nil,description:"原作中的人形魔法植物，成熟后叫声致命，可用于配制恢复药剂。",sourceIDs:["hp_mandrake"]),
+        .init(id:"cattail_fibre",name:"宽叶香蒲纤维",scientificName:"Typha latifolia",origin:.real,locations:["marsh"],level:8,rarity:.common,isCookable:false,ingredient:nil,description:"湿地里的香蒲有密集的棕色圆柱形花序；这里收的是干叶上能拆出的长纤维。",sourceIDs:["usda_cattail"]),
+        .init(id:"bog_myrtle",name:"香杨梅枝",scientificName:"Myrica gale",origin:.real,locations:["marsh"],level:8,rarity:.uncommon,isCookable:false,ingredient:nil,description:"生在湿地的矮灌木。叶片或枝条折断时能闻到香气。",sourceIDs:["pa_sweet_gale"]),
+        .init(id:"bog_glass",name:"沼辉珠",scientificName:nil,origin:.original,locations:["marsh"],level:10,rarity:.rare,isCookable:false,ingredient:nil,description:"原创。泥底的小珠夹着淡紫光，擦净后能看见里面弯弯的草影。",sourceIDs:[]),
+        .init(id:"sea_grape",name:"海葡萄",scientificName:"Caulerpa lentillifera",origin:.real,locations:["reef"],level:28,rarity:.common,isCookable:false,ingredient:nil,description:"学名长茎葡萄蕨藻，是海水里的绿藻。直立藻枝长满圆粒，像一串小葡萄。",sourceIDs:["study_sea_grape"]),
+        .init(id:"reef_silk",name:"礁丝",scientificName:nil,origin:.original,locations:["reef"],level:28,rarity:.uncommon,isCookable:false,ingredient:nil,description:"原创。潮水退去后挂在礁边的蓝绿丝带，晒干还能弯折，可带去锻造。",sourceIDs:[]),
+        .init(id:"tide_glass",name:"潮纹晶片",scientificName:nil,origin:.original,locations:["reef"],level:28,rarity:.rare,isCookable:false,ingredient:nil,description:"原创。浅绿断面上有并行的白线，每一道像一条退去的潮痕。",sourceIDs:[]),
+        .init(id:"alpine_juniper",name:"欧刺柏枝",scientificName:"Juniperus communis",origin:.real,locations:["highland"],level:35,rarity:.common,isCookable:false,ingredient:nil,description:"带针形叶的常绿灌木，能在裸露山坡上生长，成熟球果多为蓝黑色。",sourceIDs:["ec_juniper"]),
+        .init(id:"cloud_lichen",name:"云枝衣",scientificName:nil,origin:.original,locations:["highland"],level:35,rarity:.uncommon,isCookable:false,ingredient:nil,description:"原创。灰白的细枝伏在岩石背风面，起雾时绒尖会凝出小水珠。",sourceIDs:[]),
+        .init(id:"wind_silver",name:"风银薄片",scientificName:nil,origin:.original,locations:["highland"],level:35,rarity:.rare,isCookable:false,ingredient:nil,description:"原创。山脊裂石中剥落的银片，薄边被风吹动时会响一声。",sourceIDs:[]),
+        .init(id:"echo_vine",name:"回声藤",scientificName:nil,origin:.original,locations:["ruins"],level:40,rarity:.common,isCookable:false,ingredient:nil,description:"原创。沿石阶缝隙攀缘，干燥后的藤茎仍然柔韧，可带去锻造。",sourceIDs:[]),
+        .init(id:"archive_moss",name:"卷页苔",scientificName:nil,origin:.original,locations:["ruins"],level:40,rarity:.uncommon,isCookable:false,ingredient:nil,description:"原创。成片覆在旧墙下，赭色叶缘一层层翘起，像受潮的纸页。",sourceIDs:[]),
+        .init(id:"rune_shard",name:"符刻碎石",scientificName:nil,origin:.original,locations:["ruins"],level:40,rarity:.rare,isCookable:false,ingredient:nil,description:"原创。断石留着半道刻纹，斜照时沟底泛出淡紫。",sourceIDs:[])
     ]
 }
 
@@ -301,7 +350,11 @@ extension NatureCatalog {
         .init(id:"moon_moth",name:"月绒蛾",scientificName:nil,origin:.original,locations:["forest","lake"],level:5,description:"原创。绒毛般的触角轻颤，翅面像一对小月牙。",sourceIDs:[]),
         .init(id:"pebble_tortoise",name:"卵石龟",scientificName:nil,origin:.original,locations:["river","mountains"],level:10,description:"原创。背甲像一堆圆卵石，静止时很难被发现。",sourceIDs:[]),
         .init(id:"rain_sprite",name:"雨枝灵",scientificName:nil,origin:.original,locations:["tropical"],level:18,description:"原创。手脚像细枝，爱把叶片上的雨水晃成一串。",sourceIDs:[]),
-        .init(id:"tidal_mouse",name:"潮沫鼠",scientificName:nil,origin:.original,locations:["beach"],level:15,description:"原创。卷尾像小海浪，会沿潮线搜集圆润的小石子。",sourceIDs:[])
+        .init(id:"tidal_mouse",name:"潮沫鼠",scientificName:nil,origin:.original,locations:["beach"],level:15,description:"原创。卷尾像小海浪，会沿潮线搜集圆润的小石子。",sourceIDs:[]),
+        .init(id:"american_bittern",name:"美洲麻鳽",scientificName:"Botaurus lentiginosus",origin:.real,locations:["marsh"],level:8,description:"浅水中的鹭科鸟类。褐色竖纹融入芦苇，从岸边经过时很容易错过它。",sourceIDs:["fws_american_bittern"]),
+        .init(id:"reef_manta",name:"阿氏前口蝠鲼",scientificName:"Mobula alfredi",origin:.real,locations:["reef"],level:28,description:"会反复游到礁上的清洁站，小鱼在那里啄去它身上的寄生物。",sourceIDs:["study_reef_manta"]),
+        .init(id:"alpine_ibex",name:"阿尔卑斯北山羊",scientificName:"Capra ibex",origin:.real,locations:["highland"],level:35,description:"常在阿尔卑斯山的岩坡间活动，雄性的角比雌性更长、更粗。",sourceIDs:["park_alpine_ibex"]),
+        .init(id:"archive_moth",name:"残卷蛾",scientificName:nil,origin:.original,locations:["ruins"],level:40,description:"原创。合翅时像一页泛黄的纸，常伏在干燥的石门框背面。",sourceIDs:[])
     ]
 }
 
@@ -376,12 +429,29 @@ extension NatureCatalog {
         .init(id:"kew_rattan",title:"Royal Botanic Gardens, Kew · Sustainable Rattan",url:"https://www.kew.org/science/our-science/projects/sustainable-rattan"),
         .init(id:"hp_bowtruckle",title:"Harry Potter Official Encyclopedia · Bowtruckle",url:"https://www.harrypotter.com/fact-file/creatures/bowtruckle"),
         .init(id:"hp_plants",title:"Harry Potter Official · Wizarding Plants",url:"https://www.harrypotter.com/features/harry-potter-101-wizarding-plants"),
-        .init(id:"hp_moon",title:"Harry Potter Official · The Importance of the Moon",url:"https://www.harrypotter.com/features/the-importance-of-the-moon-in-the-wizarding-world")
+        .init(id:"hp_moon",title:"Harry Potter Official · The Importance of the Moon",url:"https://www.harrypotter.com/features/the-importance-of-the-moon-in-the-wizarding-world"),
+        .init(id:"dfo_grass_pickerel",title:"加拿大渔业及海洋部 · 草狗鱼栖地研究",url:"https://publications.gc.ca/collections/collection_2021/mpo-dfo/Fs97-4-3218-eng.pdf"),
+        .init(id:"usfs_mudminnow",title:"美国林务局 · 北美泥狗鱼",url:"https://www.srs.fs.usda.gov/pubs/chap/chap_2019_warren_019.pdf"),
+        .init(id:"usgs_bluespotted_sunfish",title:"美国地质调查局 · 蓝斑太阳鱼",url:"https://nas.er.usgs.gov/queries/factsheet.aspx?Species_ID=377"),
+        .init(id:"study_chromis",title:"实验海洋生物学与生态学期刊 · 蓝绿光鳃鱼的幼鱼栖地选择",url:"https://www.sciencedirect.com/science/article/pii/S0022098106005545"),
+        .init(id:"museum_convict_tang",title:"澳大利亚博物馆 · 条纹刺尾鱼",url:"https://australian.museum/learn/animals/fishes/convict-surgeonfish-acanthurus-triostegus/"),
+        .init(id:"study_bullethead",title:"钝头鹦嘴鱼在团块滨珊瑚上的啃食实验",url:"https://link.springer.com/article/10.1186/s42523-020-0024-0"),
+        .init(id:"ea_minnow",title:"英国环境署 · 河流鱼类的繁殖与栖地",url:"https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/291545/scho1204bilg-e-e.pdf"),
+        .init(id:"zsl_loach",title:"伦敦动物学会 · 河口鱼类野外辨识手册",url:"https://cms.zsl.org/sites/default/files/2022-09/ZSL%20estuarine%20fish%20web%20guide.pdf"),
+        .init(id:"study_lanternfish",title:"灯笼鱼发光器结构的比较研究",url:"https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0310976"),
+        .init(id:"study_hatchetfish",title:"深海银斧鱼发光器的显微断层成像研究",url:"https://pubmed.ncbi.nlm.nih.gov/32517614/"),
+        .init(id:"cosewic_grenadier",title:"加拿大濒危野生动物状况委员会 · 圆吻长尾鳕评估",url:"https://www.canada.ca/en/environment-climate-change/services/species-risk-public-registry/cosewic-assessments-status-reports/roundnose-grenadier.html"),
+        .init(id:"usda_cattail",title:"美国自然资源保护局 · 宽叶香蒲",url:"https://www.nrcs.usda.gov/plantmaterials/idpmctn380201.pdf"),
+        .init(id:"pa_sweet_gale",title:"宾夕法尼亚州自然遗产计划 · 香杨梅",url:"https://www.naturalheritage.dcnr.pa.gov/factsheets/14167.pdf"),
+        .init(id:"study_sea_grape",title:"长茎葡萄蕨藻的盐度与施肥培养实验",url:"https://www.sciencedirect.com/science/article/pii/S2352513424002539"),
+        .init(id:"ec_juniper",title:"欧盟联合研究中心 · 欧洲森林树木图集：欧刺柏",url:"https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Juniperus_communis.pdf"),
+        .init(id:"fws_american_bittern",title:"美国鱼类及野生动植物管理局 · 美洲麻鳽",url:"https://www.fws.gov/story/2024-01/american-bittern"),
+        .init(id:"study_reef_manta",title:"阿氏前口蝠鲼在珊瑚礁清洁站的观测研究",url:"https://onlinelibrary.wiley.com/doi/10.1002/ece3.7464"),
+        .init(id:"park_alpine_ibex",title:"大帕拉迪索国家公园 · 阿尔卑斯北山羊",url:"https://www.pngp.it/en/nature-and-research/fauna/grasslands-and-rocky-environments/alpine-ibex")
     ]
 
     static func validationErrors() -> [String] {
-        let locationWaters: [String:Set<NatureWaterType>] = ["lake":[.fresh],"river":[.fresh],"mountains":[.fresh],"polar":[.fresh,.salt],"tropical":[.fresh],"beach":[.brackish,.salt],"sea":[.salt]]
-        let locationLevels = ["lake":3,"forest":5,"river":10,"mountains":12,"polar":25,"tropical":18,"beach":15,"sea":20]
+        let regions = Set(FishingLocation.all.map(\.regionID) + ExpeditionLocation.all.map(\.id))
         let sourceIDs = Set(sources.map(\.id))
         let baitIDs = Set(baits.map(\.id))
         var errors: [String] = []
@@ -397,10 +467,13 @@ extension NatureCatalog {
             check(row.id,row.origin,row.sourceIDs)
             if row.level < 1 || row.locations.isEmpty || row.waterTypes.isEmpty || row.baitIDs.isEmpty || !Set(row.baitIDs).isSubset(of:baitIDs) { errors.append("Incomplete fish: " + row.id) }
             if row.fishingHabitatIDs.isEmpty { errors.append("Missing fishing habitat: " + row.id) }
+            let rodLevel = FishingRod.all.first { $0.rank >= row.minimumRodRank }?.level ?? 1
             for location in row.locations {
-                guard let water = locationWaters[location] else { errors.append("Unknown fishing location: " + row.id); continue }
-                if water.isDisjoint(with:row.waterTypes) { errors.append("Water mismatch: " + row.id + "/" + location) }
-                let usable = baits.contains { bait in row.baitIDs.contains(bait.id) && bait.locations.contains(location) && !Set(bait.waterTypes).isDisjoint(with:row.waterTypes) && bait.level <= max(row.level,locationLevels[location] ?? 1) }
+                let places = FishingLocation.all.filter { $0.regionID == location && $0.contains(row) }
+                if places.isEmpty { errors.append("Missing fishing location: " + row.id + "/" + location); continue }
+                let usable = places.contains { place in
+                    place.baits.contains { row.baitIDs.contains($0.id) && $0.level <= max(row.level, place.level, rodLevel) }
+                }
                 if !usable { errors.append("No available bait: " + row.id + "/" + location) }
             }
             if row.foodKind == .sea && !row.waterTypes.contains(.salt) && !row.waterTypes.contains(.brackish) { errors.append("Sea ingredient in fresh water: " + row.id) }
@@ -415,11 +488,11 @@ extension NatureCatalog {
         }
         for row in forage {
             check(row.id,row.origin,row.sourceIDs)
-            if row.locations.isEmpty || row.locations.contains(where:{ locationLevels[$0] == nil }) || row.level < 1 || (!row.isCookable && row.ingredient != nil) { errors.append("Invalid forage: " + row.id) }
+            if row.locations.isEmpty || row.locations.contains(where:{ !regions.contains($0) }) || row.level < 1 || (!row.isCookable && row.ingredient != nil) { errors.append("Invalid forage: " + row.id) }
         }
         for row in wildlife {
             check(row.id,row.origin,row.sourceIDs)
-            if row.locations.isEmpty || row.locations.contains(where:{ locationLevels[$0] == nil }) || row.level < 1 { errors.append("Invalid wildlife: " + row.id) }
+            if row.locations.isEmpty || row.locations.contains(where:{ !regions.contains($0) }) || row.level < 1 { errors.append("Invalid wildlife: " + row.id) }
         }
         return errors
     }

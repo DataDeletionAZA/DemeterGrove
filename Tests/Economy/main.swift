@@ -168,6 +168,40 @@ for upgrade in Upgrade.allCases {
 }
 check(100_000 - allTools.garden.coins == totalUpgradeCost,"all upgrades charge their displayed prices")
 
+var backyard = AppData()
+let pondLevelMinutes = (1..<PondState.buildLevel).reduce(0) { $0 + LevelProgress.requirement($1) }
+backyard.sessions = [FocusSession(id:UUID(),title:"专注",kind:.stopwatch,date:epoch,seconds:Double(pondLevelMinutes * 60))]
+backyard.garden.coins = 2_000
+check(backyard.levelProgress.level == 12 && backyard.buildPond(at:epoch),"level 12 opens a four-fish pond")
+check(backyard.upgradeMiningTool(at:epoch) && backyard.openMine("mountain_quartz",at:epoch),"level 12 can open quartz with a steel pickaxe")
+check(!backyard.openMine("reef_tin",at:epoch) && !backyard.expandPond(at:epoch),"later mines and the larger pond remain locked")
+backyard.sessions[0].seconds += 30 * 60
+check(backyard.selectMine("mountain_quartz",at:epoch),"a completed quartz layer can be selected")
+let beforeBackyardHour = backyard.garden.coins
+backyard.timer = TimerRun(kind:.stopwatch,target:3600,taskTitle:"专注",startedAt:epoch,resumedAt:epoch)
+for batch in 0..<3 {
+    let start = epoch.addingTimeInterval(Double(batch * 20 * 60))
+    let end = start.addingTimeInterval(20 * 60)
+    for _ in 0..<4 { check(backyard.buyPondFry("common_carp",at:start),"stock four carp fry per batch") }
+    if backyard.pondState!.feed < 4 { check(backyard.buyPondFeed(at:start),"buy fish feed as needed") }
+    backyard.advanceFocusWorld(at:end)
+    check(backyard.harvestPondFish(at:end) == ["common_carp":4],"one hour of pond focus yields three batches of four carp")
+    check(backyard.sellFishingCatch("common_carp",count:4),"sell pond fish through the shared fish inventory")
+}
+check(backyard.finishTimer(at:epoch.addingTimeInterval(3600))?.seconds == 3600,"the parallel pond and mine hour records focus once")
+check(backyard.garden.coins - beforeBackyardHour == 144 && backyard.pondState?.feed == 0,"the hour pays 120 focus copper and 24 net pond copper with no feed remainder")
+check(backyard.miningState.inventory["quartz"] == 16 && NatureItemInfo.mineral("quartz")?.price == 5,"the same hour produces 80 copper of quartz inventory")
+
+for (id, level, unitPrice) in [("reed_nymph",8,1),("reef_crab",28,1),("spiral_spoon",30,2),("alpine_grub",35,1),("abyss_light",45,1)] {
+    var angler = AppData()
+    let minutes = (1..<level).reduce(0) { $0 + LevelProgress.requirement($1) }
+    angler.sessions = [FocusSession(id:UUID(),title:"专注",kind:.stopwatch,date:epoch,seconds:Double(minutes * 60))]
+    angler.garden.coins = unitPrice * 10 - 1
+    check(!angler.buyFishingBait(id,count:10),"a ten-portion bait order requires the entire price")
+    angler.garden.coins += 1
+    check(angler.buyFishingBait(id,count:10) && angler.garden.coins == 0 && angler.fishingState.baitStock[id] == 10,"regional bait charges its per-portion price")
+}
+
 let legacyJSON = Data(#"{"id":"legacy-dish","name":"旧料理","category":"热菜","baseID":"soup","ingredients":{"胡萝卜":1},"sprite":5,"quality":65}"#.utf8)
 let legacyDish = try JSONDecoder().decode(Dish.self,from:legacyJSON)
 let legacyOrder = ShopOrder(dish:legacyDish,placedAt:0)

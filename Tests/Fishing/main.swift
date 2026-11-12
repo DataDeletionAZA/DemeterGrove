@@ -5,9 +5,10 @@ import Foundation
     static func encoded<T:Encodable>(_ value:T)throws->Data {
         let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys];return try encoder.encode(value)
     }
-    static func fixture()->AppData {
+    static func fixture(level:Int=50)->AppData {
         var data=AppData();data.preferences.sound=false;data.preferences.notifications=false;data.garden.coins=20_000
-        data.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:Date(),seconds:1_000_000)]
+        let minutes=(1..<level).reduce(0){$0+LevelProgress.requirement($1)}
+        data.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:Date(),seconds:Double(minutes*60))]
         return data
     }
     static func sameProgress(_ first:FishingState,_ second:FishingState) {
@@ -18,8 +19,8 @@ import Foundation
         check(first.catches.map(\.focus) == second.catches.map(\.focus))
         check(first.catches.map(\.locationID) == second.catches.map(\.locationID))
     }
-    static func started(location:String="lake",bait:String?="earthworm",stock:Int=10_000)->FishingState {
-        var state=FishingState(enabled:true,locationID:location,rodID:"star",baitID:bait,
+    static func started(location:String="lake",rod:String="star",bait:String?="earthworm",stock:Int=10_000)->FishingState {
+        var state=FishingState(enabled:true,locationID:location,rodID:rod,baitID:bait,
             ownedRods:Set(FishingRod.all.map(\.id)),baitStock:bait.map{[$0:stock]} ?? [:],random:FocusRandom(state:12345))
         check(state.advance(to:0,active:true,level:50));return state
     }
@@ -96,7 +97,7 @@ import Foundation
             check(!place.fish.isEmpty && !place.baits.isEmpty)
             check(place.fish.allSatisfy{$0.fishingHabitatIDs.contains(place.habitatID) && $0.waterTypes.contains(place.waterType)})
             check(place.baits.allSatisfy{$0.locations.contains(place.regionID) && $0.waterTypes.contains(place.waterType)})
-            var state=started(location:place.id,bait:place.baits.first!.id,stock:10_000)
+            var state=started(location:place.id,rod:"abyssal",bait:place.baits.first!.id,stock:10_000)
             state.advance(to:1_000_000,active:true,level:50)
             for id in state.lifetime.keys where fish[id] != nil {check(place.contains(fish[id]!));observed.insert(id)}
             check(state.isValid(focus:1_000_000))
@@ -105,6 +106,63 @@ import Foundation
         for specimen in NatureCatalog.fish {
             check(FishingLocation.all.contains{place in place.contains(specimen) && place.baits.contains{specimen.baitIDs.contains($0.id)}})
         }
+        let errors=NatureCatalog.validationErrors()
+        precondition(errors.isEmpty,errors.joined(separator:"\n"))
+        for (id,level,habitat,bait) in [
+            ("reed_marsh",8,"reed_marsh","reed_nymph"),
+            ("coral_lagoon",28,"coral_lagoon","reef_crab"),
+            ("mist_highland",35,"mist_highland","alpine_grub"),
+            ("abyss",45,"abyss","abyss_light")
+        ] {
+            let place=places[id]!
+            check(place.level == level && place.habitatID == habitat && place.fish.count == 4)
+            check(place.baits.contains{$0.id == bait && $0.level == level})
+            var before=fixture(level:level-1), unlocked=fixture(level:level)
+            check(!before.buyFishingBait(bait))
+            check(!before.configureFishing(enabled:true,location:id,rod:"willow",bait:nil,at:now))
+            let price=place.baits.first{$0.id == bait}!.price
+            let startingCoins=unlocked.garden.coins
+            check(unlocked.buyFishingBait(bait,count:5))
+            check(unlocked.fishingState.baitStock[bait] == 5 && unlocked.garden.coins == startingCoins-price*5)
+            check(unlocked.configureFishing(enabled:true,location:id,rod:"willow",bait:bait,at:now))
+            let saved=try JSONDecoder().decode(AppData.self,from:encoded(unlocked))
+            _=try saved.validated(at:now)
+            check(saved.fishingState == unlocked.fishingState)
+        }
+        for id in ["reedglass","storm","abyssal"] {
+            let rod=FishingRod.all.first{$0.id == id}!
+            let previous=FishingRod.all[rod.rank-1]
+            check(rod.speed < previous.speed && rod.speed >= 0.70)
+            var locked=fixture(level:rod.level-1),unlocked=fixture(level:rod.level)
+            check(!locked.buyFishingRod(id))
+            let startingCoins=unlocked.garden.coins
+            check(unlocked.buyFishingRod(id) && !unlocked.buyFishingRod(id))
+            check(unlocked.garden.coins == startingCoins-rod.price && unlocked.fishingState.ownedRods.contains(id))
+        }
+        for (id,fishID,required,previous,level) in [
+            ("coral_lagoon","pearl_mantle","reedglass","star",30),
+            ("mist_highland","cloud_koi","storm","reedglass",40),
+            ("abyss","abyssal_comet","abyssal","storm",45)
+        ] {
+            var good=started(location:id,rod:required,bait:"spiral_spoon")
+            var lowLevel=good, lowRank=started(location:id,rod:previous,bait:"spiral_spoon")
+            let elapsed=1_000_000.0
+            good.advance(to:elapsed,active:true,level:level)
+            lowLevel.advance(to:elapsed,active:true,level:level-1)
+            lowRank.advance(to:elapsed,active:true,level:level)
+            check(good.lifetime[fishID,default:0]>0)
+            check(lowLevel.lifetime[fishID] == nil && lowRank.lifetime[fishID] == nil)
+            let coins=good.lifetime.reduce(0){sum,row in
+                sum+row.value*(NatureItemInfo.fishingCatch(row.key)?.price ?? 0)
+            }
+            check(Double(coins)*3600/elapsed < 120)
+        }
+        for id in ["reed_nymph","reef_crab","alpine_grub","abyss_light","spiral_spoon"] {
+            check(NatureCatalog.fish.contains{$0.baitIDs.contains(id)})
+        }
+        var wrongBait=started(location:"abyss",rod:"abyssal",bait:"alpine_grub",stock:5)
+        wrongBait.advance(to:5000,active:true,level:45)
+        check(wrongBait.cast?.baitID == nil && wrongBait.baitStock["alpine_grub"] == 5)
         var lowRod=started(location:"sea_warm",bait:nil);lowRod.rodID="willow";lowRod.cast?.rodID="willow"
         lowRod.advance(to:100_000,active:true,level:50)
         check(lowRod.lifetime.keys.allSatisfy{fish[$0]?.rarity != .legendary})
@@ -190,6 +248,6 @@ import Foundation
         check(!store.commitGameChange{$0.prepareFish("common_carp",count:1)})
         check(try encoded(store.data) == priorStore && Data(contentsOf:backup) == disk)
         try manager.removeItem(at:store.file);try manager.moveItem(at:backup,to:store.file)
-        print("PASS: fishing automatic start, disabled freeze, bait depletion, pause/rest, seeded long-step and backlog equivalence, finite clocks, all 48 fish reachable in valid habitats, trade conservation, legacy rods, persistence and failed-save rollback")
+        print("PASS: fishing automatic start, disabled freeze, bait depletion, pause/rest, seeded long-step and backlog equivalence, finite clocks, all \(fish.count) fish reachable in valid habitats, location and rod gates, trade conservation, legacy rods, persistence and failed-save rollback")
     }
 }

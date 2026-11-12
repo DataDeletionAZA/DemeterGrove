@@ -4,6 +4,8 @@ struct WorldMapScene: View {
     @ObservedObject var store: GardenStore
     @State private var showingInventory=false
     @State private var selectedPlace:String?
+    private var playerLevel: Int { store.data.levelProgress.level }
+
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
@@ -24,31 +26,56 @@ struct WorldMapScene: View {
                         mapMarker(place,size:size)
                     }
                     if let place=WorldMapPlace.all.first(where:{$0.id == selectedPlace}) {
-                        let popupHeight=CGFloat(place.activities.count)*40+60
-                        let popupHalf=popupHeight/2
-                        VStack(spacing:5) {
-                            HStack {Text(place.name).font(.headline);Spacer();Button("关闭"){selectedPlace=nil}.font(.caption)}
-                            ForEach(place.activities,id:\.1) {activity in
-                                Button {selectedPlace=nil;SceneNavigation.open(activity.1,store:store,from:store.currentRoute)} label: {
-                                    Text(activity.0).lineLimit(1).frame(maxWidth:.infinity)
-                                }
-                            }
-                        }.environment(\.compactSceneControls,true).padding(10)
-                            .frame(width:min(180,size.width-24),height:popupHeight).magicSurface(Palette.paper,strong:true)
-                            .position(x:min(size.width-100,max(100,size.width*place.point.x)),y:min(size.height-popupHalf-6,max(popupHalf+6,size.height*place.point.y-popupHalf)))
+                        activityMenu(for: place, in: size)
                     }
                 }.frame(width:size.width,height:size.height).clipped()
                     .clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
             }
         }.sheet(isPresented:$showingInventory) {InventoryView(store:store)}
     }
-    private func mapMarker(_ place:WorldMapPlace,size:CGSize)->some View {
-        let unlocked=place.canEnter(level:store.data.levelProgress.level)
-        return Button {
-            if unlocked,let route=place.route {
-                if place.activities.count>1 {selectedPlace=place.id}
-                else {selectedPlace=nil;SceneNavigation.open(route,store:store,from:store.currentRoute)}
+
+    private func activityMenu(for place: WorldMapPlace, in size: CGSize) -> some View {
+        let frame = place.popupFrame(in: size)
+        return VStack(spacing: 5) {
+            HStack {
+                Text(place.name).font(.headline).lineLimit(1)
+                Spacer(minLength: 4)
+                Button("关闭") { selectedPlace = nil }.buttonStyle(PixelButtonStyle())
             }
+            PixelScrollView {
+                VStack(spacing: 4) {
+                    ForEach(place.activities) { activity in
+                        let unlocked = activity.canEnter(level: playerLevel)
+                        Button { enter(activity) } label: {
+                            HStack(spacing: 5) {
+                                Text(activity.name).lineLimit(1).minimumScaleFactor(0.8)
+                                Spacer(minLength: 4)
+                                if !unlocked { Image(systemName: "lock.fill").font(.system(size: 9)).accessibilityHidden(true) }
+                                Text(activity.requirement).font(.caption).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            }.frame(maxWidth: .infinity)
+                        }.buttonStyle(PixelButtonStyle()).disabled(!unlocked)
+                            .accessibilityLabel("\(activity.name)，\(activity.requirement)")
+                    }
+                }
+            }
+        }.environment(\.compactSceneControls, true).padding(8)
+            .frame(width: frame.width, height: frame.height)
+            .magicSurface(Palette.paper, strong: true)
+            .position(x: frame.midX, y: frame.midY)
+    }
+
+    private func enter(_ activity: WorldMapActivity) {
+        guard activity.canEnter(level: playerLevel) else { return }
+        selectedPlace = nil
+        SceneNavigation.open(activity.route, store: store, from: store.currentRoute)
+    }
+
+    private func mapMarker(_ place:WorldMapPlace,size:CGSize)->some View {
+        let unlocked=place.canEnter(level:playerLevel)
+        return Button {
+            guard unlocked else { return }
+            if place.activities.count > 1 { selectedPlace = place.id }
+            else if let activity = place.activities.first { enter(activity) }
         } label: {
             VStack(spacing:2) {
                 HStack(spacing:4) {

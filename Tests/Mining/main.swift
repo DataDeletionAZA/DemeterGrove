@@ -11,12 +11,15 @@ import Foundation
         return data
     }
     static func reject(_ data: AppData) -> Bool { do { _ = try data.validated(); return false } catch { return true } }
+    static func focusForLevel(_ level: Int) -> Double {
+        Double((1..<level).reduce(0) { $0 + LevelProgress.requirement($1) } * 60)
+    }
     static func allLayers(at focus: Double, selected: String? = nil) -> MiningState {
         MiningState(layers: Dictionary(uniqueKeysWithValues: MineLayer.all.map { ($0.id, MineProgress(lastFocus: focus)) }), selectedLayer: selected)
     }
     @MainActor static func main() throws {
         let now = Date()
-        check(MineLayer.areas.count == 4 && MineLayer.all.count == 10)
+        check(MineLayer.areas.count == 7 && MineLayer.all.count == 19)
         check(Set(MineLayer.all.map(\.artworkName)).count == MineLayer.all.count)
         for area in MineLayer.areas {
             let layers = MineLayer.layers(in: area)
@@ -70,6 +73,22 @@ import Foundation
             check(path.advanceMining(to: path.totalFocus + Double(layer.unlockMinutes * 60)))
             check(path.miningState.layers[layer.id] != nil && path.miningState.opening == nil)
         }
+        for area in ["潮汐矿窟", "高地矿洞", "遗迹矿井"] {
+            var path = fixture(focus: 0)
+            for layer in MineLayer.layers(in: area) {
+                path.sessions[0].seconds = focusForLevel(layer.level) - 1
+                check(!path.openMine(layer.id, at: now))
+                path.sessions[0].seconds += 1
+                check(path.openMine(layer.id, at: now))
+                let ready = path.totalFocus + Double(layer.unlockMinutes * 60)
+                _ = path.advanceMining(to: ready - 1)
+                check(path.miningState.layers[layer.id] == nil)
+                path.sessions[0].seconds = ready
+                check(path.advanceMining(to: ready) && path.miningState.layers[layer.id] != nil)
+                check(path.miningState.layers[layer.id]?.work == 0)
+            }
+            _ = try path.validated(at: now)
+        }
         var delayed = fixture()
         check(delayed.openMine("quarry_coal", at: now))
         check(delayed.advanceMining(to: baseline + 1800))
@@ -79,7 +98,8 @@ import Foundation
         passive.garden.economy.mining = allLayers(at: 0)
         check(!passive.advanceMining(to: 0))
         check(passive.advanceMining(to: 3600))
-        for layer in MineLayer.all { check(passive.miningState.inventory[layer.mineralID] == 3600 / (layer.cycleMinutes * 60)) }
+        let expected = Dictionary(MineLayer.all.map { ($0.mineralID, 3600 / ($0.cycleMinutes * 60)) }, uniquingKeysWith: +)
+        for (id, quantity) in expected { check(passive.miningState.inventory[id, default: 0] == quantity) }
         var resident = fixture(focus: 0)
         resident.garden.economy.mining = allLayers(at: 0, selected: "quarry_copper")
         check(resident.advanceMining(to: 3600))
@@ -97,8 +117,45 @@ import Foundation
         check(!switched.selectMine("invalid", at: now))
         check(switched.advanceMining(to: 1500) && switched.miningState.inventory["copper"] == 3)
 
+        var toolUpgrade = fixture(focus: focusForLevel(8) - 1)
+        let toolBaseline = toolUpgrade.totalFocus
+        toolUpgrade.garden.economy.mining = allLayers(at: toolBaseline, selected: "quarry_copper")
+        let oldToolBytes = try encoded(toolUpgrade)
+        let oldToolSave = try JSONDecoder().decode(AppData.self, from: oldToolBytes)
+        check(oldToolSave.miningState.toolRank == nil && oldToolSave.miningState.tool.id == "tool_pickaxe")
+        check(!toolUpgrade.upgradeMiningTool(at: now))
+        check(try encoded(toolUpgrade) == oldToolBytes)
+        toolUpgrade.sessions[0].seconds += 240
+        toolUpgrade.garden.coins = MiningTool.all[1].price - 1
+        let insufficient = try encoded(toolUpgrade)
+        check(!toolUpgrade.upgradeMiningTool(at: now))
+        check(try encoded(toolUpgrade) == insufficient)
+        toolUpgrade.garden.coins += 1
+        check(toolUpgrade.upgradeMiningTool(at: now) && toolUpgrade.garden.coins == 0)
+        check(toolUpgrade.miningState.tool.id == "pickaxe_steel")
+        check(toolUpgrade.miningState.inventory["copper", default: 0] == 0)
+        check(toolUpgrade.miningState.layers["quarry_copper"]?.work == 720)
+        check(toolUpgrade.miningState.layers["quarry_coal"]?.work == 240)
+        toolUpgrade.sessions[0].seconds += 45
+        check(toolUpgrade.advanceMining(to: toolUpgrade.totalFocus))
+        check(toolUpgrade.miningState.inventory["copper"] == 1 && toolUpgrade.miningState.layers["quarry_copper"]?.work == 0)
+        check(toolUpgrade.miningState.layers["quarry_coal"]?.work == 285)
+        for rank in 2...3 {
+            let next = MiningTool.all[rank]
+            toolUpgrade.garden.coins = next.price
+            toolUpgrade.sessions[0].seconds = focusForLevel(next.level) - 1
+            check(!toolUpgrade.upgradeMiningTool(at: now))
+            toolUpgrade.sessions[0].seconds += 1
+            check(toolUpgrade.upgradeMiningTool(at: now) && toolUpgrade.garden.coins == 0)
+            check(toolUpgrade.miningState.tool.id == next.id && toolUpgrade.miningState.toolRank == rank)
+        }
+        check(toolUpgrade.miningState.nextTool == nil && !toolUpgrade.upgradeMiningTool(at: now))
+        let restoredTool = try JSONDecoder().decode(AppData.self, from: encoded(toolUpgrade)).validated(at: now)
+        check(restoredTool.miningState == toolUpgrade.miningState)
+
         var jump = fixture(focus: 0), steps = jump
         jump.garden.economy.mining = allLayers(at: 0, selected: "polar_starlight")
+        jump.garden.economy.mining?.toolRank = 3
         steps.garden.economy.mining = jump.garden.economy.mining
         check(jump.advanceMining(to: 86400))
         for seconds in stride(from: 17, through: 86394, by: 17) { _ = steps.advanceMining(to: Double(seconds)) }
@@ -108,11 +165,12 @@ import Foundation
 
         var timer = fixture()
         timer.garden.economy.mining = allLayers(at: timer.totalFocus, selected: "quarry_coal")
+        timer.garden.economy.mining?.toolRank = 3
         timer.timer = TimerRun(kind: .stopwatch, target: 1800, taskTitle: "阅读", startedAt: now, resumedAt: now)
         let paused = now.addingTimeInterval(200)
         timer.timer?.pause(at: paused)
         check(timer.advanceMining(to: timer.gameFocus(at: paused)))
-        check(timer.miningState.inventory["coal"] == 1)
+        check(timer.miningState.inventory["coal"] == 2)
         check(!timer.advanceMining(to: timer.gameFocus(at: paused.addingTimeInterval(999))))
         _ = timer.finishTimer(at: paused)
         timer.timer = TimerRun(kind: .rest, target: 300, taskTitle: "休息", startedAt: paused, resumedAt: paused)
@@ -139,7 +197,8 @@ import Foundation
             MiningState(layers: ["quarry_coal": MineProgress(lastFocus: valid.totalFocus + 1)]),
             MiningState(opening: MineOpening(layerID: "quarry_copper", startedFocus: 0)),
             MiningState(selectedLayer: "quarry_coal"), MiningState(inventory: ["coal": -1]),
-            MiningState(inventory: ["invalid": 1]), MiningState(lifetime: ["coal": 1_000_000_001])
+            MiningState(inventory: ["invalid": 1]), MiningState(lifetime: ["coal": 1_000_000_001]),
+            MiningState(toolRank: -1), MiningState(toolRank: MiningTool.all.count), MiningState(toolRank: Int.max)
         ]
         for state in invalidStates { var data = valid; data.garden.economy.mining = state; check(reject(data)) }
 
@@ -157,7 +216,13 @@ import Foundation
         try Data([1]).write(to: store.file.appendingPathComponent("blocked"))
         check(!store.commitGameChange { $0.advanceMining(to: $0.totalFocus) })
         check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
+        check(!store.commitGameChange { $0.upgradeMiningTool(at: now) })
+        check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
         try manager.removeItem(at: store.file); try manager.moveItem(at: backup, to: store.file)
-        print("PASS: four-area ten-layer vertical navigation, unique artwork routes, bounded wide/narrow scene controls, mining unlock deadlines and all area prerequisites, passive layers, one resident multiplier, switching preserves partial work, long-step equivalence, rollback and invalid clocks, pause/rest freeze, 10:1 diamonds, invalid imports, persistence and failed-save rollback")
+        let coins = store.data.garden.coins
+        check(store.commitGameChange { $0.upgradeMiningTool(at: now) })
+        let saved = try SaveFile.read(store.file)
+        check(saved.miningState.toolRank == 1 && saved.garden.coins == coins - MiningTool.all[1].price)
+        print("PASS: seven mine areas and nineteen layers, unlock chains and clocks, passive production, pickaxe upgrades and partial work, pause/rest, long-step equivalence, 10:1 diamonds, legacy saves, invalid ranks, and failed-save rollback")
     }
 }

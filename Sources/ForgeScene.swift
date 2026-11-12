@@ -28,7 +28,7 @@ struct ForgeScene:View {
                     SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"锻造室")},
                     SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store,from:"锻造室")},
                     SceneToolbarItem("上次结果",disabled:result == nil){openResult()},
-                    SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store,from:"锻造室")}
+                    SceneToolbarItem("小屋"){SceneNavigation.open("首页",store:store,from:"锻造室")}
                 ])
             }
             SceneCanvas(hasSidebar:true) {size in
@@ -197,6 +197,12 @@ struct ForgeScene:View {
                         .accessibilityValue(material?.name ?? "未选")
                         .accessibilityAddTraits(selected ? .isSelected:[])
                 }
+            }
+            ForEach(mold.specialRecipes.indices, id: \.self) { index in
+                let recipe = mold.specialRecipes[index]
+                let names = recipe.materials.compactMap { id in ForgeMaterial.all.first { $0.id == id }?.name }
+                Text(recipe.name + " · " + names.joined(separator: " + "))
+                    .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Text("\(component.name)材料").font(.headline)

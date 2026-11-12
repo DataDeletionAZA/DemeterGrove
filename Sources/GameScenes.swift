@@ -84,11 +84,11 @@ struct GameRoomView: View {
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h)
-                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store,from:store.currentRoute)}}
+                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小屋"){SceneNavigation.open("首页",store:store,from:store.currentRoute)}}
                     if room == "农场" {gardenScene(w:w,h:h)}
                     else if room == "厨房" {kitchenScene(w:w,h:h)}
                     else {shopScene(w:w,h:h)}
-                    if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store,from:store.currentRoute)}}
+                    if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到后院"){SceneNavigation.open("后院",store:store,from:store.currentRoute)}}
                     SceneParticles()
                     SceneArrows(store:store,scene:room)
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))

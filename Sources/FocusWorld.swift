@@ -12,6 +12,7 @@ extension AppData {
         }
         changed = advanceAutoShop(to:focus) || changed
         changed = advanceRanch(to:focus) || changed
+        changed = advancePond(to:focus) || changed
         let active=timer.map { $0.kind != .rest && $0.resumedAt != nil && ($0.kind == .stopwatch || $0.elapsed(at:date)<$0.target) } ?? false
         changed = advanceFishing(to:focus,active:active && garden.economy.trip(.fishing) == nil) || changed
         changed = advanceMining(to:focus) || changed

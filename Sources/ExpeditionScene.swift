@@ -198,6 +198,8 @@ struct ExpeditionScene: View {
                         Spacer(minLength:0)
                         Text("×\(state.inventory[item.id,default:0])").font(.system(size:11)).foregroundStyle(Palette.goldLight)
                     }
+                    Text(item.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                    NatureSourceLinks(ids:item.sourceIDs)
                     HStack(spacing:5) {
                         if item.isCookable,let ingredient=item.ingredient {
                             Button("加工 ×1") {
@@ -237,6 +239,16 @@ struct ExpeditionScene: View {
                         }
                     }
                     if !record.discoveries.isEmpty {Text("发现 \(record.discoveries.count) 种").font(.system(size:10)).foregroundStyle(Palette.muted)}
+                    ForEach(NatureCatalog.wildlife.filter{record.discoveries.contains("wildlife:"+$0.id)}) {animal in
+                        HStack(alignment:.top,spacing:5) {
+                            GameNatureSprite(key:animal.spriteKey,size:28)
+                            VStack(alignment:.leading,spacing:3) {
+                                Text(animal.name).font(.system(size:11))
+                                Text(animal.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                                NatureSourceLinks(ids:animal.sourceIDs)
+                            }
+                        }
+                    }
                 }.frame(maxWidth:.infinity,alignment:.leading).padding(8).magicSurface(Palette.card)
             }
         }

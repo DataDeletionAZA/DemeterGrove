@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SceneObject: CaseIterable {
-    case farmDoor, kitchenDoor, studyDoor, shopDoor, signpost, shopExit, shopCounter, gardenExit, forestExit
+    case shopExit, shopCounter, gardenExit, forestExit
     case taskMemo, calendar, diary, hourglass, habitBook, recipeBook, cookingCounter
     case plotOne, plotTwo, plotThree, plotFour, plotFive, plotSix
 
@@ -9,7 +9,6 @@ enum SceneObject: CaseIterable {
 
     var room: String {
         switch self {
-        case .farmDoor, .kitchenDoor, .studyDoor, .shopDoor, .signpost: return "Courtyard"
         case .taskMemo, .calendar, .diary, .hourglass, .habitBook: return "Study"
         case .recipeBook, .cookingCounter: return "Kitchen"
         case .shopExit,.shopCounter: return "Shop"
@@ -25,11 +24,6 @@ enum SceneObject: CaseIterable {
         case .forestExit: return (0.50,0.29,0.18,0.28)
         case .shopExit: return (0.91,0.34,0.16,0.52)
         case .shopCounter:return (0.405,0.62,0.81,0.24)
-        case .farmDoor: return (0.211, 0.52, 0.07, 0.18)
-        case .kitchenDoor: return (0.406, 0.52, 0.07, 0.18)
-        case .studyDoor: return (0.626, 0.52, 0.07, 0.18)
-        case .shopDoor: return (0.806, 0.52, 0.07, 0.18)
-        case .signpost: return (0.91, 0.79, 0.12, 0.12)
         case .taskMemo: return (0.253, 0.647, 0.23, 0.17)
         case .calendar: return (0.257, 0.30, 0.13, 0.22)
         case .diary: return (0.51, 0.661, 0.18, 0.17)
@@ -57,16 +51,6 @@ enum SceneObject: CaseIterable {
             points=[(0,524),(1188,504),(1240,575),(1240,752),(0,752)]
         case .shopExit:
             points = [(1268,588),(1268,252),(1275,198),(1298,157),(1333,132),(1375,124),(1420,138),(1452,168),(1473,210),(1473,588)]
-        case .farmDoor:
-            points = [(269,617),(269,494),(273,474),(283,459),(299,448),(318,443),(335,445),(352,454),(365,471),(372,491),(372,617)]
-        case .kitchenDoor:
-            points = [(584,613),(584,511),(589,493),(598,480),(612,470),(629,466),(647,471),(660,483),(670,502),(671,613)]
-        case .studyDoor:
-            points = [(912,613),(912,493),(918,475),(931,461),(947,454),(966,453),(984,460),(998,475),(1008,495),(1008,613)]
-        case .shopDoor:
-            points = [(1194,628),(1194,508),(1200,489),(1212,475),(1228,468),(1247,468),(1264,477),(1275,491),(1281,509),(1281,628)]
-        case .signpost:
-            points = [(1304,782),(1350,752),(1479,783),(1479,852),(1409,840),(1409,925),(1384,925),(1381,835),(1321,820)]
         case .taskMemo:
             points = [(216,706),(298,589),(483,598),(536,576),(567,568),(562,590),(522,627),(495,662),(496,708),(459,718),(447,741),(215,737)]
         case .calendar:

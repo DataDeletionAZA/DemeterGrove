@@ -6,9 +6,9 @@ func fixture()->AppData {
     let seconds=Double((1..<30).reduce(0){$0+LevelProgress.requirement($1)}*60)
     data.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:now,seconds:seconds)]
     data.garden.economy.mining=MiningState(inventory:Dictionary(uniqueKeysWithValues:Mineral.all.map{($0.id,100)}))
-    data.garden.economy.finds=Dictionary(uniqueKeysWithValues:ForgeMaterial.all.filter{$0.kind == "纤维"}.map{($0.id,100)})
+    data.garden.economy.finds=Dictionary(uniqueKeysWithValues:ForgeMaterial.all.filter{$0.kind == "纤维" && !$0.isForage}.map{($0.id,100)})
     data.garden.economy.expedition=ExpeditionState(hired:["rowan"],team:["rowan"],equipment:["rowan":[GearSlot.tool.rawValue:"copper_sickle"]],gear:["copper_sickle":1])
-    data.garden.economy.expedition?.inventory=["rattan":100,"willow_twig":100,"driftwood":100]
+    data.garden.economy.expedition?.inventory=["rattan":100,"willow_twig":100,"driftwood":100,"reef_silk":100,"echo_vine":100]
     return data
 }
 func encoded(_ data:AppData)throws->Data {let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys];return try encoder.encode(data)}
@@ -175,6 +175,32 @@ for (id,name,materials) in weapons {
 assert(expanded.expeditionState.inventory["willow_twig"] == 96)
 assert(expanded.expeditionState.inventory["driftwood"] == 99)
 
+var newRecipes = fixture()
+for (moldID, name, materials) in [
+    ("pendant", "潮灯坠", ["fluorite", "tin"]),
+    ("coat", "潮绸远行衣", ["reef_silk", "alpaca_fibre", "platinum"]),
+    ("staff", "曦石寻路杖", ["echo_vine", "sunstone", "platinum"]),
+    ("longsword", "陨纹长剑", ["meteor_iron", "zinc", "reef_silk"])
+] {
+    let mold = ForgeMold.all.first { $0.id == moldID }!
+    assert(mold.specialName(materialIDs: materials) == name)
+    assert(mold.specialName(materialIDs: Array(materials.reversed())) == nil)
+    assert(newRecipes.forgeGear(moldID: moldID, materialIDs: materials, natural: 20))
+    let gear = newRecipes.expeditionState.resolveGear(newRecipes.forgeState.lastResult!.gearID!)!
+    let inputs = materials.reduce(0) { $0 + forgePrices[$1]! }
+    assert(gear.name == name + " · 杰作" && gear.description == ItemLore.text(for: "gear:" + name))
+    assert(gear.salePrice == (inputs * 180 + 50) / 100 + (materials.count == 2 ? 4 : 7) + 5)
+    assert(gear.saleValue == gear.salePrice && gear.spriteKey == mold.gearSpriteKey)
+    _ = try newRecipes.validated(at: now)
+}
+assert(newRecipes.miningState.inventory["platinum"] == 98 && newRecipes.miningState.inventory["meteor_iron"] == 99)
+assert(newRecipes.expeditionState.inventory["reef_silk"] == 98 && newRecipes.expeditionState.inventory["echo_vine"] == 99)
+assert(newRecipes.garden.economy.finds["alpaca_fibre"] == 99 && newRecipes.garden.economy.finds["reef_silk"] == nil)
+assert(newRecipes.forgeGear(moldID: "longsword", materialIDs: ["meteor_iron", "meteor_iron", "meteor_iron"], natural: 20))
+let cappedGear = newRecipes.expeditionState.resolveGear(newRecipes.forgeState.lastResult!.gearID!)!
+assert(cappedGear.guarding == 30 && newRecipes.miningState.inventory["meteor_iron"] == 96)
+_ = try newRecipes.validated(at: now)
+
 var outfits=fixture()
 let garmentMaterials=[
     ("iron","锁子甲","锁子护腿"),
@@ -224,4 +250,4 @@ assert(scarce.forgeGear(moldID:"wand",materialIDs:["willow_twig","quartz"],natur
 assert(scarce.expeditionState.inventory["willow_twig"] == 99 && scarce.miningState.inventory["quartz"] == 99)
 assert(scarce.forgeState.lastResult?.gearID == nil && scarce.expeditionState.generatedGear?.count == 1)
 _ = try scarce.validated(at:now)
-print("PASS: forge compatibility and material conservation, weapon shapes and garment variants, catastrophic/rough/masterpiece outcomes, equip/inventory, shared shop capacity, receipts and save migration")
+print("PASS: forge compatibility and material conservation, new recipes and sale quotes, stat bounds, weapon and garment variants, equip/inventory, shop receipts and save migration")

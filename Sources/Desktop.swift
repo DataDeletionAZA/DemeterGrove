@@ -6,8 +6,8 @@ import UserNotifications
 let desktopTools: [(String, String)] = [
     ("任务", "checklist"), ("计时器", "timer"),
     ("日程", "calendar"), ("习惯", "checkmark.circle"), ("日记", "book.closed"),
-    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
-    ("成长", "sparkles"), ("地图", "map"), ("衣柜", "tshirt")
+    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("池塘", "fish"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
+    ("成长", "sparkles"), ("小屋", "home"), ("后院", "garden"), ("户外地图", "map"), ("衣柜", "tshirt")
 ]
 
 @main
@@ -567,7 +567,7 @@ struct ToolPanelView: View {
     @ObservedObject var store: GardenStore
     var tool: String
     private var sceneMetadata:String {
-        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","户外地图"].contains(tool) else{return ""}
+        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","后院","户外地图"].contains(tool) else{return ""}
         let level="等级 \(store.data.levelProgress.level)"
         return tool == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
     }
@@ -589,9 +589,11 @@ struct ToolPanelView: View {
                     case "农场", "厨房", "商店": FarmPage(store: store, section: tool)
                     case "统计": StatsPage(store: store)
                     case "成长": GrowthPage(store:store)
-                    case "首页": HomeScene(store:store)
+                    case "首页", "小屋": HomeScene(store:store)
                     case "书房": StudyScene(store:store)
                     case "地图": HomeScene(store:store)
+                    case "后院": HomeScene(store:store,backyard:true)
+                    case "池塘": PondScene(store:store)
                     case "户外地图": WorldMapScene(store:store)
                     case "湖畔钓鱼", "钓鱼": FishingScene(store:store)
                     case "林间冒险", "探险": ExpeditionScene(store:store)

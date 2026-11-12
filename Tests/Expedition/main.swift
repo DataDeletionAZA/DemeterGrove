@@ -24,7 +24,7 @@ assert(team.hireCompanion("rowan"))
 assert(team.garden.coins == beforeHire-Companion.all[0].price)
 assert(!team.hireCompanion("rowan"))
 assert(!team.toggleExpeditionCompanion("mira"))
-for person in Companion.all.dropFirst() {assert(team.hireCompanion(person.id))}
+for person in Companion.all.dropFirst() where person.level<=25 {assert(team.hireCompanion(person.id))}
 for person in Companion.all.prefix(4) {assert(team.toggleExpeditionCompanion(person.id))}
 assert(team.expeditionState.hired.count == 8 && team.expeditionState.team.count == 4)
 assert(!team.toggleExpeditionCompanion("cedar"))
@@ -162,6 +162,53 @@ for place in ExpeditionLocation.all {
     assert(!region.expeditionState.inventory.isEmpty && Set(region.expeditionState.inventory.keys).isSubset(of:ids))
     assert(region.expeditionState.isValid(focus:start+1800))
 }
+
+for (location,level,materials,wildlife) in [
+    ("marsh",8,["cattail_fibre","bog_myrtle","bog_glass"],"american_bittern"),
+    ("reef",28,["sea_grape","reef_silk","tide_glass"],"reef_manta"),
+    ("highland",35,["alpine_juniper","cloud_lichen","wind_silver"],"alpine_ibex"),
+    ("ruins",40,["echo_vine","archive_moss","rune_shard"],"archive_moth")
+] {
+    var locked=fixture(level:level-1), unlocked=fixture(level:level)
+    assert(!locked.embarkExpedition(locationID:location,minutes:60,at:now))
+    assert(unlocked.embarkExpedition(locationID:location,minutes:60,at:now))
+    if location == "marsh" {
+        assert(unlocked.advanceExpedition(to:unlocked.totalFocus+3600))
+        assert(unlocked.expeditionState.inventory["bog_glass"] == nil)
+        unlocked=fixture(level:10)
+    } else {
+        assert(unlocked.returnExpedition(at:now))
+    }
+    assert(unlocked.embarkExpedition(locationID:location,minutes:1440,at:now))
+    let saved=try encode(unlocked)
+    unlocked=try JSONDecoder().decode(AppData.self,from:saved)
+    _=try unlocked.validated(at:now)
+    let start=unlocked.expeditionState.trip!.startedFocus
+    unlocked.garden.economy.expedition?.trip?.gathering=240
+    unlocked.garden.economy.expedition?.trip?.scouting=240
+    unlocked.garden.economy.expedition?.trip?.guarding=240
+    assert(unlocked.advanceExpedition(to:start+86400))
+    assert(Set(unlocked.expeditionState.inventory.keys) == Set(materials))
+    assert(unlocked.expeditionState.discoveries.contains("wildlife:"+wildlife))
+    assert(unlocked.expeditionState.inventory.values.reduce(0,+) <= 288*3)
+    assert(unlocked.expeditionState.isValid(focus:start+86400))
+}
+
+var expandedTeam=fixture(level:40)
+for (id,level) in [("coralie",30),("arden",35),("sable",40)] {
+    var locked=fixture(level:level-1), unlocked=fixture(level:level)
+    assert(!locked.hireCompanion(id))
+    let person=Companion.all.first{$0.id == id}!
+    let coins=unlocked.garden.coins
+    assert(person.level == level && unlocked.hireCompanion(id) && !unlocked.hireCompanion(id))
+    assert(unlocked.garden.coins == coins-person.price)
+    assert(expandedTeam.hireCompanion(id) && expandedTeam.toggleExpeditionCompanion(id))
+}
+assert(expandedTeam.embarkExpedition(locationID:"ruins",minutes:30,at:now))
+let expandedSave=try encode(expandedTeam)
+let expandedReload=try JSONDecoder().decode(AppData.self,from:expandedSave)
+_ = try expandedReload.validated(at:now)
+assert(expandedReload.expeditionState.trip?.companions == ["coralie","arden","sable"])
 
 var legacy=fixture()
 legacy.garden.economy.journey=Journey(kind:.adventure,startedAt:legacy.totalFocus,duration:600)

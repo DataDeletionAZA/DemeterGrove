@@ -18,7 +18,6 @@ for object in SceneObject.allCases {
 }
 assert(!SceneObject.taskMemo.outline.contains(CGPoint(x: 340, y: 760)))
 assert(!SceneObject.recipeBook.outline.contains(CGPoint(x: 480, y: 640)))
-assert(!SceneObject.farmDoor.outline.contains(CGPoint(x: 240, y: 520)))
 assert(SceneObject.gardenPlots.count == 6)
 assert(!SceneObject.plotOne.outline.contains(CGPoint(x: 590, y: 440)))
 assert(!SceneObject.plotFour.outline.contains(CGPoint(x: 570, y: 670)))

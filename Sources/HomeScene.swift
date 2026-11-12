@@ -2,7 +2,9 @@ import SwiftUI
 
 struct HomeScene: View {
     @ObservedObject var store: GardenStore
+    var backyard = false
     @State private var showingInventory=false
+    private var background:String {backyard ? "Backyard":"House"}
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
             SceneHeader {
@@ -18,12 +20,12 @@ struct HomeScene: View {
             SceneCanvas { size in
                 let w = size.width, h = size.height
                 ZStack {
-                    RoomBackdrop(name: "Courtyard").frame(width: w, height: h).clipped()
-                    SceneTarget(object: .farmDoor, sceneSize: size, label: "农场", action: { SceneNavigation.open("农场",store:store,from:store.currentRoute) })
-                    SceneTarget(object: .kitchenDoor, sceneSize: size, label: "厨房", action: { SceneNavigation.open("厨房",store:store,from:store.currentRoute) })
-                    SceneTarget(object: .studyDoor, sceneSize: size, label: "书房", action: { SceneNavigation.open("书房",store:store,from:store.currentRoute) })
-                    SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store,from:store.currentRoute) })
-                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{SceneNavigation.open("户外地图",store:store,from:store.currentRoute)})
+                    RoomBackdrop(name:background).frame(width:w,height:h).clipped()
+                    ForEach(backyard ? HomeEntrance.backyard:HomeEntrance.house) {entry in
+                        SceneImageHotspot(background:background,rect:entry.rect,size:size,label:SceneNavigation.title(entry.id)) {
+                            SceneNavigation.open(entry.id,store:store,from:store.currentRoute)
+                        }
+                    }
                     SceneParticles()
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
             }

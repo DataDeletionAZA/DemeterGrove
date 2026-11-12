@@ -3,12 +3,12 @@ import AppKit
 
 enum GameImages {
     private static let aiServiceIcon: NSImage? = Bundle.main.url(forResource:"AIService",withExtension:"png",subdirectory:"Game").flatMap { NSImage(contentsOf:$0) }
-    static let backgrounds: [String:NSImage] = (["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "Courtyard", "Study", "WorldMap", "Parchment", "Ranch", "Tavern", "Forge", "Mine", "River", "MountainLake", "Beach", "Tropical", "Sea", "Polar", "PolarCoast", "SeaWarm"] + MineLayer.all.map(\.artworkName)).reduce(into: [:]) { result, name in
+    static let backgrounds: [String:NSImage] = (["Garden", "Kitchen", "Shop", "Lake", "Forest", "Laboratory", "House", "Backyard", "Pond", "ReedMarsh", "CoralLagoon", "MistHighland", "Ruins", "AbyssCoast", "Study", "WorldMap", "Parchment", "Ranch", "Tavern", "Forge", "Mine", "River", "MountainLake", "Beach", "Tropical", "Sea", "Polar", "PolarCoast", "SeaWarm"] + MineLayer.all.map(\.artworkName)).reduce(into: [:]) { result, name in
         if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: name.hasPrefix("Mine_") ? "Game/Mines" : "Game"), let image = NSImage(contentsOf: url) { result[name] = image }
     }
     static func interfaceIcon(name:String)->NSImage? {
-        if ["书房","study","农场","厨房","牧场","酒馆","酒馆与装备","锻造室","成长","growth","sparkles","炼金室","熬制魔药","alchemy","flask","地图","户外地图","map","worldmap","衣柜","tshirt","库存","inventory","archivebox","种子柜","seed-cabinet","矿洞","首页","小院","home","采买","market","cart","配方册","recipes"].contains(name) {return nil}
-        let natureIcons = ["牧场":"ranch_cow", "动物商店":"ranch_chicken", "酒馆":"companion_rowan", "酒馆与装备":"companion_rowan", "锻造室":"gear_iron_staff", "矿洞":"tool_pickaxe", "鱼类图鉴":"fish_common_carp", "渔具店":"rod_ash"]
+        if ["书房","study","农场","厨房","牧场","酒馆","酒馆与装备","锻造室","成长","growth","sparkles","炼金室","熬制魔药","alchemy","flask","地图","户外地图","map","worldmap","衣柜","tshirt","库存","inventory","archivebox","种子柜","seed-cabinet","矿洞","首页","小院","小屋","home","采买","market","cart","配方册","recipes"].contains(name) {return nil}
+        let natureIcons = ["池塘":"fish_common_carp", "后院":"ranch_cow", "牧场":"ranch_cow", "动物商店":"ranch_chicken", "酒馆":"companion_rowan", "酒馆与装备":"companion_rowan", "锻造室":"gear_iron_staff", "矿洞":"tool_pickaxe", "鱼类图鉴":"fish_common_carp", "渔具店":"rod_ash"]
         if let key=natureIcons[name] {return NatureImages.image(key)}
         if name == "AI 服务" || name == "ai" {return aiServiceIcon}
         let index:[String:Int] = ["成长":0,"sparkles":0,"growth":0,"炼金室":1,"熬制魔药":1,"flask":1,"alchemy":1,

@@ -159,6 +159,7 @@ struct Economy: Codable {
     var expeditions = 0
     var autoShop: AutoShopState? = nil
     var ranch: RanchState? = nil
+    var pond: PondState? = nil
     var fishing: FishingState? = nil
     var expedition: ExpeditionState? = nil
     var mining: MiningState? = nil
