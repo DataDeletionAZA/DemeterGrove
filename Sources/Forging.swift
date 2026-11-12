@@ -8,7 +8,11 @@ struct ForgeMaterial:Identifiable {
     let gathering:Int
     let scouting:Int
     let guarding:Int
-    let value:Int
+    var value:Int {
+        if let mineral=Mineral.all.first(where:{$0.id == id}) {return mineral.price}
+        if let forage=NatureCatalog.forage.first(where:{$0.id == id}) {return forage.salePrice}
+        return NatureCatalog.ranchSpecies.first{$0.productID == id}?.salePrice ?? 0
+    }
     var isMineral:Bool {Mineral.all.contains{$0.id == id}}
     var isForage:Bool {!isMineral && NatureCatalog.forage.contains{$0.id == id}}
     var spriteKey:String {
@@ -16,23 +20,23 @@ struct ForgeMaterial:Identifiable {
         return NatureItemInfo.find(id)?.spriteKey ?? "ranch_"+id
     }
     static let all:[ForgeMaterial]=[
-        .init(id:"copper",name:"铜",kind:"金属",gathering:1,scouting:0,guarding:0,value:4),
-        .init(id:"iron",name:"铁",kind:"金属",gathering:0,scouting:0,guarding:2,value:6),
-        .init(id:"silver",name:"银",kind:"金属",gathering:0,scouting:2,guarding:0,value:10),
-        .init(id:"gold",name:"金",kind:"软金属",gathering:0,scouting:2,guarding:0,value:16),
-        .init(id:"quartz",name:"石英",kind:"晶石",gathering:0,scouting:1,guarding:0,value:5),
-        .init(id:"moonstone",name:"月长石",kind:"晶石",gathering:0,scouting:1,guarding:1,value:12),
-        .init(id:"diamond",name:"钻石",kind:"晶石",gathering:1,scouting:1,guarding:1,value:80),
-        .init(id:"obsidian",name:"黑曜石",kind:"晶石",gathering:2,scouting:0,guarding:1,value:12),
-        .init(id:"starlight_ore",name:"星辉矿",kind:"金属",gathering:1,scouting:2,guarding:0,value:18),
-        .init(id:"sheep_wool",name:"羊毛",kind:"纤维",gathering:0,scouting:0,guarding:1,value:5),
-        .init(id:"rabbit_fibre",name:"兔绒",kind:"纤维",gathering:1,scouting:0,guarding:0,value:6),
-        .init(id:"alpaca_fibre",name:"羊驼绒",kind:"纤维",gathering:0,scouting:1,guarding:1,value:8),
-        .init(id:"cloud_fleece",name:"云绒",kind:"纤维",gathering:1,scouting:1,guarding:0,value:10),
-        .init(id:"cashmere",name:"羊绒",kind:"纤维",gathering:0,scouting:0,guarding:2,value:9),
-        .init(id:"rattan",name:"藤条",kind:"藤材",gathering:1,scouting:0,guarding:2,value:7),
-        .init(id:"willow_twig",name:"白柳落枝",kind:"木材",gathering:1,scouting:0,guarding:0,value:3),
-        .init(id:"driftwood",name:"海漂木",kind:"木材",gathering:0,scouting:1,guarding:1,value:4)
+        .init(id:"copper",name:"铜",kind:"金属",gathering:1,scouting:0,guarding:0),
+        .init(id:"iron",name:"铁",kind:"金属",gathering:0,scouting:0,guarding:2),
+        .init(id:"silver",name:"银",kind:"金属",gathering:0,scouting:2,guarding:0),
+        .init(id:"gold",name:"金",kind:"软金属",gathering:0,scouting:2,guarding:0),
+        .init(id:"quartz",name:"石英",kind:"晶石",gathering:0,scouting:1,guarding:0),
+        .init(id:"moonstone",name:"月长石",kind:"晶石",gathering:0,scouting:1,guarding:1),
+        .init(id:"diamond",name:"钻石",kind:"晶石",gathering:1,scouting:1,guarding:1),
+        .init(id:"obsidian",name:"黑曜石",kind:"晶石",gathering:2,scouting:0,guarding:1),
+        .init(id:"starlight_ore",name:"星辉矿",kind:"金属",gathering:1,scouting:2,guarding:0),
+        .init(id:"sheep_wool",name:"羊毛",kind:"纤维",gathering:0,scouting:0,guarding:1),
+        .init(id:"rabbit_fibre",name:"兔绒",kind:"纤维",gathering:1,scouting:0,guarding:0),
+        .init(id:"alpaca_fibre",name:"羊驼绒",kind:"纤维",gathering:0,scouting:1,guarding:1),
+        .init(id:"cloud_fleece",name:"云绒",kind:"纤维",gathering:1,scouting:1,guarding:0),
+        .init(id:"cashmere",name:"羊绒",kind:"纤维",gathering:0,scouting:0,guarding:2),
+        .init(id:"rattan",name:"藤条",kind:"藤材",gathering:1,scouting:0,guarding:2),
+        .init(id:"willow_twig",name:"白柳落枝",kind:"木材",gathering:1,scouting:0,guarding:0),
+        .init(id:"driftwood",name:"海漂木",kind:"木材",gathering:0,scouting:1,guarding:1)
     ]
 }
 struct ForgePart:Identifiable {
@@ -113,6 +117,16 @@ struct ForgeMold:Identifiable {
         return max(-6,min(6,total))
     }
 
+    fileprivate func salePrice(materials:[ForgeMaterial],quality:Int)->Int? {
+        guard let percent=Self.salePercents[quality] else{return nil}
+        let value=materials.reduce(0){$0+$1.value}
+        let labor=parts.count == 2 ? 4:7
+        let special=specialName(materialIDs:materials.map(\.id)) == nil ? 0:5
+        return (value*percent+50)/100+labor+special
+    }
+
+    private static let salePercents=[15:60,35:90,55:110,75:130,95:155,100:180]
+
     private static let grip=ForgePart(id:"grip",name:"握柄",preferred:["copper","iron","willow_twig","driftwood"])
     private static let wrap=ForgePart(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre","rabbit_fibre","cashmere"])
     private static let core=ForgePart(id:"gem",name:"杖芯",preferred:["quartz","moonstone","diamond","starlight_ore"])
@@ -144,6 +158,35 @@ struct ForgeMold:Identifiable {
         .init(id:"coat",name:"外套",station:.sewing,slot:.coat,level:5,parts:[.init(id:"cloth",name:"衣身",preferred:["sheep_wool","cloud_fleece"]),.init(id:"lining",name:"衬里",preferred:["rabbit_fibre","alpaca_fibre"]),.init(id:"buckle",name:"衣扣",preferred:["copper","moonstone"])],gathering:0,scouting:0,guarding:2)
     ]
 }
+
+extension EconomyBalance {
+    static func equipmentSalePrice(_ gear:CraftedGear)->Int? {
+        if let recipe=CraftedGear.all.first(where:{$0.id == gear.id}) {
+            let inputs=recipe.minerals.merging(recipe.materials,uniquingKeysWith:+)
+            return inputs.reduce(recipe.price) {sum,part in
+                let value=Mineral.all.first{$0.id == part.key}?.price ?? ForgeMaterial.all.first{$0.id == part.key}?.value ?? 0
+                return sum+value*part.value
+            }
+        }
+        guard let mold=ForgeMold.all.first(where:{gear.id.hasPrefix("forged_"+$0.id+"_") && gear.slot == $0.slot}) else{return nil}
+        let prefix="forged_"+mold.id+"_"
+        let encoded=gear.id.dropFirst(prefix.count)
+        guard let suffix=encoded.lastIndex(of:"_"),encoded[suffix...].hasPrefix("_q") else{return nil}
+        let digits=encoded[suffix...].dropFirst(2)
+        guard let quality=Int(digits),String(quality) == digits else{return nil}
+        let materialKey=encoded[..<suffix]
+        var remaining=materialKey
+        var materials:[ForgeMaterial]=[]
+        for _ in mold.parts {
+            guard let material=ForgeMaterial.all.first(where:{remaining == $0.id || remaining.hasPrefix($0.id+"_")}) else{return nil}
+            materials.append(material)
+            remaining=remaining.dropFirst(material.id.count+1)
+        }
+        guard materials.map(\.id).joined(separator:"_") == materialKey else{return nil}
+        return mold.salePrice(materials:materials,quality:quality)
+    }
+}
+
 extension CraftedGear {
     var description:String? {ItemLore.text(for:"gear:"+(forgeSprite ?? id))}
 }
@@ -220,7 +263,7 @@ extension AppData {
                 gathering:max(0,(mold.gathering+materials.reduce(0){$0+$1.gathering})*scale/2+specialBonus),
                 scouting:max(0,(mold.scouting+materials.reduce(0){$0+$1.scouting})*scale/2+specialBonus),
                 guarding:max(0,(mold.guarding+materials.reduce(0){$0+$1.guarding})*scale/2+specialBonus),
-                forgeSprite:mold.outputSprite(material:main),saleValue:max(1,materials.reduce(0){$0+$1.value}*(20+roll.quality)/50))
+                forgeSprite:mold.outputSprite(material:main),saleValue:mold.salePrice(materials:materials,quality:roll.quality))
             expedition.generatedGear=expedition.generatedGear ?? [:]
             expedition.generatedGear?[id]=item
             expedition.gear[id,default:0]+=1

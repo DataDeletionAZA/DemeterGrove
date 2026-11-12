@@ -87,7 +87,9 @@ import Foundation
         timed.timer?.pause(at:later)
         check(timed.garden.plots.allSatisfy{abs($0.progress(timed.gameFocus(at:later))-0.1) < 0.0001})
         check(timed.gameFocus(at:later.addingTimeInterval(600)) == 300)
-        _ = timed.finishTimer(at:later)
+        timed.garden.economy.upgrades[Upgrade.watering.rawValue] = 1
+        let dewBefore = timed.garden.water
+        check(timed.finishTimer(at:later)?.water == 2 && timed.garden.water == dewBefore + 2)
         check(timed.garden.plots.allSatisfy{abs($0.progress(timed.totalFocus)-0.1) < 0.0001})
         _ = try timed.validated(at:later)
 

@@ -39,7 +39,7 @@ for seconds in [100.0, 200.0] {
 assert(data.totalFocus == 900 && data.garden.water == 6)
 assert(data.collectSale() && data.garden.coins == 30+soupPrice)
 assert(!data.collectSale())
-assert(data.buySeeds() && data.garden.coins == 24+soupPrice)
+assert(data.buySeeds() && data.garden.coins == 26+soupPrice)
 var emptyGarden = AppData()
 emptyGarden.garden.seeds = 0
 emptyGarden.garden.coins = 0
@@ -59,7 +59,7 @@ defer { try? FileManager.default.removeItem(at: folder) }
 let file = folder.appendingPathComponent("save.json")
 try SaveFile.write(data, to: file)
 let restored = try SaveFile.read(file)
-assert(restored.totalFocus == data.totalFocus && restored.garden.coins == 24+soupPrice)
+assert(restored.totalFocus == data.totalFocus && restored.garden.coins == data.garden.coins)
 var invalid = data
 invalid.sessions.append(invalid.sessions[0])
 do { _ = try invalid.validated(); fatalError("重复结算应被拒绝") } catch DataIssue.invalid { }
@@ -264,6 +264,7 @@ let beforeFishSale = journey.garden.coins
 assert(journey.sellFind(fish) && journey.garden.coins == beforeFishSale+journey.findPrice(fish))
 assert(!journey.sellFind(fish))
 focus(100_000,into:&journey)
+journey.garden.coins = Upgrade.rod.price(0)-1
 assert(journey.upgrade(.rod) == false)
 journey.garden.coins = 100_000
 assert(journey.upgrade(.rod) && journey.embark(.fishing))
@@ -285,7 +286,7 @@ let potionWater = journey.garden.water
 assert(journey.usePotion("dew") && journey.garden.water == potionWater+6 && !journey.usePotion("dew"))
 journey.garden.economy.finds["seed"] = 1
 let potionSeeds = journey.garden.seeds
-assert(journey.usePotion("seed") && journey.garden.seeds == potionSeeds+3 && !journey.usePotion("seed"))
+assert(journey.usePotion("seed") && journey.garden.seeds == potionSeeds+6 && !journey.usePotion("seed"))
 journey.garden.economy.finds["bloom"] = 1
 assert(!journey.usePotion("bloom") && journey.garden.economy.finds["bloom"] == 1)
 let potionPlot = journey.garden.plots[0].id
@@ -379,7 +380,7 @@ let emptyPlot = typed.garden.plots[0].id
 let waterAtPlant = typed.garden.water
 assert(!typed.plant(.carrot,in:emptyPlot) && typed.garden.water == waterAtPlant)
 assert(typed.plant(.lemon,in:emptyPlot) && typed.garden.cropSeeds["柠檬"] == 0 && typed.garden.cropSeeds["番茄"] == 2)
-typed.garden.coins = 12
+typed.garden.coins = EconomyBalance.seedPacketPrice(.pumpkin)
 assert(typed.buySeeds(.pumpkin) && typed.garden.cropSeeds["南瓜"] == 1 && typed.garden.cropSeeds["番茄"] == 2 && typed.garden.coins == 0)
 let tomatoSeeds = typed.garden.cropSeeds["番茄"]
 typed.garden.seeds += 3

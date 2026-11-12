@@ -123,7 +123,37 @@ import Foundation
         check(try encoded(trade) == priorTrade)
         check(trade.sellFishingCatch("waterweed",count:3) && trade.fishingState.inventory["waterweed"] == 0)
 
+        var preparation=fixture()
+        preparation.garden.economy.fishing=FishingState(inventory:["silver_scale":1,"moonlight":1,"golden_stripe":1,"driftwood":1])
+        for (id,ingredient) in [("silver_scale",Ingredient.silverFish),("moonlight",.moonFish),("golden_stripe",.goldFish)] {
+            let before=preparation.ingredientCount(ingredient)
+            check(preparation.prepareFish(id,count:1))
+            check(preparation.ingredientCount(ingredient) == before+1 && preparation.fishingState.inventory[id] == 0)
+        }
+        preparation.garden.economy.expedition=ExpeditionState(inventory:["driftwood":1,"quartz":1])
+        preparation.garden.economy.mining=MiningState(inventory:["quartz":1])
+        let inventory=Dictionary(uniqueKeysWithValues:preparation.inventory.map{($0.id,$0)})
+        check(inventory["fishing:driftwood"]?.name == "浮木" && inventory["forage:driftwood"]?.name == "海漂木")
+        check(inventory["mining:quartz"]?.name == "石英" && inventory["forage:quartz"]?.name == "石英晶簇")
+        preparation.garden.economy.fishing?.catches=[FishingCatch(itemID:"driftwood",focus:0,locationID:"lake")]
+        check(preparation.gameReadyEvents(at:now).contains{$0.kind == .fishing && $0.name == "浮木"})
+        let beforeDriftwood=preparation.garden.coins
+        check(preparation.sellFishingCatch("driftwood",count:1))
+        check(preparation.garden.coins == beforeDriftwood+1 && preparation.expeditionState.inventory["driftwood"] == 1)
+
+        var oldCast=started(location:"sea_warm",bait:nil)
+        oldCast.cast?.duration=240
+        check(oldCast.isValid(focus:120))
+        oldCast.advance(to:239,active:true,level:25)
+        check(oldCast.catches.isEmpty)
+        oldCast.advance(to:240,active:true,level:25)
+        check(oldCast.catches.count == 1)
+        check((288...480).contains(oldCast.cast!.duration))
+
         var upgraded=fixture();upgraded.garden.economy.upgrades[Upgrade.rod.rawValue]=3
+        let priorLegacyPurchase=try encoded(upgraded)
+        check(!upgraded.buyFishingRod("ocean"))
+        check(try encoded(upgraded) == priorLegacyPurchase)
         check(upgraded.configureFishing(enabled:true,location:"sea",rod:"ocean",bait:"squid",at:now))
         check(Set(["willow","ash","river","ocean"]).isSubset(of:upgraded.fishingState.ownedRods))
         let priorUpgrade=try encoded(upgraded)

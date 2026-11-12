@@ -20,7 +20,7 @@ struct FishingScene:View {
     private var configurationLocation:FishingLocation {FishingLocation.all.first{$0.id == configurationLocationID} ?? location}
     private var locked:Bool {store.data.levelProgress.level<location.level}
     private var ownedRods:Set<String> {state.ownedRods.union(FishingRod.all.filter{$0.rank<=store.data.garden.rank(.rod)}.map(\.id))}
-    private var bag:[String] {state.inventory.keys.filter{state.inventory[$0,default:0]>0}.sorted{(NatureItemInfo.find($0)?.name ?? $0)<(NatureItemInfo.find($1)?.name ?? $1)}}
+    private var bag:[String] {state.inventory.keys.filter{state.inventory[$0,default:0]>0}.sorted{(NatureItemInfo.fishingCatch($0)?.name ?? $0)<(NatureItemInfo.fishingCatch($1)?.name ?? $1)}}
     private var rodPosition:CGPoint {
         switch location.background {
         case "Lake":return CGPoint(x:0.465,y:0.435)
@@ -93,15 +93,18 @@ struct FishingScene:View {
         VStack(alignment:.leading,spacing:9) {
             Text("收获袋").font(.headline).foregroundStyle(Palette.goldLight)
             Text("\(bag.count) 种 · \(state.inventory.values.reduce(0,+)) 份").font(.caption).foregroundStyle(Palette.muted)
-            if let selected,let item=NatureItemInfo.find(selected),state.inventory[selected,default:0]>0 {
+            if let selected,let item=NatureItemInfo.fishingCatch(selected),state.inventory[selected,default:0]>0 {
                 Text(item.name).font(.callout)
                 if let description=ItemLore.text(for:"fishing:"+selected) {
                     Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                 }
                 HStack(spacing:5) {
-                    Button("出售 ×1") {if store.commitGameChange({$0.sellFishingCatch(selected,count:1)}){store.message="获得 \(Money.text(item.price))"}}
-                    if NatureCatalog.fish.first(where:{$0.id == selected})?.isCookable == true {
-                        Button("处理鱼肉") {if store.commitGameChange({$0.prepareFish(selected,count:1)}){store.message="鱼肉已放入食材柜"}}
+                    Button("出售 · \(Money.text(item.price))") {if store.commitGameChange({$0.sellFishingCatch(selected,count:1)}){store.message="获得 \(Money.text(item.price))"}}
+                        .accessibilityLabel("出售\(item.name)，获得\(Money.text(item.price))")
+                    if let ingredient=NatureCatalog.fish.first(where:{$0.id == selected})?.cookingIngredient {
+                        Button("处理成\(ingredient.rawValue)") {
+                            if store.commitGameChange({$0.prepareFish(selected,count:1)}){store.message="\(ingredient.rawValue)已放入食材柜"}
+                        }
                     }
                 }.font(.system(size:11))
                 if selected == "waterweed" {
@@ -113,7 +116,7 @@ struct FishingScene:View {
                 PixelScrollView {
                     LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:SceneSizing.stockColumns(width:max(1,geo.size.width-16))),spacing:8) {
                         ForEach(bag,id:\.self) {id in
-                            if let item=NatureItemInfo.find(id) {
+                            if let item=NatureItemInfo.fishingCatch(id) {
                                 Button {selected=selected == id ? nil:id} label:{
                                     VStack(spacing:5) {
                                         GameNatureSprite(key:item.spriteKey,size:50)
@@ -126,7 +129,7 @@ struct FishingScene:View {
                     }
                     if bag.isEmpty {Text("暂无收获").font(.caption).foregroundStyle(Palette.muted).padding(.vertical,16)}
                     if let latest=state.catches.last {
-                        Text(latest.itemID.flatMap{NatureItemInfo.find($0)?.name}.map{"最近钓获："+$0} ?? "最近一竿没有收获")
+                        Text(latest.itemID.flatMap{NatureItemInfo.fishingCatch($0)?.name}.map{"最近钓获："+$0} ?? "最近一竿没有收获")
                             .font(.system(size:11)).foregroundStyle(Palette.muted).padding(.top,10)
                     }
                 }

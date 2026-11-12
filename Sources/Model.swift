@@ -317,11 +317,11 @@ struct AppData: Codable {
         pomodoroBreakReady = run.kind == .pomodoro && seconds >= run.target
         guard seconds > 0, !sessions.contains(where: { $0.id == run.id }) else { return (0, 0, run.kind == .rest) }
         let beforeFocus = totalFocus
-        let before = Int(beforeFocus / 300)
         sessions.append(run.record(endingAt: now))
-        let water = Int(totalFocus / 300) - before
+        let afterFocus = totalFocus
+        let water = min(1_000_000_000-garden.water,EconomyBalance.waterReward(before:beforeFocus,after:afterFocus,wateringRank:garden.rank(.watering)))
         garden.water += water
-        garden.coins += EconomyBalance.focusReward(before:beforeFocus,after:totalFocus)
+        garden.coins += EconomyBalance.focusReward(before:beforeFocus,after:afterFocus)
         return (seconds, water, run.kind == .rest)
     }
 

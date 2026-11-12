@@ -21,10 +21,10 @@ struct FishingRod:Identifiable {
     var spriteKey:String {"rod_"+id}
     static let all:[FishingRod]=[
         .init(id:"willow",name:"柳木钓竿",level:3,price:0,rank:0,speed:1),
-        .init(id:"ash",name:"白蜡木钓竿",level:5,price:87,rank:1,speed:0.95),
-        .init(id:"river",name:"河行钓竿",level:10,price:174,rank:2,speed:0.90),
-        .init(id:"ocean",name:"潮汐钓竿",level:15,price:348,rank:3,speed:0.85),
-        .init(id:"star",name:"星纹钓竿",level:25,price:986,rank:4,speed:0.80)
+        .init(id:"ash",name:"白蜡木钓竿",level:5,price:30,rank:1,speed:0.95),
+        .init(id:"river",name:"河行钓竿",level:10,price:60,rank:2,speed:0.90),
+        .init(id:"ocean",name:"潮汐钓竿",level:15,price:100,rank:3,speed:0.85),
+        .init(id:"star",name:"星纹钓竿",level:25,price:180,rank:4,speed:0.80)
     ]
 }
 
@@ -83,7 +83,7 @@ struct FishingLocation:Identifiable {
         .init(id:"beach",regionID:"beach",habitatID:"coast",waterType:.salt,name:"潮间海岸",level:15,minimum:180,maximum:360,background:"Beach"),
         .init(id:"tropical",regionID:"tropical",habitatID:"tropical_river",waterType:.fresh,name:"雨林水湾",level:18,minimum:120,maximum:300,background:"Tropical"),
         .init(id:"sea",regionID:"sea",habitatID:"cool_shelf",waterType:.salt,name:"冷流海域",level:20,minimum:210,maximum:420,background:"Sea"),
-        .init(id:"sea_warm",regionID:"sea",habitatID:"warm_pelagic",waterType:.salt,name:"暖流远洋",level:20,minimum:210,maximum:420,background:"SeaWarm"),
+        .init(id:"sea_warm",regionID:"sea",habitatID:"warm_pelagic",waterType:.salt,name:"暖流远洋",level:20,minimum:360,maximum:600,background:"SeaWarm"),
         .init(id:"polar",regionID:"polar",habitatID:"polar_lake",waterType:.fresh,name:"冰原湖",level:25,minimum:210,maximum:420,background:"Polar"),
         .init(id:"polar_coast",regionID:"polar",habitatID:"polar_coast",waterType:.salt,name:"极地近岸",level:25,minimum:210,maximum:420,background:"PolarCoast")
     ]
@@ -192,7 +192,7 @@ extension AppData {
     mutating func buyFishingRod(_ id:String)->Bool {
         guard let rod=FishingRod.all.first(where:{$0.id == id}),levelProgress.level>=rod.level,garden.coins>=rod.price else{return false}
         var state=fishingState
-        guard !state.ownedRods.contains(id) else{return false}
+        guard !state.ownedRods.contains(id),rod.rank>garden.rank(.rod) else{return false}
         garden.coins-=rod.price;state.ownedRods.insert(id);garden.economy.fishing=state;return true
     }
     mutating func buyFishingBait(_ id:String,count:Int=1)->Bool {
@@ -203,14 +203,14 @@ extension AppData {
     }
     mutating func sellFishingCatch(_ id:String,count:Int)->Bool {
         var state=fishingState
-        let price=NatureCatalog.fish.first{$0.id == id}?.salePrice ?? (["waterweed","driftwood","shell","river_pebble"].contains(id) ? 1:0)
+        let price=NatureItemInfo.fishingCatch(id)?.price ?? 0
         guard price>0,count>0,state.inventory[id,default:0]>=count,garden.coins<=1_000_000_000_000-price*count else{return false}
         state.inventory[id,default:0]-=count;garden.coins+=price*count;garden.economy.fishing=state;return true
     }
     mutating func prepareFish(_ id:String,count:Int)->Bool {
         var state=fishingState
-        guard let fish=NatureCatalog.fish.first(where:{$0.id == id}),fish.isCookable,count>0,state.inventory[id,default:0]>=count else{return false}
-        let ingredient=Ingredient.fishFillet
+        guard let ingredient=NatureCatalog.fish.first(where:{$0.id == id})?.cookingIngredient,
+              count>0,state.inventory[id,default:0]>=count else{return false}
         guard garden.ingredients[ingredient.rawValue,default:0]<=1_000_000_000-count else{return false}
         state.inventory[id,default:0]-=count;garden.ingredients[ingredient.rawValue,default:0]+=count
         garden.economy.fishing=state;return true

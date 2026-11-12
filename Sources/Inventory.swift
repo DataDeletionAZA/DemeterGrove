@@ -42,7 +42,13 @@ extension AppData {
         }
         for (prefix,items) in [("fishing",garden.economy.fishing?.inventory ?? [:]),("forage",garden.economy.expedition?.inventory ?? [:]),("mining",garden.economy.mining?.inventory ?? [:])] {
             result += items.keys.sorted().compactMap {id in
-                guard let item=NatureItemInfo.find(id),items[id,default:0]>0 else{return nil}
+                let info:NatureItemInfo?
+                switch prefix {
+                case "fishing":info=NatureItemInfo.fishingCatch(id)
+                case "mining":info=NatureItemInfo.mineral(id)
+                default:info=NatureItemInfo.find(id)
+                }
+                guard let item=info,items[id,default:0]>0 else{return nil}
                 return InventoryEntry(id:prefix+":"+id,name:item.name,category:.material,count:items[id,default:0],artwork:.nature(item.spriteKey))
             }
         }

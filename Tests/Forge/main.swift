@@ -76,6 +76,8 @@ assert(special.expeditionState.gear[specialResult.gearID!] == 2)
 assert(special.forgeGear(moldID:"coat",materialIDs:["cloud_fleece","alpaca_fibre","moonstone"],natural:20))
 assert(special.forgeState.lastResult!.name.contains("月云护行衣"))
 let coat=special.expeditionState.resolveGear(special.forgeState.lastResult!.gearID!)!
+let coatInputs=ForgeMaterial.all.filter{["cloud_fleece","alpaca_fibre","moonstone"].contains($0.id)}.reduce(0){$0+$1.value}
+assert(coat.salePrice == (coatInputs*180+50)/100+12)
 assert(coat.slot == .coat && special.equipExpeditionGear(coat.id,companion:"rowan",slot:.coat))
 let inventory=special.inventory.filter{$0.id.hasPrefix("gear:")}
 assert(inventory.contains{$0.id == "gear:"+coat.id})
@@ -100,6 +102,9 @@ _ = try legacy.validated(at:now)
 
 var olderForgedFixture=fixture()
 assert(olderForgedFixture.forgeGear(moldID:"sickle",materialIDs:["copper","iron"],natural:20))
+let originalPrice=777
+let originalGearID=olderForgedFixture.forgeState.lastResult!.gearID!
+olderForgedFixture.garden.economy.expedition?.generatedGear?[originalGearID]?.saleValue=originalPrice
 let olderForgedJSON=String(decoding:try encoded(olderForgedFixture),as:UTF8.self)
     .replacingOccurrences(of:"铜镰刀 · 杰作",with:"铜采集镰 · 杰作")
 var olderForged=try JSONDecoder().decode(AppData.self,from:Data(olderForgedJSON.utf8))
@@ -110,8 +115,47 @@ _ = try olderForged.validated(at:now)
 assert(olderForged.forgeGear(moldID:"sickle",materialIDs:["copper","iron"],natural:20))
 assert(olderForged.expeditionState.gear[olderForgedID] == 2 && olderForged.expeditionState.wornCount(olderForgedID) == 1)
 assert(olderForged.expeditionState.resolveGear(olderForgedID)?.name == "铜采集镰 · 杰作")
+let olderGear=olderForged.expeditionState.resolveGear(olderForgedID)!
+assert(olderGear.saleValue == originalPrice && olderGear.salePrice != originalPrice)
 assert(olderForged.forgeState.lastResult?.name == "铜采集镰 · 杰作")
 _ = try olderForged.validated(at:now)
+assert(olderForged.stockEquipment(olderForgedID,at:now))
+assert(olderForged.garden.autoShopState.equipmentOrders?.first?.price == olderGear.salePrice)
+olderForged.garden.economy.autoShop?.equipmentOrders?[0].price=originalPrice
+var previousOrder=try JSONDecoder().decode(AppData.self,from:encoded(olderForged)).validated(at:now)
+assert(previousOrder.garden.autoShopState.equipmentOrders?.first?.price == originalPrice)
+previousOrder.sessions.append(FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:now,seconds:300))
+assert(previousOrder.collectShopProceeds(at:now) == originalPrice)
+assert(previousOrder.expeditionState.resolveGear(olderForgedID) == olderGear)
+
+let minerals=Dictionary(uniqueKeysWithValues:Mineral.all.map{($0.id,$0.price)})
+let forgePrices=Dictionary(uniqueKeysWithValues:ForgeMaterial.all.map{($0.id,$0.value)})
+assert(forgePrices.values.allSatisfy{$0>0})
+assert(forgePrices["quartz"] == minerals["quartz"])
+assert(forgePrices["driftwood"] == NatureCatalog.forage.first{$0.id == "driftwood"}?.salePrice)
+assert(forgePrices["sheep_wool"] == NatureCatalog.ranchSpecies.first{$0.productID == "sheep_wool"}?.salePrice)
+assert(CraftedGear.all.first{$0.id == "copper_sickle"}?.salePrice == 12+4*minerals["copper"]!+2*minerals["coal"]!)
+
+var priced=fixture()
+for mold in ForgeMold.all {
+    let inputs=mold.parts.map{$0.preferred[0]}
+    assert(priced.forgeGear(moldID:mold.id,materialIDs:inputs,natural:20))
+    let gear=priced.expeditionState.resolveGear(priced.forgeState.lastResult!.gearID!)!
+    assert(EconomyBalance.equipmentSalePrice(gear) == gear.saleValue && gear.salePrice>inputs.reduce(0){$0+forgePrices[$1]!})
+}
+let copperPair=2*forgePrices["copper"]!
+for (face,percent) in [(2,60),(4,90),(8,110),(12,130),(16,155),(20,180)] {
+    assert(priced.forgeGear(moldID:"machete",materialIDs:["copper","copper"],natural:face))
+    let gear=priced.expeditionState.resolveGear(priced.forgeState.lastResult!.gearID!)!
+    assert(gear.salePrice == (copperPair*percent+50)/100+4)
+}
+for id in ["forged_missing_copper_iron_q100","forged_sickle_copper_q100","forged_sickle_copper_iron_coal_q100",
+           "forged_sickle_copper_iron_q0","forged_sickle_copper_iron_q0100","forged_sickle_copper_iron__q100",
+           "forged_sickle_unknown_iron_q100","forged_sickle_copper_iron_q100_extra"] {
+    let imported=CraftedGear(id:id,name:"旧装备",slot:.tool,level:5,minerals:[:],price:0,gathering:0,scouting:0,guarding:0,
+                             forgeSprite:"forge_gear_sickle",saleValue:73)
+    assert(EconomyBalance.equipmentSalePrice(imported) == nil && imported.salePrice == 73)
+}
 
 var expanded=fixture()
 let weapons=[

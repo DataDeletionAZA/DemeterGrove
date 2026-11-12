@@ -153,19 +153,24 @@ enum Ingredient: String, Codable, CaseIterable, Identifiable {
         case .onion,.spinach,.pea,.beet:return 6
         case .eggplant,.tea:return 8
         case .apple,.pear,.sunroot:return 10
-        case .moonbean,.appleJam,.beetSugar:return 12
-        case .shrivelfig,.dirigiblePlum,.butter,.moonbeanPaste:return 18
+        case .moonbean:return 12
+        case .beetSugar:return 14
+        case .butter,.moonbeanPaste:return 27
+        case .appleJam,.cakeBase:return 29
+        case .shrivelfig,.dirigiblePlum:return 18
         case .wheat,.tomato,.potato,.corn,.cookedRice:return 8
         case .mushroom,.lemon:return 10
-        case .pumpkin,.strawberry,.milk,.roastedTea:return 12
+        case .pumpkin,.strawberry,.milk:return 12
+        case .roastedTea:return 10
         case .honey,.cocoa,.coffee:return 14
         case .fishFillet,.goatMilk,.duckEgg:return 12
         case .bilberry,.raspberry,.hazelnut,.rosehip,.cloudberry,.lingonberry,.coconut:return 14
         case .vanilla:return 18
-        case .noodles,.silverFish:return 18
-        case .bread:return 24
+        case .noodles:return 16
+        case .silverFish:return 18
+        case .bread:return 23
         case .moonFish:return 28
-        case .cakeBase,.goldFish:return 40
+        case .goldFish:return 40
         }
     }
 }

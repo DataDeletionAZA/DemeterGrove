@@ -11,14 +11,14 @@ struct Companion:Identifiable {
     let guarding:Int
     var spriteKey:String {"companion_"+id}
     static let all:[Companion]=[
-        .init(id:"rowan",name:"罗温",role:"林间采集者",level:5,price:58,gathering:2,scouting:1,guarding:0),
-        .init(id:"mira",name:"米拉",role:"河谷向导",level:5,price:58,gathering:1,scouting:2,guarding:0),
-        .init(id:"oswin",name:"奥斯温",role:"巡路护卫",level:6,price:87,gathering:0,scouting:1,guarding:2),
-        .init(id:"iris",name:"伊里斯",role:"草药师",level:8,price:116,gathering:3,scouting:1,guarding:0),
-        .init(id:"cedar",name:"西达",role:"山地勘察员",level:12,price:174,gathering:1,scouting:3,guarding:1),
-        .init(id:"brann",name:"布兰",role:"远行护卫",level:14,price:203,gathering:1,scouting:1,guarding:3),
-        .init(id:"linnet",name:"林奈特",role:"雨林博物学者",level:18,price:290,gathering:3,scouting:3,guarding:1),
-        .init(id:"vesper",name:"维斯珀",role:"星夜领航员",level:25,price:493,gathering:2,scouting:4,guarding:3)
+        .init(id:"rowan",name:"罗温",role:"林间采集者",level:5,price:45,gathering:2,scouting:1,guarding:0),
+        .init(id:"mira",name:"米拉",role:"河谷向导",level:5,price:35,gathering:1,scouting:2,guarding:0),
+        .init(id:"oswin",name:"奥斯温",role:"巡路护卫",level:6,price:38,gathering:0,scouting:1,guarding:2),
+        .init(id:"iris",name:"伊里斯",role:"草药师",level:8,price:95,gathering:3,scouting:1,guarding:0),
+        .init(id:"cedar",name:"西达",role:"山地勘察员",level:12,price:115,gathering:1,scouting:3,guarding:1),
+        .init(id:"brann",name:"布兰",role:"远行护卫",level:14,price:110,gathering:1,scouting:1,guarding:3),
+        .init(id:"linnet",name:"林奈特",role:"雨林博物学者",level:18,price:190,gathering:3,scouting:3,guarding:1),
+        .init(id:"vesper",name:"维斯珀",role:"星夜领航员",level:25,price:260,gathering:2,scouting:4,guarding:3)
     ]
 }
 
@@ -37,7 +37,7 @@ struct CraftedGear:Identifiable,Codable,Equatable {
     var forgeSprite:String? = nil
     var saleValue:Int? = nil
     var spriteKey:String {forgeSprite ?? "gear_"+id}
-    var salePrice:Int {saleValue ?? max(1,price*2)}
+    var salePrice:Int {EconomyBalance.equipmentSalePrice(self) ?? saleValue ?? max(1,price*2)}
     static let all:[CraftedGear]=[
         .init(id:"copper_sickle",name:"铜刃采集镰",slot:.tool,level:5,minerals:["copper":4,"coal":2],price:12,gathering:1,scouting:0,guarding:0),
         .init(id:"iron_staff",name:"铁箍行路杖",slot:.tool,level:8,minerals:["iron":4,"coal":3],price:20,gathering:0,scouting:1,guarding:1),
@@ -169,7 +169,7 @@ extension AppData {
 
     var expeditionStats: (gathering:Int,scouting:Int,guarding:Int) {
         let state = expeditionState
-        var gathering = 1 + garden.rank(.wand), scouting = 1, guarding = 1
+        var gathering = 1 + garden.rank(.wand)*2, scouting = 1, guarding = 1
         for id in state.team {
             if let companion = Companion.all.first(where: { $0.id == id }) {
                 gathering += companion.gathering; scouting += companion.scouting; guarding += companion.guarding
@@ -237,8 +237,7 @@ extension AppData {
         let events = Int(elapsed / 300)
         while trip.events < events { expeditionEvent(trip:&trip,state:&state); trip.events += 1 }
         if elapsed >= trip.duration {
-            if trip.duration.truncatingRemainder(dividingBy:300) > 0 { expeditionEvent(trip:&trip,state:&state) }
-            finishExpedition(trip:trip,elapsed:trip.duration,completed:true,state:&state)
+            finishExpedition(trip:&trip,elapsed:trip.duration,completed:true,state:&state)
         } else { state.trip = trip }
         guard state != before else { return false }
         garden.economy.expedition = state
@@ -251,8 +250,8 @@ extension AppData {
         let focus = gameFocus(at:date)
         advanceExpedition(to:focus)
         var state = expeditionState
-        if let trip = state.trip {
-            finishExpedition(trip:trip,elapsed:max(0,min(trip.duration,focus-trip.startedFocus)),completed:false,state:&state)
+        if var trip = state.trip {
+            finishExpedition(trip:&trip,elapsed:max(0,min(trip.duration,focus-trip.startedFocus)),completed:false,state:&state)
             garden.economy.expedition = state
         }
         return true
@@ -273,15 +272,20 @@ extension AppData {
 
     private func expeditionEvent(trip: inout ExpeditionTrip, state: inout ExpeditionState) {
         let forage = NatureCatalog.forage.filter { $0.locations.contains(trip.locationID) && $0.level <= trip.level }
+        let scouting = min(12,trip.scouting)
         let weighted = forage.map { item in
-            item.rarity.weight * (100 + trip.scouting * (NatureRarity.allCases.firstIndex(of:item.rarity) ?? 0) * 12)
+            item.rarity.weight * (100 + scouting * (NatureRarity.allCases.firstIndex(of:item.rarity) ?? 0) * 12)
         }
         let total = weighted.reduce(0,+)
         if total > 0 {
             var roll = state.random.next(total)
             for (index,item) in forage.enumerated() {
                 if roll < weighted[index] {
-                    let count = 1 + trip.gathering / 4 + (state.random.next(100) < min(60,trip.guarding*3) ? 1:0)
+                    let gatheringChance = min(100,max(0,trip.gathering-1)*5)
+                    let guardingChance = min(25,trip.guarding*2)
+                    let gatheredExtra = state.random.next(100) < gatheringChance
+                    let guardedExtra = state.random.next(100) < guardingChance
+                    let count = 1 + (gatheredExtra ? 1:0) + (guardedExtra ? 1:0)
                     let available = min(1_000_000_000 - trip.rewards[item.id,default:0],
                                         1_000_000_000 - state.inventory[item.id,default:0] - trip.unpackedCount(item.id))
                     if available > 0 { trip.rewards[item.id,default:0] += min(count,available) }
@@ -299,7 +303,9 @@ extension AppData {
         }
     }
 
-    private func finishExpedition(trip: ExpeditionTrip, elapsed: Double, completed: Bool, state: inout ExpeditionState) {
+    private func finishExpedition(trip: inout ExpeditionTrip, elapsed: Double, completed: Bool, state: inout ExpeditionState) {
+        let remainingSeconds = Int(elapsed.truncatingRemainder(dividingBy:300))
+        if remainingSeconds > 0, state.random.next(300) < remainingSeconds { expeditionEvent(trip:&trip,state:&state) }
         for id in trip.rewards.keys { state.inventory[id,default:0] += trip.unpackedCount(id) }
         state.discoveries.formUnion(trip.discoveries)
         state.history.append(ExpeditionRecord(id:trip.id,locationID:trip.locationID,duration:elapsed,plannedDuration:trip.duration,

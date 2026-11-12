@@ -70,14 +70,32 @@ assert(!team.returnExpedition(at:now) && !team.advanceExpedition(to:started+1000
 let afterReturned=try encode(team.expeditionState)
 assert(afterReturned == returned)
 
-var solo=fixture(level:5)
-assert(solo.embarkExpedition(locationID:"forest",minutes:1,at:now))
-let soloStart=solo.expeditionState.trip!.startedFocus
-assert(solo.expeditionState.trip!.companions.isEmpty)
-assert(!solo.advanceExpedition(to:soloStart+59))
-assert(solo.advanceExpedition(to:soloStart+60))
-assert(solo.expeditionState.trip == nil && solo.expeditionState.inventory.values.reduce(0,+)>0)
-assert(solo.expeditionState.history.last!.completed && solo.expeditionState.history.last!.duration == 60)
+for (seed,minutes,earnsReward) in [(UInt64(1),1,false),(UInt64(2),1,true),(UInt64(1),4,true),(UInt64(13),5,true)] {
+    var solo=fixture(level:5)
+    solo.garden.economy.expedition?.random=FocusRandom(state:seed)
+    var early=solo
+    assert(solo.embarkExpedition(locationID:"forest",minutes:minutes,at:now))
+    assert(early.embarkExpedition(locationID:"forest",minutes:10,at:now))
+    let soloStart=solo.expeditionState.trip!.startedFocus
+    assert(solo.expeditionState.trip!.companions.isEmpty)
+    assert(!solo.advanceExpedition(to:soloStart+Double(minutes*60-1)))
+    assert(solo.advanceExpedition(to:soloStart+Double(minutes*60)))
+    assert(solo.expeditionState.trip == nil && solo.expeditionState.inventory.isEmpty == !earnsReward)
+    assert(solo.expeditionState.history.last!.completed && solo.expeditionState.history.last!.duration == Double(minutes*60))
+    early.timer=TimerRun(kind:.stopwatch,target:600,taskTitle:"阅读",startedAt:now,resumedAt:now)
+    assert(early.returnExpedition(at:now.addingTimeInterval(Double(minutes*60))))
+    assert(early.expeditionState.trip == nil && !early.expeditionState.history.last!.completed)
+    assert(early.expeditionState.inventory == solo.expeditionState.inventory)
+    assert(early.expeditionState.random == solo.expeditionState.random)
+}
+
+var equipped=fixture(level:25)
+assert(equipped.embarkExpedition(locationID:"beach",minutes:60,at:now))
+equipped.garden.economy.expedition?.trip?.gathering=240
+equipped.garden.economy.expedition?.trip?.scouting=240
+equipped.garden.economy.expedition?.trip?.guarding=240
+assert(equipped.advanceExpedition(to:equipped.totalFocus+3600))
+assert((24...36).contains(equipped.expeditionState.inventory.values.reduce(0,+)))
 
 var gathering=fixture(level:5)
 gathering.garden.economy.expedition?.random=FocusRandom(state:5)

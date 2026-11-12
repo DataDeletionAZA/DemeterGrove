@@ -21,7 +21,7 @@ struct RanchState: Codable, Equatable {
     var troughCapacity: Int { expanded ? 48 : 24 }
     var feedPortions: Int { trough + feedBags * Self.feedBagPortions }
     var readyCount: Int { animals.reduce(0) { $0 + $1.ready } }
-    static let expansionPrice = 493
+    static let expansionPrice = 720
     static let expansionLevel = 4
     static let feedBagPrice = 12
     static let feedBagPortions = 6

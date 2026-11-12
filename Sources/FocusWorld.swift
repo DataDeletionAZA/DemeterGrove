@@ -25,10 +25,15 @@ struct NatureItemInfo {
     var spriteKey:String
     var price:Int
     static func find(_ id:String)->NatureItemInfo? {
-        if let fish=NatureCatalog.fish.first(where:{$0.id == id}) {return .init(name:fish.name,spriteKey:fish.spriteKey,price:fish.salePrice)}
         if let item=NatureCatalog.forage.first(where:{$0.id == id}) {return .init(name:item.name,spriteKey:item.spriteKey,price:item.salePrice)}
-        if let animal=NatureCatalog.ranchSpecies.first(where:{$0.productID == id}) {return .init(name:animal.productName,spriteKey:"product_"+animal.id,price:max(3,animal.productionMinutes/5))}
-        if let mineral=Mineral.all.first(where:{$0.id == id}) {return .init(name:mineral.name,spriteKey:mineral.spriteKey,price:mineral.price)}
+        if let animal=NatureCatalog.ranchSpecies.first(where:{$0.productID == id}) {return .init(name:animal.productName,spriteKey:"product_"+animal.id,price:animal.salePrice)}
+        return mineral(id) ?? fishingCatch(id)
+    }
+    static func mineral(_ id:String)->NatureItemInfo? {
+        Mineral.all.first(where:{$0.id == id}).map{.init(name:$0.name,spriteKey:$0.spriteKey,price:$0.price)}
+    }
+    static func fishingCatch(_ id:String)->NatureItemInfo? {
+        if let fish=NatureCatalog.fish.first(where:{$0.id == id}) {return .init(name:fish.name,spriteKey:fish.spriteKey,price:fish.salePrice)}
         let miscellaneous=["waterweed":"水草","driftwood":"浮木","shell":"贝壳","river_pebble":"河卵石"]
         if let name=miscellaneous[id] {return .init(name:name,spriteKey:"material_"+id,price:1)}
         return nil

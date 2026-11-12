@@ -34,7 +34,16 @@ struct NatureFish: Identifiable, Equatable {
     var description: String
     var sourceIDs: [String]
     var spriteKey: String { "fish_" + id }
-    var salePrice: Int { switch rarity { case .common: return 14; case .uncommon: return 22; case .rare: return 38; case .legendary: return 62 } }
+    var salePrice: Int { switch rarity { case .common: return 6; case .uncommon: return 9; case .rare: return 15; case .legendary: return 27 } }
+    var cookingIngredient: Ingredient? {
+        guard isCookable else { return nil }
+        switch id {
+        case "silver_scale": return .silverFish
+        case "moonlight": return .moonFish
+        case "golden_stripe": return .goldFish
+        default: return .fishFillet
+        }
+    }
 }
 
 struct NatureBait: Identifiable, Equatable {
@@ -108,6 +117,18 @@ struct NatureRanchSpecies: Identifiable, Equatable {
     var description: String
     var sourceIDs: [String]
     var spriteKey: String { "ranch_" + id }
+    var salePrice: Int {
+        switch productID {
+        case "sheep_wool": return 10
+        case "rabbit_fibre": return 9
+        case "cashmere": return 11
+        case "alpaca_fibre", "mooncalf_dung": return 12
+        case "cloud_fleece": return 16
+        case "lantern_egg": return 14
+        case "moss_tuft": return 17
+        default: return max(3, productionMinutes / 5)
+        }
+    }
 }
 
 struct NatureForage: Identifiable, Equatable {
@@ -123,7 +144,7 @@ struct NatureForage: Identifiable, Equatable {
     var description: String
     var sourceIDs: [String]
     var spriteKey: String { "forage_" + id }
-    var salePrice: Int { rarity == .common ? 8 : rarity == .uncommon ? 14 : rarity == .rare ? 25 : 40 }
+    var salePrice: Int { rarity == .common ? 4 : rarity == .uncommon ? 7 : rarity == .rare ? 12 : 22 }
 }
 
 struct NatureWildlife: Identifiable, Equatable {
@@ -140,34 +161,34 @@ struct NatureWildlife: Identifiable, Equatable {
 
 enum NatureCatalog {
     static let ranchSpecies: [NatureRanchSpecies] = [
-        .init(id:"chicken", name:"母鸡", scientificName:"Gallus gallus domesticus", origin:.real, level:1, price:90, productID:"chicken_egg", productName:"鸡蛋", productCount:1, productionMinutes:15, ingredient:"鸡蛋", description:"会啄食种子和小虫的家禽，羽毛能帮助保温。", sourceIDs:["zoo_chicken"]),
-        .init(id:"cow", name:"奶牛", scientificName:"Bos taurus", origin:.real, level:1, price:180, productID:"cow_milk", productName:"牛奶", productCount:1, productionMinutes:25, ingredient:"牛奶", description:"反刍动物，胃的不同部分帮助它利用草料。", sourceIDs:["zoo_cow"]),
-        .init(id:"duck", name:"家鸭", scientificName:"Anas platyrhynchos domesticus", origin:.real, level:2, price:130, productID:"duck_egg", productName:"鸭蛋", productCount:1, productionMinutes:20, ingredient:"鸭蛋", description:"由绿头鸭驯化而来；宽嘴适合在浅水和泥边觅食。", sourceIDs:["duck_domestication"]),
-        .init(id:"goat", name:"奶山羊", scientificName:"Capra hircus", origin:.real, level:3, price:180, productID:"goat_milk", productName:"羊奶", productCount:1, productionMinutes:25, ingredient:"羊奶", description:"擅长取食灌木叶片，横向瞳孔让视野更加开阔。", sourceIDs:["zoo_goat"]),
-        .init(id:"sheep", name:"绵羊", scientificName:"Ovis aries", origin:.real, level:4, price:210, productID:"sheep_wool", productName:"羊毛", productCount:1, productionMinutes:35, ingredient:nil, description:"群居的反刍家畜，卷曲的羊毛纤维可以纺成线。", sourceIDs:["sheep_wool"]),
-        .init(id:"rabbit", name:"安哥拉兔", scientificName:"Oryctolagus cuniculus", origin:.real, level:4, price:190, productID:"rabbit_fibre", productName:"兔绒", productCount:1, productionMinutes:30, ingredient:nil, description:"长毛家兔，需要梳理和照料毛发；兔绒来自梳收的纤维。", sourceIDs:["rabbit_fibre"]),
-        .init(id:"cashmere_goat", name:"绒山羊", scientificName:"Capra hircus", origin:.real, level:5, price:260, productID:"cashmere", productName:"羊绒", productCount:1, productionMinutes:35, ingredient:nil, description:"越冬时靠细密的底绒保暖，换毛时可以梳收。", sourceIDs:["ucanr_cashmere"]),
-        .init(id:"alpaca", name:"羊驼", scientificName:"Vicugna pacos", origin:.real, level:5, price:280, productID:"alpaca_fibre", productName:"羊驼绒", productCount:1, productionMinutes:40, ingredient:nil, description:"安第斯山地驯养的骆驼科动物，软蹄垫适合行走。", sourceIDs:["zoo_alpaca"]),
-        .init(id:"honeybee", name:"西方蜜蜂", scientificName:"Apis mellifera", origin:.real, level:5, price:200, productID:"bee_honey", productName:"蜂蜜", productCount:1, productionMinutes:30, ingredient:"蜂蜜", description:"社会性昆虫，采集花蜜和花粉，并为许多植物传粉。", sourceIDs:["bee_pollination"]),
-        .init(id:"mooncalf", name:"月痴兽", scientificName:nil, origin:.harryPotter, level:6, price:360, productID:"mooncalf_dung", productName:"银色粪肥", productCount:1, productionMinutes:40, ingredient:nil, description:"满月时出穴起舞的羞怯魔法生物；银色粪便有益于魔法植物。", sourceIDs:["hp_mooncalf"]),
-        .init(id:"cloud_sheep", name:"云团羊", scientificName:nil, origin:.original, level:7, price:400, productID:"cloud_fleece", productName:"云绒", productCount:1, productionMinutes:45, ingredient:nil, description:"原创。喜欢靠着围栏打盹，轻盈的绒毛像一小片低云。", sourceIDs:[]),
-        .init(id:"lantern_hen", name:"灯笼鸡", scientificName:nil, origin:.original, level:8, price:420, productID:"lantern_egg", productName:"暖光蛋", productCount:1, productionMinutes:35, ingredient:nil, description:"原创。尾羽在黄昏亮起微光，留下可用作工艺材料的暖光蛋。", sourceIDs:[]),
-        .init(id:"moss_deer", name:"苔背鹿", scientificName:nil, origin:.original, level:9, price:500, productID:"moss_tuft", productName:"柔苔团", productCount:1, productionMinutes:50, ingredient:nil, description:"原创。背上生着柔软的共生苔衣，会把自然脱落的苔团留在草窝里。", sourceIDs:[])
+        .init(id:"chicken", name:"母鸡", scientificName:"Gallus gallus domesticus", origin:.real, level:1, price:58, productID:"chicken_egg", productName:"鸡蛋", productCount:1, productionMinutes:15, ingredient:"鸡蛋", description:"会啄食种子和小虫的家禽，羽毛能帮助保温。", sourceIDs:["zoo_chicken"]),
+        .init(id:"cow", name:"奶牛", scientificName:"Bos taurus", origin:.real, level:1, price:116, productID:"cow_milk", productName:"牛奶", productCount:1, productionMinutes:25, ingredient:"牛奶", description:"反刍动物，胃的不同部分帮助它利用草料。", sourceIDs:["zoo_cow"]),
+        .init(id:"duck", name:"家鸭", scientificName:"Anas platyrhynchos domesticus", origin:.real, level:2, price:87, productID:"duck_egg", productName:"鸭蛋", productCount:1, productionMinutes:20, ingredient:"鸭蛋", description:"由绿头鸭驯化而来；宽嘴适合在浅水和泥边觅食。", sourceIDs:["duck_domestication"]),
+        .init(id:"goat", name:"奶山羊", scientificName:"Capra hircus", origin:.real, level:3, price:116, productID:"goat_milk", productName:"羊奶", productCount:1, productionMinutes:25, ingredient:"羊奶", description:"擅长取食灌木叶片，横向瞳孔让视野更加开阔。", sourceIDs:["zoo_goat"]),
+        .init(id:"sheep", name:"绵羊", scientificName:"Ovis aries", origin:.real, level:4, price:116, productID:"sheep_wool", productName:"羊毛", productCount:1, productionMinutes:35, ingredient:nil, description:"群居的反刍家畜，卷曲的羊毛纤维可以纺成线。", sourceIDs:["sheep_wool"]),
+        .init(id:"rabbit", name:"安哥拉兔", scientificName:"Oryctolagus cuniculus", origin:.real, level:4, price:116, productID:"rabbit_fibre", productName:"兔绒", productCount:1, productionMinutes:30, ingredient:nil, description:"长毛家兔，需要梳理和照料毛发；兔绒来自梳收的纤维。", sourceIDs:["rabbit_fibre"]),
+        .init(id:"cashmere_goat", name:"绒山羊", scientificName:"Capra hircus", origin:.real, level:5, price:174, productID:"cashmere", productName:"羊绒", productCount:1, productionMinutes:35, ingredient:nil, description:"越冬时靠细密的底绒保暖，换毛时可以梳收。", sourceIDs:["ucanr_cashmere"]),
+        .init(id:"alpaca", name:"羊驼", scientificName:"Vicugna pacos", origin:.real, level:5, price:203, productID:"alpaca_fibre", productName:"羊驼绒", productCount:1, productionMinutes:40, ingredient:nil, description:"安第斯山地驯养的骆驼科动物，软蹄垫适合行走。", sourceIDs:["zoo_alpaca"]),
+        .init(id:"honeybee", name:"西方蜜蜂", scientificName:"Apis mellifera", origin:.real, level:5, price:145, productID:"bee_honey", productName:"蜂蜜", productCount:1, productionMinutes:30, ingredient:"蜂蜜", description:"社会性昆虫，采集花蜜和花粉，并为许多植物传粉。", sourceIDs:["bee_pollination"]),
+        .init(id:"mooncalf", name:"月痴兽", scientificName:nil, origin:.harryPotter, level:6, price:190, productID:"mooncalf_dung", productName:"银色粪肥", productCount:1, productionMinutes:40, ingredient:nil, description:"满月时出穴起舞的羞怯魔法生物；银色粪便有益于魔法植物。", sourceIDs:["hp_mooncalf"]),
+        .init(id:"cloud_sheep", name:"云团羊", scientificName:nil, origin:.original, level:7, price:290, productID:"cloud_fleece", productName:"云绒", productCount:1, productionMinutes:45, ingredient:nil, description:"原创。喜欢靠着围栏打盹，轻盈的绒毛像一小片低云。", sourceIDs:[]),
+        .init(id:"lantern_hen", name:"灯笼鸡", scientificName:nil, origin:.original, level:8, price:230, productID:"lantern_egg", productName:"暖光蛋", productCount:1, productionMinutes:35, ingredient:nil, description:"原创。尾羽在黄昏亮起微光，留下可用作工艺材料的暖光蛋。", sourceIDs:[]),
+        .init(id:"moss_deer", name:"苔背鹿", scientificName:nil, origin:.original, level:9, price:260, productID:"moss_tuft", productName:"柔苔团", productCount:1, productionMinutes:50, ingredient:nil, description:"原创。背上生着柔软的共生苔衣，会把自然脱落的苔团留在草窝里。", sourceIDs:[])
     ]
 }
 
 extension NatureCatalog {
     static let baits: [NatureBait] = [
-        .init(id:"earthworm",name:"蚯蚓饵",origin:.real,locations:["lake","river","mountains","polar","tropical"],waterTypes:[.fresh],level:3,price:2,description:"适合多种淡水鱼的虫饵。鱼还没有研究出拒绝免费午餐的习惯。",sourceIDs:["ny_fishing"]),
-        .init(id:"sweetcorn",name:"甜玉米饵",origin:.real,locations:["lake","river","tropical"],waterTypes:[.fresh],level:3,price:2,description:"偏向鲤鱼和取食植物的淡水鱼。",sourceIDs:["ny_fishing"]),
-        .init(id:"dough",name:"麦香面团",origin:.real,locations:["lake","river","tropical"],waterTypes:[.fresh],level:3,price:3,description:"柔软的谷物饵，适合缓水区。离成为面包，只差一个完全不同的命运。",sourceIDs:["ny_fishing"]),
-        .init(id:"insect",name:"昆虫饵",origin:.real,locations:["lake","river","mountains","polar","tropical"],waterTypes:[.fresh],level:5,price:3,description:"模仿水面落虫和水生昆虫幼体。",sourceIDs:["ny_guide","adfg_grayling"]),
-        .init(id:"dry_fly",name:"仿生毛钩",origin:.real,locations:["river","mountains","polar"],waterTypes:[.fresh],level:10,price:4,description:"用羽毛和纤维模仿昆虫的人工鱼饵。",sourceIDs:["ny_fishing"]),
-        .init(id:"minnow",name:"小鱼饵",origin:.real,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:4,description:"为捕食性鱼类准备的小鱼形饵。",sourceIDs:["ny_fishing","fwc_peacock"]),
-        .init(id:"shrimp",name:"鲜虾饵",origin:.real,locations:["beach","sea"],waterTypes:[.brackish,.salt],level:15,price:4,description:"适合河口和近岸的海水鱼。",sourceIDs:["fwc_red_drum"]),
-        .init(id:"squid",name:"鱿鱼条",origin:.real,locations:["beach","sea","polar"],waterTypes:[.salt],level:15,price:5,description:"偏向近海与远海的捕食性鱼。",sourceIDs:["noaa_flounder","noaa_swordfish"]),
-        .init(id:"spoon",name:"银色亮片",origin:.real,locations:["lake","river","mountains","polar","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:10,price:5,description:"靠金属反光与摆动模仿小鱼。水下的广告，也讲究投放位置。",sourceIDs:["ny_fishing"]),
-        .init(id:"glow_paste",name:"星露团饵",origin:.original,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:6,description:"原创。揉入星露的微光团饵，吸引幻想鱼。",sourceIDs:[])
+        .init(id:"earthworm",name:"蚯蚓饵",origin:.real,locations:["lake","river","mountains","polar","tropical"],waterTypes:[.fresh],level:3,price:1,description:"适合多种淡水鱼的虫饵。鱼还没有研究出拒绝免费午餐的习惯。",sourceIDs:["ny_fishing"]),
+        .init(id:"sweetcorn",name:"甜玉米饵",origin:.real,locations:["lake","river","tropical"],waterTypes:[.fresh],level:3,price:1,description:"偏向鲤鱼和取食植物的淡水鱼。",sourceIDs:["ny_fishing"]),
+        .init(id:"dough",name:"麦香面团",origin:.real,locations:["lake","river","tropical"],waterTypes:[.fresh],level:3,price:2,description:"柔软的谷物饵，适合缓水区。离成为面包，只差一个完全不同的命运。",sourceIDs:["ny_fishing"]),
+        .init(id:"insect",name:"昆虫饵",origin:.real,locations:["lake","river","mountains","polar","tropical"],waterTypes:[.fresh],level:5,price:2,description:"模仿水面落虫和水生昆虫幼体。",sourceIDs:["ny_guide","adfg_grayling"]),
+        .init(id:"dry_fly",name:"仿生毛钩",origin:.real,locations:["river","mountains","polar"],waterTypes:[.fresh],level:10,price:2,description:"用羽毛和纤维模仿昆虫的人工鱼饵。",sourceIDs:["ny_fishing"]),
+        .init(id:"minnow",name:"小鱼饵",origin:.real,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:2,description:"为捕食性鱼类准备的小鱼形饵。",sourceIDs:["ny_fishing","fwc_peacock"]),
+        .init(id:"shrimp",name:"鲜虾饵",origin:.real,locations:["beach","sea"],waterTypes:[.brackish,.salt],level:15,price:2,description:"适合河口和近岸的海水鱼。",sourceIDs:["fwc_red_drum"]),
+        .init(id:"squid",name:"鱿鱼条",origin:.real,locations:["beach","sea","polar"],waterTypes:[.salt],level:15,price:3,description:"偏向近海与远海的捕食性鱼。",sourceIDs:["noaa_flounder","noaa_swordfish"]),
+        .init(id:"spoon",name:"银色亮片",origin:.real,locations:["lake","river","mountains","polar","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:10,price:3,description:"靠金属反光与摆动模仿小鱼。水下的广告，也讲究投放位置。",sourceIDs:["ny_fishing"]),
+        .init(id:"glow_paste",name:"星露团饵",origin:.original,locations:["lake","river","mountains","polar","tropical","beach","sea"],waterTypes:[.fresh,.brackish,.salt],level:8,price:3,description:"原创。揉入星露的微光团饵，吸引幻想鱼。",sourceIDs:[])
     ]
 
     static let fish: [NatureFish] = [

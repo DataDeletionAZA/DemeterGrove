@@ -49,7 +49,7 @@ extension AppData {
         }
         events += (garden.economy.fishing?.catches ?? []).suffix(32).filter{$0.focus <= focus}.map { item in
             GameReadyEvent(id:"catch/\(item.id)",kind:.fishing,
-                           name:item.itemID.flatMap{NatureItemInfo.find($0)?.name} ?? "空钩",stored:true,quantity:item.itemID == nil ? 0:1)
+                           name:item.itemID.flatMap{NatureItemInfo.fishingCatch($0)?.name} ?? "空钩",stored:true,quantity:item.itemID == nil ? 0:1)
         }
         events += (garden.economy.expedition?.history ?? []).suffix(32).filter(\.completed).map { trip in
             GameReadyEvent(id:"expedition/\(trip.id)",kind:.adventure,

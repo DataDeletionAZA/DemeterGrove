@@ -35,7 +35,7 @@ struct GrowthPage: View {
                 }.disabled(store.data.typingReward == 0)
             }.padding(12).magicSurface(Palette.paper)
             LazyVGrid(columns:[GridItem(.adaptive(minimum:240))],spacing:10) {
-                ForEach(Upgrade.allCases) { item in
+                ForEach(Upgrade.allCases.filter { $0 != .rod }) { item in
                     let rank=store.data.garden.rank(item)
                     VStack(alignment:.leading,spacing:8) {
                         HStack { GameSprite(sheet:"Equipment",index:item.icon,size:40);Text(item.name).font(.headline);Spacer();Text("\(rank)/\(item.limit)").font(.caption) }

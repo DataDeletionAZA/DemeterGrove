@@ -145,6 +145,9 @@ import Foundation
         check(cashmere.collectRanchProduce(at: now) == ["羊绒": 1])
         check(cashmere.garden.economy.finds["cashmere"] == 1 && cashmere.ranchState.feedPortions == 5)
         validate(cashmere, at: now, label: "cashmere goat production and collected material")
+        let cashmereQuote=cashmere.findPrice("cashmere"), beforeSale=cashmere.garden.coins
+        check(cashmereQuote == 11 && cashmere.sellFind("cashmere"))
+        check(cashmere.garden.coins == beforeSale+cashmereQuote && !cashmere.sellFind("cashmere"))
         var mixed = fixture(focus: 100000)
         mixed.garden.economy.ranch = RanchState(animals: [RanchAnimal(speciesID: "chicken", ready: 1), RanchAnimal(speciesID: "chicken", ready: 2), RanchAnimal(speciesID: "cow", ready: 3)], trough: 10, lastFocus: mixed.totalFocus)
         let previousEggs = mixed.garden.ingredients["鸡蛋", default: 0], previousMilk = mixed.garden.ingredients["牛奶", default: 0]
