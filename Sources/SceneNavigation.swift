@@ -64,7 +64,7 @@ struct SceneArrows:View {
     }
     private func arrow(_ glyph:String,route:String)->some View {
         Button {SceneNavigation.open(route,store:store,from:store.currentRoute)} label: {
-            Text(glyph).font(.system(size:16)).foregroundStyle(Palette.goldLight)
+            ThemeSymbol(systemName:glyph == "◀" ? "chevron.left" : "chevron.right").font(.system(size:16)).foregroundStyle(Palette.goldLight)
                 .frame(width:30,height:34).background(Palette.paper.opacity(0.92),in:PixelFrame())
         }.buttonStyle(.plain).help(SceneNavigation.title(route)).accessibilityLabel("前往\(SceneNavigation.title(route))")
     }

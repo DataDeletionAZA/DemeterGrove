@@ -6,7 +6,11 @@ struct WalletView: View {
         HStack(spacing:8) {
             ForEach(0..<3) { index in
                 let amount=[coins/493,coins%493/29,coins%29][index]
-                HStack(spacing:3) { GameSprite(sheet:"Equipment",index:index,size:21);Text("\(amount)").monospacedDigit().font(.system(size:12)) }
+                HStack(spacing:3) {
+                    if ThemeAppearance.shared.theme == .original {GameSprite(sheet:"Equipment",index:index,size:21)}
+                    else {ThemeIcon(name:["金加隆","银西可","铜纳特"][index],size:21,theme:ThemeAppearance.shared.theme)}
+                    Text("\(amount)").monospacedDigit().font(.system(size:12))
+                }
             }
         }.accessibilityElement(children:.ignore).accessibilityLabel(Money.text(coins))
             .help("1 金加隆 = 17 银西可；1 银西可 = 29 铜纳特")
@@ -38,7 +42,11 @@ struct GrowthPage: View {
                 ForEach(Upgrade.allCases.filter { $0 != .rod }) { item in
                     let rank=store.data.garden.rank(item)
                     VStack(alignment:.leading,spacing:8) {
-                        HStack { GameSprite(sheet:"Equipment",index:item.icon,size:40);Text(item.name).font(.headline);Spacer();Text("\(rank)/\(item.limit)").font(.caption) }
+                        HStack {
+                            if ThemeAppearance.shared.theme == .original {GameSprite(sheet:"Equipment",index:item.icon,size:40)}
+                            else {ThemeIcon(name:item.name,size:40,theme:ThemeAppearance.shared.theme)}
+                            Text(item.name).font(.headline);Spacer();Text("\(rank)/\(item.limit)").font(.caption)
+                        }
                         Text(item.effect).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                         if rank<item.limit {
                             Text("等级 \(item.level(rank)) · \(Money.text(item.price(rank)))").font(.caption).foregroundStyle(Palette.goldLight)
@@ -261,7 +269,7 @@ struct MapPage: View {
                         if trip != nil {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
                         if !unlocked {
                             Palette.paper.opacity(0.55).allowsHitTesting(false)
-                            Label("等级 \(journey.level) 解锁",systemImage:"lock.fill").font(.headline).padding(14).magicSurface(Palette.paper)
+                            ThemeLabel("等级 \(journey.level) 解锁",systemImage:"lock.fill").font(.headline).padding(14).magicSurface(Palette.paper)
                         }
                     }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
                 } sidebar: {expeditionSidebar}

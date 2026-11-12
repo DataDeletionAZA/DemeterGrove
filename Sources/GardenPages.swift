@@ -17,7 +17,7 @@ struct FarmPage: View {
 struct SettingsPage: View {
     @ObservedObject var store: GardenStore
     @State private var section = "通用"
-    private let sections = ["通用", "桌宠", "专注与提醒", "AI 服务", "表达与提示词", "存档"]
+    private let sections = ["通用", "主题", "桌宠", "专注与提醒", "AI 服务", "表达与提示词", "存档"]
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SceneToolbar(items:sections.map {item in SceneToolbarItem(item,selected:section == item){section=item}})
@@ -26,6 +26,7 @@ struct SettingsPage: View {
     }
     @ViewBuilder private var sectionContent: some View {
         VStack(spacing: 20) {
+            if section == "主题" { ThemeSettings(store:store) }
             if section == "桌宠" {
             Card(title: "桌宠", icon: "person.crop.square") {
                 HStack(spacing: 32) {

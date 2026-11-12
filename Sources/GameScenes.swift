@@ -26,6 +26,7 @@ struct GameRoomView: View {
     @State private var dishName = ""
     @State private var cookingUntil = Date.distantPast
     @State private var book = false
+    @State private var themeShop = false
     @State private var market = false
     @State private var soldAt: Date?
     @State private var listedAt:Date?
@@ -101,6 +102,7 @@ struct GameRoomView: View {
         .sheet(isPresented:$methodWindow) { methodSelection }
         .sheet(isPresented: $book) { recipeBook }
         .sheet(isPresented: $market) { IngredientMarket(store: store) }
+        .sheet(isPresented: $themeShop) { ThemeShop(store:store) }
         .sheet(isPresented:$inventory) {InventoryView(store:store)}
         .sheet(isPresented:$showingRoll) {
             if let result=latestResult {
@@ -130,7 +132,10 @@ struct GameRoomView: View {
             items.append(SceneToolbarItem("配方册"){book=true})
             if store.data.garden.economy.kitchenResult != nil {items.append(SceneToolbarItem("上次制作"){restoreKitchenResult();showingRoll=true})}
         }
-        if room == "商店" {items.append(SceneToolbarItem("采买"){market=true})}
+        if room == "商店" {
+            items.append(SceneToolbarItem("采买"){market=true})
+            items.append(SceneToolbarItem("主题"){themeShop=true})
+        }
         if room == "农场" {items.append(SceneToolbarItem("种子柜"){seedCabinet=true})}
         return items
     }
@@ -249,7 +254,7 @@ struct GameRoomView: View {
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:105))],spacing:10) {
                     ForEach(methods) {item in
                         Button {method=item;loadedDish=nil} label: {
-                            VStack(spacing:8) {CookingToolArt(method:item).frame(width:64,height:50);Text(item.rawValue).font(.system(size:13))}.frame(maxWidth:.infinity).padding(10).magicSurface(method == item ? Palette.card:Palette.paper)
+                            VStack(spacing:8) {CookingToolArt(method:item,interfaceIcon:true).frame(width:64,height:50);Text(item.rawValue).font(.system(size:13))}.frame(maxWidth:.infinity).padding(10).magicSurface(method == item ? Palette.card:Palette.paper)
                                 .overlay(PixelFrame().stroke(method == item ? Palette.goldLight:Palette.line,lineWidth:1))
                         }.buttonStyle(.plain)
                     }

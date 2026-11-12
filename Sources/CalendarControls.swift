@@ -38,8 +38,8 @@ struct PixelCalendar: View {
             HStack(spacing: 7) {
                 Text(title).font(.system(size: compact ? 14 : 17, weight: .semibold)).foregroundStyle(Palette.goldLight)
                 Spacer(minLength: 4)
-                Button { move(-1) } label: { Image(systemName: "chevron.left") }.help(week ? "上一周" : "上个月").disabled(!canMove(-1))
-                Button { move(1) } label: { Image(systemName: "chevron.right") }.help(week ? "下一周" : "下个月").disabled(!canMove(1))
+                Button { move(-1) } label: { ThemeSymbol(systemName: "chevron.left") }.help(week ? "上一周" : "上个月").disabled(!canMove(-1))
+                Button { move(1) } label: { ThemeSymbol(systemName: "chevron.right") }.help(week ? "下一周" : "下个月").disabled(!canMove(1))
             }
             HStack {
                 Button("回到今天") { visible = today; choose(today) }
@@ -107,7 +107,7 @@ struct PixelDatePicker: View {
                 HStack(spacing: 9) {
                     PixelIcon(name: "calendar", size: 19)
                     Text(CalendarDates.key(selection, calendar: calendar)).monospacedDigit()
-                    Image(systemName: "chevron.down").font(.system(size: 9))
+                    ThemeSymbol(systemName: "chevron.down").font(.system(size: 9))
                 }
             }.buttonStyle(PixelButtonStyle()).accessibilityLabel(title.isEmpty ? "选择日期" : title)
                 .popover(isPresented: $showing, arrowEdge: .bottom) {

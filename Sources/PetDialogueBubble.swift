@@ -63,7 +63,7 @@ private struct PetDialogueBubbleContent: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(text).font(.system(size: 13)).lineSpacing(2).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: close) { Image(systemName: "xmark").font(.system(size: 9)).frame(width: 18, height: 18) }.buttonStyle(.plain).accessibilityLabel("关闭桌宠台词")
+            Button(action: close) { ThemeSymbol(systemName: "xmark").font(.system(size: 9)).frame(width: 18, height: 18) }.buttonStyle(.plain).accessibilityLabel("关闭桌宠台词")
         }.padding(.horizontal,12).padding(.vertical,9).frame(maxWidth: .infinity, maxHeight: .infinity, alignment:.topLeading).foregroundStyle(Palette.goldLight).magicSurface(Palette.card, strong: true).accessibilityElement(children: .contain)
     }
 }

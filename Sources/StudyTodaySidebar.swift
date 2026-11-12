@@ -2,7 +2,7 @@ import SwiftUI
 
 struct StudyTodaySidebar: View {
     @ObservedObject var store: GardenStore
-    private let ink=Color(red:0.25,green:0.18,blue:0.12)
+    private var ink: Color {ThemeAppearance.shared.theme == .original ? Color(red:0.25,green:0.18,blue:0.12):Palette.ink}
     private var records:DailyRecords {DailyRecords(date:store.today,calendar:store.calendar,rolloverMinutes:store.dayBoundary.rolloverMinutes)}
     private var habits:[Habit] {
         store.data.habits.filter {habit in
@@ -12,7 +12,9 @@ struct StudyTodaySidebar: View {
     var body:some View {
         GeometryReader {geo in
             ZStack {
-                if let image=GameImages.backgrounds["Parchment"] {
+                if ThemeAppearance.shared.theme != .original {
+                    ThemeSurface(color:Palette.card,strong:true)
+                } else if let image=GameImages.backgrounds["Parchment"] {
                     Image(nsImage:image).resizable().interpolation(.none).frame(width:geo.size.width+16,height:geo.size.height)
                 }
                 PixelScrollView {
@@ -66,7 +68,7 @@ struct StudyTodaySidebar: View {
     private func entry(_ title:String,route:String,symbol:String)->some View {
         Button {SceneNavigation.open(route,store:store,from:"书房")} label: {
             HStack(alignment:.top,spacing:5) {
-                Image(systemName:symbol).font(.system(size:10)).frame(width:12).padding(.top,2)
+                ThemeSymbol(systemName:symbol).font(.system(size:10)).frame(width:12).padding(.top,2)
                 Text(title).fixedSize(horizontal:false,vertical:true)
                 Spacer(minLength:0)
             }.contentShape(Rectangle())

@@ -4,8 +4,18 @@ import AppKit
 struct PixelFrame: InsettableShape {
     var step: CGFloat = 2
     var insetAmount: CGFloat = 0
+    var theme = ThemeAppearance.shared.theme
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        if theme == .y2k {
+            let cut=min(7,min(r.width,r.height)/4)
+            var p=Path();p.addLines([CGPoint(x:r.minX,y:r.minY),CGPoint(x:r.maxX-cut,y:r.minY),CGPoint(x:r.maxX,y:r.minY+cut),CGPoint(x:r.maxX,y:r.maxY),CGPoint(x:r.minX+cut,y:r.maxY),CGPoint(x:r.minX,y:r.maxY-cut)])
+            p.closeSubpath();return p
+        }
+        if theme != .original {
+            let radius: CGFloat = theme == .liquidGlass ? 20 : 3
+            return Path(roundedRect:r,cornerRadius:min(radius,min(r.width,r.height)/3))
+        }
         let s = min(step, min(r.width, r.height) / 5)
         let x = r.minX, y = r.minY, w = r.maxX, h = r.maxY
         let points = [CGPoint(x: x + 2*s, y: y), CGPoint(x: w - 2*s, y: y), CGPoint(x: w - 2*s, y: y+s),
@@ -24,16 +34,14 @@ struct MagicSurface: ViewModifier {
     var color: Color = Palette.card
     var strong = false
     func body(content: Content) -> some View {
-        content.background(PixelFrame().fill(color))
-            .overlay(PixelFrame().strokeBorder(strong ? Palette.gold : Palette.line, lineWidth: 1))
-            .overlay(PixelFrame().inset(by: 3).strokeBorder(strong ? Palette.gold.opacity(0.33) : Palette.line.opacity(0.28), lineWidth: 1))
+        content.background(ThemeSurface(color:color,strong:strong)).contentShape(PixelFrame())
     }
 }
 extension View {
     func magicSurface(_ color: Color = Palette.card, strong: Bool = false) -> some View { modifier(MagicSurface(color: color, strong: strong)) }
     func magicControls() -> some View {
         self.background(WindowScrollSkin().frame(width:0,height:0)).font(.system(size: 13)).buttonStyle(PixelButtonStyle()).toggleStyle(PixelToggleStyle())
-            .textFieldStyle(PixelTextFieldStyle()).tint(Palette.gold).preferredColorScheme(.dark)
+            .textFieldStyle(PixelTextFieldStyle()).tint(Palette.gold).preferredColorScheme(ThemeAppearance.shared.theme == .original ? .dark : .light)
     }
 }
 
@@ -50,11 +58,12 @@ struct PixelButtonStyle: ButtonStyle {
     @Environment(\.compactSceneControls) private var compact
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: compact ? 12 : 13)).foregroundStyle(primary ? Palette.goldLight : Palette.ink)
+        let theme=ThemeAppearance.shared.theme
+        configuration.label.font(.system(size: compact ? 12 : 13,weight:theme == .liquidGlass ? .medium:.regular))
+            .foregroundStyle(primary && theme == .christmas ? Color(red:1,green:0.96,blue:0.85) : primary ? Palette.goldLight : Palette.ink)
             .padding(.horizontal, compact ? 10 : 12).padding(.vertical, compact ? 7 : 9)
-            .background(PixelFrame(step: 2).fill(configuration.isPressed ? Palette.paper : primary ? Palette.moss : Palette.control))
-            .overlay(PixelFrame(step: 2).strokeBorder(primary ? Palette.gold : Palette.line, lineWidth: 1))
-            .overlay(alignment: .bottom) { Rectangle().fill(.black.opacity(configuration.isPressed ? 0 : 0.35)).frame(height: 2).padding(.horizontal, 4) }
+            .contentShape(Rectangle())
+            .modifier(ThemeButtonSurface(primary:primary,pressed:configuration.isPressed))
             .offset(y: configuration.isPressed ? 1 : 0).opacity(enabled ? 1 : 0.36)
     }
 }
@@ -62,7 +71,7 @@ struct PixelButtonStyle: ButtonStyle {
 struct PixelTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration.textFieldStyle(.plain).font(.system(size: 13)).padding(9).foregroundStyle(Palette.ink)
-            .background(Palette.paper).overlay(Rectangle().stroke(Palette.line, lineWidth: 1))
+            .background(Palette.paper,in:PixelFrame(step:0)).overlay(PixelFrame(step:0).strokeBorder(Palette.line,lineWidth:1))
     }
 }
 
@@ -70,10 +79,19 @@ struct PixelToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             HStack(spacing: 9) {
+                if ThemeAppearance.shared.theme == .liquidGlass {
+                    Capsule().fill(configuration.isOn ? Color(red:0.17,green:0.69,blue:0.34) : Color.gray.opacity(0.25))
+                        .frame(width:32,height:20)
+                        .overlay(alignment:configuration.isOn ? .trailing:.leading) {
+                            Circle().fill(.white).frame(width:16,height:16).shadow(color:.black.opacity(0.13),radius:1,y:1).padding(2)
+                        }
+                        .animation(.easeInOut(duration:0.16),value:configuration.isOn)
+                } else {
                 ZStack {
-                    Rectangle().fill(Palette.paper).frame(width: 16, height: 16)
-                        .overlay(Rectangle().stroke(configuration.isOn ? Palette.gold : Palette.line, lineWidth: 1))
+                    PixelFrame(step:0).fill(Palette.paper).frame(width:16,height:16)
+                        .overlay(PixelFrame(step:0).strokeBorder(configuration.isOn ? Palette.gold : Palette.line,lineWidth:1))
                     if configuration.isOn { PixelIcon(name: "check", size: 12) }
+                }
                 }
                 configuration.label
             }.contentShape(Rectangle())
@@ -85,13 +103,26 @@ struct PixelTabs<Value: Hashable>: View {
     @Binding var selection: Value
     var items: [(Value, String)]
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: ThemeAppearance.shared.theme == .liquidGlass ? 0:3) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                if ThemeAppearance.shared.theme == .liquidGlass {
+                    Button { selection = item.0 } label: {
+                        Text(item.1).font(.system(size:13,weight:selection == item.0 ? .semibold:.regular))
+                            .foregroundStyle(selection == item.0 ? Palette.gold:Palette.ink)
+                            .lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity).padding(.vertical,9)
+                            .background(selection == item.0 ? Color.white.opacity(0.95):.clear,in:Capsule())
+                            .contentShape(Capsule())
+                    }.buttonStyle(.plain).accessibilityAddTraits(selection == item.0 ? [.isSelected]:[])
+                } else {
                 Button { selection = item.0 } label: { Text(item.1).lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth: .infinity) }
                     .buttonStyle(PixelButtonStyle(primary: selection == item.0))
                     .accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])
+                }
             }
-        }
+        }.padding(ThemeAppearance.shared.theme == .liquidGlass ? 3:0)
+            .background {
+                if ThemeAppearance.shared.theme == .liquidGlass {Capsule().fill(.black.opacity(0.06))}
+            }
     }
 }
 
@@ -107,7 +138,7 @@ struct PixelSelect<Value: Hashable>: View {
             HStack {
                 Text(label).lineLimit(1)
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.down").font(.system(size: 9))
+                ThemeSymbol(systemName: "chevron.down").font(.system(size: 9))
             }.frame(maxWidth: .infinity)
         }.buttonStyle(PixelButtonStyle()).accessibilityValue(label)
             .popover(isPresented: $showing, arrowEdge: .bottom) {
@@ -119,7 +150,7 @@ struct PixelSelect<Value: Hashable>: View {
                                     HStack(spacing: 8) {
                                         Text(item.1).lineLimit(2).multilineTextAlignment(.leading)
                                         Spacer(minLength: 8)
-                                        if selection == item.0 { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
+                                        if selection == item.0 { ThemeSymbol(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
                                     }.frame(maxWidth: .infinity, alignment: .leading)
                                 }.buttonStyle(PixelButtonStyle(primary: selection == item.0 || hovered == index || focused == index))
                                     .focused($focused, equals: index).id(index)
@@ -174,7 +205,9 @@ struct PixelIcon: View {
     var size: CGFloat = 28
     var body: some View {
         Group {
-            if let image=GameImages.interfaceIcon(name:name) {
+            if ThemeAppearance.shared.theme != .original {
+                ThemeIcon(name:name,size:size,theme:ThemeAppearance.shared.theme)
+            } else if let image=GameImages.interfaceIcon(name:name) {
                 Image(nsImage:image).resizable().interpolation(.none).scaledToFit()
             } else {
         Canvas { context, bounds in
@@ -406,7 +439,7 @@ struct MagicHeader: View {
     var body: some View {
         HStack(spacing: 10) {
             if let back {
-                Button(action: back) { Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)).frame(width:44,height:40).contentShape(Rectangle()) }
+                Button(action: back) { ThemeSymbol(systemName: "chevron.left").font(.system(size: 15, weight: .semibold)).frame(width:44,height:40).contentShape(Rectangle()).modifier(ThemeToolbarSurface()) }
                     .buttonStyle(.plain).foregroundStyle(Palette.goldLight).help(backTitle).accessibilityLabel(backTitle)
             }
             HStack(spacing: 10) {
@@ -415,9 +448,9 @@ struct MagicHeader: View {
                 if !metadata.isEmpty {Text(metadata).font(.caption).foregroundStyle(Palette.muted).lineLimit(1).minimumScaleFactor(0.7)}
                 Spacer(minLength:0)
             }.contentShape(Rectangle()).overlay { if draggable { WindowDragArea() } }
-            Button(action: close) { PixelIcon(name: "close", size: 16).frame(width:40,height:40).contentShape(Rectangle()) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
+            Button(action: close) { PixelIcon(name: "close", size: 16).frame(width:40,height:40).contentShape(Rectangle()).modifier(ThemeToolbarSurface()) }.buttonStyle(.plain).help("关闭").accessibilityLabel("关闭")
         }.padding(.horizontal, 16).frame(height: 48)
-            .background(Palette.paper).overlay(alignment: .bottom) { Rectangle().fill(Palette.gold.opacity(0.6)).frame(height: 1).padding(.horizontal, 10) }
+            .background(ThemeHeaderSurface())
     }
 }
 

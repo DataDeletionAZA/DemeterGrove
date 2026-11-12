@@ -2,7 +2,9 @@ import SwiftUI
 
 let quadrantTitles = ["重要 · 紧急", "重要 · 不紧急", "不重要 · 紧急", "不重要 · 不紧急"]
 let quadrantHints = ["先着手处理", "留出整段时间", "集中安排处理", "有余力再做"]
-let quadrantColors = [Palette.clay, Palette.sage, Color(red: 0.64, green: 0.55, blue: 0.32), Color(red: 0.49, green: 0.53, blue: 0.56)]
+var quadrantColors: [Color] {
+    ThemeAppearance.shared.theme == .original ? [Palette.clay, Palette.sage, Color(red:0.64,green:0.55,blue:0.32), Color(red:0.49,green:0.53,blue:0.56)] : [Palette.clay,Palette.sage,Palette.gold,Palette.lavender]
+}
 
 struct TasksPage: View {
     @ObservedObject var store: GardenStore
@@ -73,7 +75,7 @@ struct TaskRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Button { store.toggleTaskOccurrence(occurrence) } label: {
-                Image(systemName: occurrence.completedAt == nil ? "circle" : "checkmark.circle.fill")
+                ThemeSymbol(systemName: occurrence.completedAt == nil ? "circle" : "checkmark.circle.fill")
                     .font(.system(size: 19)).foregroundStyle(occurrence.completedAt == nil ? Palette.muted : Palette.sage)
             }.buttonStyle(.plain).help(occurrence.completedAt == nil ? "标记完成" : "恢复未完成")
                 .accessibilityLabel("完成状态：" + task.title + (occurrence.displayDay.map { " · " + $0 } ?? "")).accessibilityValue(occurrence.completedAt == nil ? "未完成" : "已完成")
@@ -91,11 +93,11 @@ struct TaskRow: View {
             }.buttonStyle(.plain).help("编辑任务")
             if occurrence.completedAt == nil {
                 Button { startingFocus = true } label: {
-                    Image(systemName: "play.circle").font(.system(size: 20))
+                    ThemeSymbol(systemName: "play.circle").font(.system(size: 20))
                 }.buttonStyle(.plain).foregroundStyle(Palette.sage).help("为这件任务开始番茄钟").accessibilityLabel("为\(task.title)开始番茄钟")
             }
             Button { more.toggle() } label: {
-                Image(systemName: "ellipsis").frame(width: 24, height: 26)
+                ThemeSymbol(systemName: "ellipsis").frame(width: 24, height: 26)
             }.buttonStyle(.plain).accessibilityLabel("更多操作：" + task.title)
                 .popover(isPresented: $more, arrowEdge: .bottom) {
                     VStack(spacing: 8) {
@@ -266,10 +268,10 @@ struct TimerControls: View {
                 if kind != .stopwatch { PixelStepper(title: "时长", value: $store.focusDraftMinutes, range: 1...180).frame(maxWidth: 310) }
                 Button { selectingTask = true } label: {
                     HStack {
-                        Image(systemName: "list.bullet.rectangle")
+                        ThemeSymbol(systemName: "list.bullet.rectangle")
                         Text(store.data.tasks.first { $0.id == taskID }?.title ?? customTitle).lineLimit(2)
                         Spacer()
-                        Image(systemName: "chevron.right")
+                        ThemeSymbol(systemName: "chevron.right")
                     }.frame(maxWidth: compact ? 290 : 380)
                 }.buttonStyle(PixelButtonStyle()).accessibilityLabel("选择专注事项").help("选择现有任务、新建任务或填写本次名称")
                 GameReminderPicker(options: $gameReminders, title: "本次提醒").frame(maxWidth: 400)
@@ -388,7 +390,7 @@ struct TaskPlansView: View {
                             Button { editing = task } label: {
                                 HStack { Text(task.title); Spacer(); Text(task.scheduleRevisions?.max { $0.effectiveFrom < $1.effectiveFrom }?.rule?.summary ?? "已停止").font(.caption).foregroundStyle(Palette.muted) }.frame(maxWidth: .infinity)
                             }.buttonStyle(PixelButtonStyle()).accessibilityLabel(task.title)
-                            Button { deleting = task } label: { Image(systemName: "trash") }.buttonStyle(.plain).accessibilityLabel("删除周期计划：" + task.title)
+                            Button { deleting = task } label: { ThemeSymbol(systemName: "trash") }.buttonStyle(.plain).accessibilityLabel("删除周期计划：" + task.title)
                         }
                     }
                 }

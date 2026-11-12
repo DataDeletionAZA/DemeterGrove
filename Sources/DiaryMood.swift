@@ -29,23 +29,30 @@ struct MoodArtwork: View {
     var image: Data? = nil
     var size: CGFloat = 30
     var body: some View {
+        let theme = ThemeAppearance.shared.theme
         Group {
             if let image, let picture = NSImage(data: image) {
                 Image(nsImage: picture).resizable().interpolation(.none).scaledToFit()
             } else {
                 Canvas { context, bounds in
                     context.withCGContext { c in
-                        c.setShouldAntialias(false)
+                        let themed = theme != .original
+                        c.setShouldAntialias(themed)
                         c.scaleBy(x: bounds.width / 24, y: bounds.height / 24)
-                        let ink = NSColor(red: 0.17, green: 0.13, blue: 0.20, alpha: 1)
-                        let light = NSColor(red: 0.93, green: 0.81, blue: 0.56, alpha: 1)
+                        let ink = themed ? NSColor(Palette.ink) : NSColor(red:0.17,green:0.13,blue:0.20,alpha:1)
+                        let light = themed ? NSColor(Palette.goldLight) : NSColor(red:0.93,green:0.81,blue:0.56,alpha:1)
                         let sad = ["sad", "cry", "lonely", "miss", "tired", "sleepy"].contains(symbol)
                         let angry = ["angry", "irritated", "anxious", "nervous"].contains(symbol)
-                        let fill = sad ? NSColor(red:0.49,green:0.57,blue:0.65,alpha:1) : angry ? NSColor(red:0.73,green:0.43,blue:0.36,alpha:1) : NSColor(red:0.72,green:0.62,blue:0.38,alpha:1)
+                        let fill = themed ? NSColor(sad ? Palette.lavender.opacity(0.35) : angry ? Palette.clay.opacity(0.35) : Palette.gold.opacity(0.25)) : sad ? NSColor(red:0.49,green:0.57,blue:0.65,alpha:1) : angry ? NSColor(red:0.73,green:0.43,blue:0.36,alpha:1) : NSColor(red:0.72,green:0.62,blue:0.38,alpha:1)
                         func rect(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: NSColor) {
                             c.setFillColor(color.cgColor); c.fill(CGRect(x:x,y:y,width:w,height:h))
                         }
-                        rect(6,2,12,20,ink);rect(3,5,18,14,ink);rect(5,4,14,16,fill);rect(4,7,16,10,fill)
+                        if themed {
+                            c.setFillColor(fill.cgColor);c.fillEllipse(in:CGRect(x:2,y:2,width:20,height:20))
+                            c.setStrokeColor(light.cgColor);c.setLineWidth(0.75);c.strokeEllipse(in:CGRect(x:2,y:2,width:20,height:20))
+                        } else {
+                            rect(6,2,12,20,ink);rect(3,5,18,14,ink);rect(5,4,14,16,fill);rect(4,7,16,10,fill)
+                        }
                         rect(7,4,9,1,light);rect(5,6,1,7,light.withAlphaComponent(0.45))
                         if ["calm","content","safe","sleepy","tired","blank"].contains(symbol) {
                             rect(7,10,3,1,ink);rect(14,10,3,1,ink)
@@ -104,7 +111,7 @@ struct DiaryMoodPicker: View {
             HStack(spacing: 8) {
                 MoodArtwork(symbol: diary.moodSymbol ?? MoodChoice.symbol(for: diary.mood), image: diary.moodImage)
                 Text(diary.mood).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 9))
+                ThemeSymbol(systemName: "chevron.down").font(.system(size: 9))
             }
         }.buttonStyle(PixelButtonStyle()).accessibilityLabel("心情：" + diary.mood)
             .popover(isPresented: $showing, arrowEdge: .bottom) {

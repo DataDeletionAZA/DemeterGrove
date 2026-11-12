@@ -25,7 +25,7 @@ struct IngredientCategoryDropdown: View {
     @Environment(\.compactSceneControls) private var compact
     var body:some View {
         Button {expanded.toggle()} label: {
-            HStack(spacing:3) {Text(selection.rawValue).font(.system(size:11));Spacer(minLength:0);Text(expanded ? "▴":"▾").font(.caption)}
+            HStack(spacing:3) {Text(selection.rawValue).font(.system(size:11));Spacer(minLength:0);ThemeSymbol(systemName:expanded ? "chevron.up":"chevron.down").font(.caption)}
                 .padding(.horizontal,8).padding(.vertical,compact ? 6:8).frame(maxWidth:.infinity).background(Palette.card,in:PixelFrame()).overlay(PixelFrame().stroke(Palette.line,lineWidth:1))
         }.buttonStyle(.plain).accessibilityLabel("食材分类，\(selection.rawValue)")
             .overlay(alignment:.topLeading) {
@@ -33,7 +33,7 @@ struct IngredientCategoryDropdown: View {
                     VStack(alignment:.leading,spacing:0) {
                         ForEach(IngredientCategory.allCases) {category in
                             Button {selection=category;expanded=false} label: {
-                                HStack {Text(category.rawValue);Spacer(minLength:0);if category == selection {Text("✓")}}
+                                HStack {Text(category.rawValue);Spacer(minLength:0);if category == selection {ThemeSymbol(systemName:"checkmark")}}
                                     .font(.system(size:11)).padding(9).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                         }
@@ -65,7 +65,11 @@ struct TableIngredient:View {
 
 struct CookingToolArt:View {
     var method:CookingMethod
+    var interfaceIcon = false
     var body:some View {
+        if interfaceIcon && ThemeAppearance.shared.theme != .original {
+            ThemeIcon(name:method.rawValue,size:48,theme:ThemeAppearance.shared.theme)
+        } else {
         Canvas {context,size in
             let sx=size.width/64,sy=size.height/48
             func block(_ x:Double,_ y:Double,_ w:Double,_ h:Double,_ color:Color) {
@@ -88,6 +92,7 @@ struct CookingToolArt:View {
                 else {block(19,19,26,4,Color(red:0.50,green:0.64,blue:0.57))}
             }
         }.accessibilityHidden(true)
+        }
     }
 }
 

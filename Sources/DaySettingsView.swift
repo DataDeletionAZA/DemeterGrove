@@ -29,7 +29,7 @@ struct DaySettingsView: View {
             Toggle("时区跟随 Mac 系统", isOn: $followsSystem)
             if !followsSystem {
                 Button { search = ""; choosingZone = true } label: {
-                    HStack { Text(zoneTitle(zone)); Spacer(); Image(systemName: "magnifyingglass") }
+                    HStack { Text(zoneTitle(zone)); Spacer(); ThemeSymbol(systemName: "magnifyingglass") }
                 }.buttonStyle(PixelButtonStyle()).accessibilityLabel("搜索或选择时区")
                     .popover(isPresented: $choosingZone, arrowEdge: .bottom) { zonePicker }
             } else { Text("系统时区：" + zoneTitle(TimeZone.current.identifier)).font(.caption).foregroundStyle(Palette.muted) }

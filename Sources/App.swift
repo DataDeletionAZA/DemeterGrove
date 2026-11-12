@@ -51,16 +51,18 @@ struct RootView: View {
                     RoundedRectangle(cornerRadius: 2).fill(Palette.sage).frame(width: 6, height: 6)
                     Text(store.storageLocked ? "存档需要恢复" : store.saveStatus).font(.caption)
                 }.foregroundStyle(Palette.muted)
-            }.padding(20).frame(width: 196).background(Palette.paper)
-            Rectangle().fill(Palette.line).frame(width: 1)
+            }.padding(ThemeAppearance.shared.theme == .liquidGlass ? 14:20).frame(width:196)
+                .modifier(ThemeNavigationSurface())
+                .padding(ThemeAppearance.shared.theme == .liquidGlass ? 10:0)
+            if ThemeAppearance.shared.theme != .liquidGlass {Rectangle().fill(Palette.line).frame(width:1)}
             }
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 14) {
-                    Button { sidebarShown.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 17)) }
+                    Button { sidebarShown.toggle() } label: { ThemeSymbol(systemName: "sidebar.left").font(.system(size: 17)).frame(width:40,height:40).modifier(ThemeToolbarSurface()) }
                         .buttonStyle(.plain).help(sidebarShown ? "收起侧栏" : "展开侧栏").accessibilityLabel(sidebarShown ? "收起侧栏" : "展开侧栏")
                     Button {
                         SceneNavigation.back(store:store)
-                    } label: {Image(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle())}
+                    } label: {ThemeSymbol(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle()).modifier(ThemeToolbarSurface())}
                         .buttonStyle(.plain).help(backLabel).accessibilityLabel(backLabel)
                     VStack(alignment: .leading, spacing: 7) {
                         Text(SceneNavigation.title(store.selectedPage)).font(.system(size: 23, weight: .semibold, design: .default))
@@ -69,9 +71,9 @@ struct RootView: View {
                     Spacer()
                     Text(store.dayBoundary.dateText(store.today))
                         .font(.caption).foregroundStyle(Palette.muted)
-                }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 20)
+                }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 20).background(ThemeHeaderSurface())
                 if !store.error.isEmpty {
-                    Label(store.error, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
+                    ThemeLabel(store.error, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
                         .padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.red.opacity(0.06)).padding(.horizontal, 30)
                 }
                 GeometryReader { viewport in
@@ -118,7 +120,7 @@ struct RootView: View {
         }.frame(minWidth: 560, minHeight: 400).environment(\.calendar,store.calendar)
             .environment(\.dayBoundary,store.dayBoundary).environment(\.timeZone,store.calendar.timeZone)
             .foregroundStyle(Palette.ink).tint(Palette.sage)
-            .magicControls().environment(\.locale, Locale(identifier: "zh_CN"))
+            .magicControls().appTheme(store).environment(\.locale, Locale(identifier: "zh_CN"))
             .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:560,height:400))}
             .sheet(isPresented:Binding(get:{store.pendingFocusReviewID != nil && store.pet?.managerIsOpen == true},set:{if !$0 {store.pendingFocusReviewID=nil}})) {
                 if let id=store.pendingFocusReviewID {FocusSessionEditor(store:store,sessionID:id)}
