@@ -3,7 +3,7 @@ import SwiftUI
 struct FishingScene:View {
     @ObservedObject var store:GardenStore
     var initialLocation:String?=nil
-    @State private var locationID="lake"
+    @State private var configurationLocationID="lake"
     @State private var selected:String?
     @State private var configuration=false
     @State private var market=false
@@ -16,7 +16,9 @@ struct FishingScene:View {
     @State private var quantity=1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var state:FishingState {store.data.fishingState}
-    private var location:FishingLocation {FishingLocation.all.first{$0.id == locationID} ?? FishingLocation.all[0]}
+    private var location:FishingLocation {FishingLocation.all.first{$0.id == (initialLocation ?? state.locationID)} ?? FishingLocation.all[0]}
+    private var configurationLocation:FishingLocation {FishingLocation.all.first{$0.id == configurationLocationID} ?? location}
+    private var locked:Bool {store.data.levelProgress.level<location.level}
     private var ownedRods:Set<String> {state.ownedRods.union(FishingRod.all.filter{$0.rank<=store.data.garden.rank(.rod)}.map(\.id))}
     private var bag:[String] {state.inventory.keys.filter{state.inventory[$0,default:0]>0}.sorted{(NatureItemInfo.find($0)?.name ?? $0)<(NatureItemInfo.find($1)?.name ?? $1)}}
     private var rodPosition:CGPoint {
@@ -34,13 +36,17 @@ struct FishingScene:View {
     var body:some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
             SceneHeader {
-                HStack {Text(location.name).font(.headline);Spacer();WalletView(coins:store.data.garden.coins)}
-                SceneToolbar(items:[.init("渔具",action:openConfiguration),.init("鱼类图鉴",action:{codex=true}),
-                    .init("库存",action:{inventory=true}),.init("户外地图",action:{SceneNavigation.open("户外地图",store:store)})])
+                HStack {
+                    if initialLocation == nil {Text(location.name).font(.headline)}
+                    if locked {Label("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
+                    Spacer(minLength:0)
+                    WalletView(coins:store.data.garden.coins)
+                }
+                SceneToolbar(items:[.init("渔具",disabled:locked,action:openConfiguration),.init("鱼类图鉴",action:{codex=true}),
+                    .init("库存",action:{inventory=true}),.init("户外地图",action:{SceneNavigation.open("户外地图",store:store,from:store.currentRoute)})])
             }
             SceneCanvas(hasSidebar:true) {size in stage(size)} sidebar:{catchCabinet}
-        }.onAppear{locationID=initialLocation ?? state.locationID}
-            .sheet(isPresented:$configuration){fishingConfiguration}
+        }.sheet(isPresented:$configuration){fishingConfiguration}
             .sheet(isPresented:$market){tackleMarket}
             .sheet(isPresented:$inventory){InventoryView(store:store)}
             .sheet(isPresented:$codex){fishCodex}
@@ -51,8 +57,8 @@ struct FishingScene:View {
             RoomBackdrop(name:location.background).frame(width:size.width,height:size.height)
             ObjectButton(label:"选择渔竿和鱼饵",action:openConfiguration,caption:"渔具") {
                 GameNatureSprite(key:"rod_"+state.rodID,size:size.width*0.13)
-            }.position(x:size.width*rodPosition.x,y:size.height*rodPosition.y)
-            if state.enabled,state.cast?.locationID == locationID {
+            }.position(x:size.width*rodPosition.x,y:size.height*rodPosition.y).disabled(locked).opacity(locked ? 0.5:1)
+            if state.enabled,state.cast?.locationID == location.id {
                 TimelineView(.animation(minimumInterval:0.12,paused:reduceMotion)) {time in
                     let drift=reduceMotion ? 0:sin(time.date.timeIntervalSinceReferenceDate*2)*2
                     GameNatureSprite(key:"fishing_float",size:size.width*0.035)
@@ -63,12 +69,13 @@ struct FishingScene:View {
                 HStack {Text(fishingStatus).font(.system(size:12)).padding(9).background(Palette.paper.opacity(0.94),in:PixelFrame());Spacer()}
                 Spacer()
                 HStack {
-                    if locationID == "lake" {
+                    if location.id == "lake",!locked {
                         ObjectButton(label:"渔具店",action:{market=true},caption:"渔具店") {GameSprite(sheet:"Equipment",index:9,size:size.width*0.12)}
                     }
                     Spacer()
                 }
             }.padding(14)
+            SceneArrows(store:store,scene:"钓鱼/"+location.id)
         }.frame(width:size.width,height:size.height).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold,lineWidth:1))
     }
 
@@ -128,17 +135,22 @@ struct FishingScene:View {
     }
 
     private func openConfiguration() {
+        guard !locked else{return}
         guard store.data.garden.economy.trip(.fishing) == nil else{store.message="当前这次钓鱼尚未结束";return}
+        configurationLocationID=location.id
         rod=state.rodID;automatic=state.enabled || store.data.garden.economy.fishing == nil
-        bait=state.baitID ?? "";configuration=true
+        bait=location.baits.first{$0.id == state.baitID}?.id ?? "";configuration=true
     }
     private var fishingConfiguration:some View {
         SceneDialog(preferred:CGSize(width:560,height:480)) {
             HStack {Text("渔具配置").font(.title3);Spacer();Button("关闭"){configuration=false}}
         } content:{
             VStack(alignment:.leading,spacing:14) {
-                PixelSelect(selection:$locationID,items:FishingLocation.all.filter{$0.level<=store.data.levelProgress.level}.map{($0.id,$0.name)})
+                PixelSelect(selection:$configurationLocationID,items:FishingLocation.all.filter{$0.level<=store.data.levelProgress.level}.map{($0.id,$0.name)})
                     .accessibilityLabel("钓鱼地点")
+                    .onChange(of:configurationLocationID) { _,_ in
+                        if !configurationLocation.baits.contains(where:{$0.id == bait}) { bait="" }
+                    }
                 PixelSelect(selection:$rod,items:FishingRod.all.filter{ownedRods.contains($0.id)}.map{($0.id,$0.name)})
                     .accessibilityLabel("选择渔竿")
                 if let description=ItemLore.text(for:"rod:"+rod) {
@@ -147,7 +159,7 @@ struct FishingScene:View {
                 Toggle("随专注自动钓鱼",isOn:$automatic).toggleStyle(PixelToggleStyle())
                 HStack {Text("鱼饵").font(.headline);Spacer();Button("无饵"){bait=""}.buttonStyle(PixelButtonStyle(primary:bait.isEmpty))}
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:100))],spacing:8) {
-                    ForEach(location.baits.filter{$0.level<=store.data.levelProgress.level}) {item in
+                    ForEach(configurationLocation.baits.filter{$0.level<=store.data.levelProgress.level}) {item in
                         Button {bait=item.id} label:{
                             VStack(spacing:4) {
                                 GameNatureSprite(key:item.spriteKey,size:46)
@@ -166,11 +178,17 @@ struct FishingScene:View {
             }
         } footer:{
             HStack {
-                if locationID == "lake" {Button("渔具店"){configuration=false;market=true}}
+                if configurationLocationID == "lake" {Button("渔具店"){configuration=false;market=true}}
                 Spacer()
                 Button("保存配置") {
-                    let validBait=location.baits.first{$0.id == bait}?.id
-                    if store.commitGameChange({$0.configureFishing(enabled:automatic,location:locationID,rod:rod,bait:validBait,at:store.now)}) {configuration=false}
+                    let place=configurationLocation
+                    let validBait=place.baits.first{$0.id == bait}?.id
+                    if store.commitGameChange({$0.configureFishing(enabled:automatic,location:place.id,rod:rod,bait:validBait,at:store.now)}) {
+                        configuration=false
+                        if let initialLocation,initialLocation != place.id {
+                            SceneNavigation.open("钓鱼/"+place.id,store:store,from:store.currentRoute)
+                        }
+                    }
                 }.buttonStyle(PixelButtonStyle(primary:true))
             }
         }

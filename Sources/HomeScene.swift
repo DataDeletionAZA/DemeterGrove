@@ -11,7 +11,7 @@ struct HomeScene: View {
                     WalletView(coins: store.data.garden.coins)
                 }
                 SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
                     .init("库存",action:{showingInventory=true})
                 ])
             }
@@ -19,11 +19,11 @@ struct HomeScene: View {
                 let w = size.width, h = size.height
                 ZStack {
                     RoomBackdrop(name: "Courtyard").frame(width: w, height: h).clipped()
-                    SceneTarget(object: .farmDoor, sceneSize: size, label: "农场", action: { SceneNavigation.open("农场",store:store) })
-                    SceneTarget(object: .kitchenDoor, sceneSize: size, label: "厨房", action: { SceneNavigation.open("厨房",store:store) })
-                    SceneTarget(object: .studyDoor, sceneSize: size, label: "书房", action: { SceneNavigation.open("书房",store:store) })
-                    SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store) })
-                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{SceneNavigation.open("户外地图",store:store)})
+                    SceneTarget(object: .farmDoor, sceneSize: size, label: "农场", action: { SceneNavigation.open("农场",store:store,from:store.currentRoute) })
+                    SceneTarget(object: .kitchenDoor, sceneSize: size, label: "厨房", action: { SceneNavigation.open("厨房",store:store,from:store.currentRoute) })
+                    SceneTarget(object: .studyDoor, sceneSize: size, label: "书房", action: { SceneNavigation.open("书房",store:store,from:store.currentRoute) })
+                    SceneTarget(object: .shopDoor, sceneSize: size, label: "商店", action: { SceneNavigation.open("商店",store:store,from:store.currentRoute) })
+                    SceneTarget(object:.signpost,sceneSize:size,label:"外出路牌",action:{SceneNavigation.open("户外地图",store:store,from:store.currentRoute)})
                     SceneParticles()
                 }.clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.7), lineWidth: 1))
             }
@@ -67,7 +67,7 @@ struct StudyScene: View {
                     WalletView(coins:store.data.garden.coins)
                 }
                 SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
                     .init("库存",action:{showingInventory=true})
                 ])
             }

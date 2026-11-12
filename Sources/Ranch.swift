@@ -19,6 +19,7 @@ struct RanchState: Codable, Equatable {
     var lastFocus: Double? = nil
     var capacity: Int { expanded ? 8 : 4 }
     var troughCapacity: Int { expanded ? 48 : 24 }
+    var feedPortions: Int { trough + feedBags * Self.feedBagPortions }
     var readyCount: Int { animals.reduce(0) { $0 + $1.ready } }
     static let expansionPrice = 493
     static let expansionLevel = 4
@@ -44,7 +45,12 @@ struct RanchState: Codable, Equatable {
         var remaining = focus - previous
         lastFocus = focus
         while remaining > 0 {
-            for index in animals.indices where !animals[index].fed && animals[index].ready < animals[index].storageLimit && trough > 0 {
+            for index in animals.indices where !animals[index].fed && animals[index].ready < animals[index].storageLimit {
+                if trough == 0 && feedBags > 0 {
+                    feedBags -= 1
+                    trough = Self.feedBagPortions
+                }
+                guard trough > 0 else { break }
                 animals[index].fed = true
                 trough -= 1
             }
@@ -66,10 +72,10 @@ struct RanchState: Codable, Equatable {
 }
 
 enum RanchFeed: String, CaseIterable, Identifiable {
-    case bag = "混合饲料", wheat = "小麦", corn = "玉米", carrot = "胡萝卜", cabbage = "卷心菜", pumpkin = "南瓜"
+    case wheat = "小麦", corn = "玉米", carrot = "胡萝卜", cabbage = "卷心菜", pumpkin = "南瓜"
     var id: String { rawValue }
     var portions: Int {
-        switch self { case .bag: return 6; case .wheat: return 3; case .corn,.pumpkin: return 4; case .carrot,.cabbage: return 2 }
+        switch self { case .wheat: return 3; case .corn,.pumpkin: return 4; case .carrot,.cabbage: return 2 }
     }
 }
 
@@ -107,10 +113,9 @@ extension AppData {
     mutating func fillRanchTrough(_ food: RanchFeed, at date: Date = Date()) -> Bool {
         var ranch = ranchState
         ranch.advance(to: gameFocus(at: date))
-        let available = food == .bag ? ranch.feedBags : garden.ingredients[food.rawValue, default: 0]
-        guard available > 0, ranch.trough + food.portions <= ranch.troughCapacity else { return false }
-        if food == .bag { ranch.feedBags -= 1 }
-        else { garden.ingredients[food.rawValue, default: 0] -= 1 }
+        guard garden.ingredients[food.rawValue, default: 0] > 0,
+              ranch.trough + food.portions <= ranch.troughCapacity else { return false }
+        garden.ingredients[food.rawValue, default: 0] -= 1
         ranch.trough += food.portions
         garden.economy.ranch = ranch
         return true

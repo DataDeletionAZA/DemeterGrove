@@ -12,7 +12,7 @@ struct WorldMapScene: View {
                     WalletView(coins:store.data.garden.coins)
                 }
                 SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
                     .init("库存",action:{showingInventory=true})
                 ])
             }
@@ -29,7 +29,7 @@ struct WorldMapScene: View {
                         VStack(spacing:5) {
                             HStack {Text(place.name).font(.headline);Spacer();Button("关闭"){selectedPlace=nil}.font(.caption)}
                             ForEach(place.activities,id:\.1) {activity in
-                                Button {selectedPlace=nil;SceneNavigation.open(activity.1,store:store)} label: {
+                                Button {selectedPlace=nil;SceneNavigation.open(activity.1,store:store,from:store.currentRoute)} label: {
                                     Text(activity.0).lineLimit(1).frame(maxWidth:.infinity)
                                 }
                             }
@@ -47,7 +47,7 @@ struct WorldMapScene: View {
         return Button {
             if unlocked,let route=place.route {
                 if place.activities.count>1 {selectedPlace=place.id}
-                else {selectedPlace=nil;SceneNavigation.open(route,store:store)}
+                else {selectedPlace=nil;SceneNavigation.open(route,store:store,from:store.currentRoute)}
             }
         } label: {
             VStack(spacing:2) {

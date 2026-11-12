@@ -76,7 +76,7 @@ struct AIEncouragementView:View {
                 }
             } else {
                 Text("请先在设置中为\(feature.title)选择一个 API 预设。").foregroundStyle(Palette.muted)
-                Button("打开设置") {close();store.selectedPage="设置";store.pet?.openTool("设置")}
+                Button("打开设置") {close();SceneNavigation.open("设置",store:store,from:store.currentRoute)}
             }
             if working {
                 TimelineView(.periodic(from:batchStarted,by:1)) {context in

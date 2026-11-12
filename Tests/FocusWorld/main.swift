@@ -62,6 +62,10 @@ import Foundation
             ("fishing purchase",{$0.buyFishingBait("earthworm")} ),
             ("mining selection",{$0.selectMine("quarry_coal",at:now)}),
             ("equipment crafting",{$0.forgeGear(moldID:"sickle",materialIDs:["copper","copper"],natural:12)} ),
+            ("expedition forage",{data in
+                guard let trip=data.expeditionState.trip,let id=trip.rewards.keys.sorted().first else{return false}
+                return data.collectExpeditionForage(id,at:trip.locationID)
+            }),
             ("expedition return",{$0.returnExpedition(at:now)}),
             ("cooking",{$0.cook(.soup,natural:16)}),
             ("potion brewing",{$0.embark(.potions,recipe:"dew",at:now)})

@@ -245,7 +245,7 @@ struct MapPage: View {
             SceneHeader {
                 HStack {Spacer();WalletView(coins:store.data.garden.coins)}
                 SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store)}),
+                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
                     .init("库存",action:{showingInventory=true})
                 ])
             }
@@ -257,7 +257,7 @@ struct MapPage: View {
                         RoomBackdrop(name:journey.scene).frame(width:w,height:h)
                         ObjectButton(label:actionLabel,action:act,caption:actionLabel) {GameSprite(sheet:"Equipment",index:journey.icon,size:w*0.13)}
                             .disabled(!unlocked).position(x:w*(journey == .fishing ? 0.465:0.64),y:h*(journey == .fishing ? 0.435:0.73))
-                        if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"户外地图"){SceneNavigation.open("户外地图",store:store)}}
+                        if journey == .adventure {SceneTarget(object:.forestExit,sceneSize:size,label:"户外地图"){SceneNavigation.open("户外地图",store:store,from:store.currentRoute)}}
                         if trip != nil {SceneParticles().frame(width:w*0.22,height:h*0.15).position(x:w*0.53,y:h*0.58)}
                         if !unlocked {
                             Palette.paper.opacity(0.55).allowsHitTesting(false)
@@ -349,7 +349,7 @@ struct MapPage: View {
     private func act() {
         guard unlocked else{return}
         if let trip {
-            guard trip.progress(store.gameFocus)>=1 else {SceneNavigation.open("计时器",store:store);return}
+            guard trip.progress(store.gameFocus)>=1 else {SceneNavigation.open("计时器",store:store,from:store.currentRoute);return}
             var result:String?
             if store.commitGameChange({result=$0.collectJourney(journey,at:store.now);return result != nil}),let result {store.message=result;hint=""}
         } else if store.commitGameChange({$0.embark(journey,at:store.now)}) {store.message="\(journey.rawValue)已开始，记录专注后回来领取。";hint=""}

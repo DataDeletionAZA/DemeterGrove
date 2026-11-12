@@ -6,7 +6,7 @@ import UserNotifications
 let desktopTools: [(String, String)] = [
     ("任务", "checklist"), ("计时器", "timer"),
     ("日程", "calendar"), ("习惯", "checkmark.circle"), ("日记", "book.closed"),
-    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "person.3"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
+    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
     ("成长", "sparkles"), ("地图", "map"), ("衣柜", "tshirt")
 ]
 
@@ -270,7 +270,7 @@ final class PetController {
     private func dismissFloating() { closeMenu(); closeTool() }
     func back() {
         let route=managerIsOpen ? store.selectedPage:store.activeTool
-        if let parent=store.sceneNavigation.parent(of:route) {openTool(parent)}
+        if let parent=store.sceneNavigation.goBack(from:route) {displayTool(parent)}
         else {manager?.orderOut(nil);closeTool();showMenu()}
     }
     func toggleMenu() {
@@ -289,6 +289,9 @@ final class PetController {
     func openTool(_ name: String, from source: String? = nil) {
         let name=SceneNavigation.canonical(name)
         store.sceneNavigation.enter(name,from:source)
+        displayTool(name)
+    }
+    private func displayTool(_ name:String) {
         if managerIsOpen {
             store.selectedPage = ["待办":"任务", "计时器":"专注"][name] ?? name
             openManager()
@@ -570,7 +573,7 @@ struct ToolPanelView: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-        MagicHeader(title: SceneNavigation.title(tool), metadata: sceneMetadata, draggable: false, back: { store.pet?.back() }) { store.pet?.closeTool() }
+        MagicHeader(title: SceneNavigation.title(tool), metadata: sceneMetadata, draggable: false, backTitle: store.sceneNavigation.parent(of:tool).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单", back: { store.pet?.back() }) { store.pet?.closeTool() }
         GeometryReader { viewport in
         PixelScrollView {
             VStack(alignment: .leading, spacing: 14) {

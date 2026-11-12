@@ -39,7 +39,7 @@ struct AutoShopState: Codable, Equatable {
             && ((receivables == 0) == (soldCount == 0))
             && Set(receipts.map(\.dishID)).count == receipts.count
             && receipts.allSatisfy { !$0.dishID.isEmpty && $0.dishID.count <= 512 && !$0.name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && $0.name.count <= 60
-                && ($0.equipmentSprite.map{sprite in CraftedGear.all.contains{$0.spriteKey == sprite} || ForgeMold.all.contains{$0.gearSpriteKey == sprite}} ?? Dish.validSprite($0.sprite)) && (1...Self.limit).contains($0.count) && (1...Self.moneyLimit).contains($0.amount) }
+                && ($0.equipmentSprite.map{sprite in CraftedGear.all.contains{$0.spriteKey == sprite} || ForgeMold.all.contains{$0.supportsGearSprite(sprite)}} ?? Dish.validSprite($0.sprite)) && (1...Self.limit).contains($0.count) && (1...Self.moneyLimit).contains($0.amount) }
             && receipts.reduce(0, { $0 + $1.amount }) == receivables
             && receipts.reduce(0, { $0 + $1.count }) == soldCount
             && (lastAdvancedFocus.map { $0.isFinite && $0 >= 0 && $0 <= focus } ?? true)

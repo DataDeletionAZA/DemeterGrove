@@ -5,7 +5,7 @@ struct RootView: View {
     @ObservedObject var store: GardenStore
     @State private var sidebarShown = true
     private let pages = [("书房", "book.closed"), ("任务", "checklist"), ("专注", "timer"), ("日程", "calendar"),
-                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "person.3"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
+                         ("习惯", "leaf"), ("日记", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("成长", "sparkles"),
                          ("地图", "map"), ("衣柜", "tshirt"), ("统计", "chart.bar"), ("设置", "slider.horizontal.3")]
     private var sidebarPage:String {
         let route=SceneNavigation.canonical(store.selectedPage)
@@ -59,8 +59,7 @@ struct RootView: View {
                     Button { sidebarShown.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 17)) }
                         .buttonStyle(.plain).help(sidebarShown ? "收起侧栏" : "展开侧栏").accessibilityLabel(sidebarShown ? "收起侧栏" : "展开侧栏")
                     Button {
-                        if let pet=store.pet {pet.back()}
-                        else {SceneNavigation.open(store.sceneNavigation.parent(of:store.selectedPage) ?? "菜单",store:store)}
+                        SceneNavigation.back(store:store)
                     } label: {Image(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle())}
                         .buttonStyle(.plain).help(backLabel).accessibilityLabel(backLabel)
                     VStack(alignment: .leading, spacing: 7) {

@@ -22,7 +22,7 @@ struct Companion:Identifiable {
     ]
 }
 
-enum GearSlot:String,Codable,CaseIterable {case tool="工具",coat="外衣",charm="饰物"}
+enum GearSlot:String,Codable,CaseIterable {case tool="工具",coat="外衣",trousers="下装",charm="饰物"}
 struct CraftedGear:Identifiable,Codable,Equatable {
     let id:String
     let name:String
@@ -63,6 +63,11 @@ struct ExpeditionTrip:Codable,Equatable,Identifiable {
     var events=0
     var rewards:[String:Int]=[:]
     var discoveries:[String]=[]
+    var packedRewards:[String:Int]? = nil
+
+    func unpackedCount(_ itemID: String) -> Int {
+        rewards[itemID,default:0] - (packedRewards?[itemID] ?? 0)
+    }
 }
 struct ExpeditionRecord:Codable,Equatable,Identifiable {
     var id:UUID
@@ -124,7 +129,7 @@ extension ExpeditionState {
                     && (1...100000).contains(item.level) && item.price == 0 && item.minerals.isEmpty && item.materials.isEmpty
                     && [item.gathering,item.scouting,item.guarding].allSatisfy{(0...30).contains($0)}
                     && item.saleValue.map{(1...1_000_000).contains($0)} == true
-                    && ForgeMold.all.contains{$0.gearSpriteKey == item.spriteKey && $0.slot == item.slot}
+                    && ForgeMold.all.contains{$0.supportsGearSprite(item.spriteKey) && $0.slot == item.slot}
               }),
               gear.allSatisfy({ id,count in resolveGear(id) != nil && (0...1_000_000_000).contains(count) }),
               Set(equipment.keys).isSubset(of: hired) else { return false }
@@ -143,7 +148,10 @@ extension ExpeditionState {
                   (1...100000).contains(trip.level), (1...1000).contains(trip.gathering),
                   (1...1000).contains(trip.scouting), (1...1000).contains(trip.guarding),
                   trip.events >= 0, trip.events <= Int(min(trip.duration,focus-trip.startedFocus)/300),
-                  validRewards(trip.rewards), trip.rewards.allSatisfy({$0.value <= 1_000_000_000-inventory[$0.key,default:0]}), Set(trip.discoveries).count == trip.discoveries.count,
+                  validRewards(trip.rewards), validRewards(trip.packedRewards ?? [:]),
+                  (trip.packedRewards ?? [:]).allSatisfy({$0.value > 0 && $0.value <= trip.rewards[$0.key,default:0]}),
+                  trip.rewards.keys.allSatisfy({trip.unpackedCount($0) <= 1_000_000_000-inventory[$0,default:0]}),
+                  Set(trip.discoveries).count == trip.discoveries.count,
                   Set(trip.discoveries).isSubset(of:discoveryIDs), !history.contains(where: { $0.id == trip.id }) else { return false }
         }
         return history.allSatisfy {
@@ -250,6 +258,19 @@ extension AppData {
         return true
     }
 
+    mutating func collectExpeditionForage(_ itemID: String, at locationID: String) -> Bool {
+        guard var state = garden.economy.expedition, var trip = state.trip, trip.locationID == locationID else { return false }
+        let count = trip.unpackedCount(itemID)
+        guard count > 0, state.inventory[itemID,default:0] <= 1_000_000_000-count else { return false }
+        state.inventory[itemID,default:0] += count
+        var packed = trip.packedRewards ?? [:]
+        packed[itemID,default:0] += count
+        trip.packedRewards = packed
+        state.trip = trip
+        garden.economy.expedition = state
+        return true
+    }
+
     private func expeditionEvent(trip: inout ExpeditionTrip, state: inout ExpeditionState) {
         let forage = NatureCatalog.forage.filter { $0.locations.contains(trip.locationID) && $0.level <= trip.level }
         let weighted = forage.map { item in
@@ -261,7 +282,8 @@ extension AppData {
             for (index,item) in forage.enumerated() {
                 if roll < weighted[index] {
                     let count = 1 + trip.gathering / 4 + (state.random.next(100) < min(60,trip.guarding*3) ? 1:0)
-                    let available = 1_000_000_000 - state.inventory[item.id,default:0] - trip.rewards[item.id,default:0]
+                    let available = min(1_000_000_000 - trip.rewards[item.id,default:0],
+                                        1_000_000_000 - state.inventory[item.id,default:0] - trip.unpackedCount(item.id))
                     if available > 0 { trip.rewards[item.id,default:0] += min(count,available) }
                     let key = "forage:" + item.id
                     if !trip.discoveries.contains(key) { trip.discoveries.append(key) }
@@ -278,7 +300,7 @@ extension AppData {
     }
 
     private func finishExpedition(trip: ExpeditionTrip, elapsed: Double, completed: Bool, state: inout ExpeditionState) {
-        for (id,count) in trip.rewards { state.inventory[id,default:0] += count }
+        for id in trip.rewards.keys { state.inventory[id,default:0] += trip.unpackedCount(id) }
         state.discoveries.formUnion(trip.discoveries)
         state.history.append(ExpeditionRecord(id:trip.id,locationID:trip.locationID,duration:elapsed,plannedDuration:trip.duration,
                                               completed:completed,companions:trip.companions,rewards:trip.rewards,discoveries:trip.discoveries))

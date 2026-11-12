@@ -179,7 +179,9 @@ extension ShopOrder {
 }
 
 struct Garden: Codable {
-    var plots: [Plot] = (0..<6).map { _ in Plot() }
+    static let plotsPerField = 6
+    var plots: [Plot] = (0..<Self.plotsPerField).map { _ in Plot() }
+    var fieldCount: Int { plots.count / Self.plotsPerField }
     var cropSeeds: [String:Int] = ["胡萝卜":2,"小麦":2,"番茄":2]
     var seeds: Int {
         get { cropSeeds.values.reduce(0,+) }
@@ -336,12 +338,15 @@ struct AppData: Codable {
         return true
     }
 
-    mutating func plantRandomly(at date: Date = Date()) -> Int {
+    mutating func plantRandomly(startingOn field: Int = 0, at date: Date = Date()) -> Int {
+        guard (0..<garden.fieldCount).contains(field) else { return 0 }
+        let start = field * Garden.plotsPerField
+        let plots = [garden.plots[start...], garden.plots[..<start]].joined()
         var count = 0
-        for id in garden.plots.filter({ $0.crop == nil }).map(\.id).shuffled() {
+        for plot in plots where plot.crop == nil {
             guard garden.water > 0,
                   let crop = Crop.allCases.filter({ garden.cropSeeds[$0.rawValue,default:0] > 0 }).randomElement(),
-                  plant(crop,in:id,at:date) else { break }
+                  plant(crop,in:plot.id,at:date) else { break }
             count += 1
         }
         return count
@@ -481,7 +486,7 @@ struct AppData: Codable {
         try require(Set(events.map(\.id)).count == events.count)
         try require(Set(habits.map(\.id)).count == habits.count)
         try require(Set(sessions.map(\.id)).count == sessions.count)
-        try require(Set(garden.plots.map(\.id)).count == garden.plots.count && garden.plots.count == 6+garden.rank(.farmland)*6)
+        try require(Set(garden.plots.map(\.id)).count == garden.plots.count && garden.plots.count == (1+garden.rank(.farmland))*Garden.plotsPerField)
         try require(tasks.allSatisfy { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.categoryName.count <= 40 })
         try require(events.allSatisfy { !$0.title.isEmpty && $0.end >= $0.start })
         try require(sessions.allSatisfy { $0.isValid })

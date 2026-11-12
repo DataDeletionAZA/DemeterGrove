@@ -2,142 +2,279 @@ import SwiftUI
 
 struct ForgeScene:View {
     @ObservedObject var store:GardenStore
-    @State private var station:ForgeStation = .furnace
-    @State private var moldID="sword"
-    @State private var materials:[String]=["","",""]
+    @State private var showing=false
+    @State private var mold=ForgeMold.all[0]
+    @State private var materials=["",""]
     @State private var part=0
     @State private var started:Date?
     @State private var rolling=false
     @State private var reveal=false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.sceneViewport) private var viewport
-    private var compact:Bool {viewport.width<700 || viewport.height<520}
-    private var mold:ForgeMold {ForgeMold.all.first{$0.id == moldID} ?? ForgeMold.all[0]}
+
+    private var station:ForgeStation {mold.station}
     private var result:ForgeResult? {store.data.forgeState.lastResult}
-    private var working:Bool {started != nil || rolling}
+    private var sewing:Bool {station == .sewing}
+    private var unlocked:Bool {store.data.levelProgress.level>=mold.level}
+    private var component:ForgePart {mold.parts[part]}
+    private var compact:Bool {viewport.width<650 || viewport.height<500}
+
     var body:some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
             SceneHeader {
                 HStack {Text("锻造室").font(.system(size:13));Spacer();WalletView(coins:store.data.garden.coins)}
-                SceneToolbar(items:[SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store)},SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store)},SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store)},SceneToolbarItem("上次结果",disabled:result == nil || working){reveal=true},SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store)}])
+                SceneToolbar(items:[
+                    SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:"锻造室")},
+                    SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"锻造室")},
+                    SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store,from:"锻造室")},
+                    SceneToolbarItem("上次结果",disabled:result == nil){openResult()},
+                    SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store,from:"锻造室")}
+                ])
             }
             SceneCanvas(hasSidebar:true) {size in
                 ZStack {
                     RoomBackdrop(name:"Forge").frame(width:size.width,height:size.height)
-                    SceneImageHotspot(background:"Forge",rect:CGRect(x:0.72,y:0.08,width:0.23,height:0.44),size:size,label:"熔炉"){selectStation(.furnace)}
-                    SceneImageHotspot(background:"Forge",rect:CGRect(x:0.07,y:0.34,width:0.33,height:0.28),size:size,label:"缝纫台"){selectStation(.sewing)}
-                    moldRack(size)
-                    if let started {
-                        ForgeSequence(start:started,station:station,materials:materials).frame(width:size.width*0.42,height:size.height*0.42).position(x:size.width*0.52,y:size.height*0.65)
-                    } else {partTray(size)}
-                    if reveal,let result {resultCard(result,height:size.height).frame(width:min(330,size.width*0.82)).position(x:size.width*0.52,y:size.height*0.5)}
-                    if rolling,let result {
-                        CraftRollPresentation(roll:result.roll,title:station == .sewing ? "落针定形":"锤落成器",subtitle:mold.name) {rolling=false;reveal=true}
-                            .environment(\.sceneViewport,size).position(x:size.width/2,y:size.height/2)
-                    }
-                }.frame(width:size.width,height:size.height).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
-                    .onChange(of:store.now) {_,now in
-                        if let started,now.timeIntervalSince(started)>=3.2 {
-                            self.started=nil;rolling=true;materials=Array(repeating:"",count:mold.parts.count);part=0
-                        }
-                    }
-            } sidebar:{basket}
-        }.onAppear {if result != nil {reveal=true}}
+                    SceneImageHotspot(background:"Forge",rect:CGRect(x:0.72,y:0.08,width:0.23,height:0.44),size:size,label:"熔炉"){openStation(.furnace)}
+                    SceneImageHotspot(background:"Forge",rect:CGRect(x:0.07,y:0.34,width:0.33,height:0.28),size:size,label:"缝纫台"){openStation(.sewing)}
+                    SceneArrows(store:store,scene:"锻造室")
+                }.frame(width:size.width,height:size.height).clipShape(PixelFrame())
+                    .overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
+            } sidebar: {materialBasket}
+        }.sheet(isPresented:$showing,onDismiss:clearPresentation) {
+            stationWindow.onExitCommand{showing=false}
+        }
     }
-    private func selectStation(_ value:ForgeStation) {
-        guard !working else{return}
-        station=value
-        if mold.station != value,let first=ForgeMold.all.first(where:{$0.station == value}) {selectMold(first)}
+
+    private var materialBasket:some View {
+        let owned=ForgeMaterial.all.filter{store.data.forgeMaterialCount($0)>0}
+        return VStack(alignment:.leading,spacing:8) {
+            Text("材料篮").font(.headline).foregroundStyle(Palette.goldLight)
+            if owned.isEmpty {
+                Text("还没有制作材料").font(.caption).foregroundStyle(Palette.muted)
+                Spacer(minLength:0)
+            } else {
+                PixelScrollView {
+                    VStack(spacing:6) {
+                        ForEach(owned) {material in
+                            HStack(spacing:6) {
+                                GameNatureSprite(key:material.spriteKey,size:24)
+                                Text(material.name).font(.caption)
+                                Spacer(minLength:2)
+                                Text("×\(store.data.forgeMaterialCount(material))").font(.caption)
+                                    .monospacedDigit().foregroundStyle(Palette.muted)
+                            }.frame(maxWidth:.infinity,alignment:.leading)
+                        }
+                    }.padding(.trailing,SceneSizing.scrollGutter)
+                }
+            }
+        }.padding(10).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+            .magicSurface(Palette.paper)
+    }
+
+    private func openStation(_ value:ForgeStation) {
+        guard let first=ForgeMold.all.first(where:{$0.station == value}) else{return}
+        clearPresentation()
+        selectMold(first)
+        showing=true
+    }
+
+    private func openResult() {
+        guard let result,let previous=ForgeMold.all.first(where:{$0.id == result.moldID}) else{return}
+        clearPresentation()
+        selectMold(previous)
+        reveal=true
+        showing=true
+    }
+
+    private func clearPresentation() {
+        started=nil
+        rolling=false
         reveal=false
     }
+
     private func selectMold(_ value:ForgeMold) {
-        guard !working else{return}
-        moldID=value.id;station=value.station;materials=Array(repeating:"",count:value.parts.count);part=0;reveal=false
+        mold=value
+        materials=Array(repeating:"",count:value.parts.count)
+        part=0
     }
-    private func moldRack(_ size:CGSize)->some View {
-        HStack(spacing:5) {
-            ForEach(ForgeMold.all.filter{$0.station == station}) {item in
-                ObjectButton(label:"选择\(item.name)\(station == .sewing ? "纸样":"铸模")",action:{selectMold(item)},caption:item.name) {
-                    GameNatureSprite(key:item.spriteKey,size:size.width*0.07)
-                        .background(mold.id == item.id ? Palette.gold.opacity(0.22):.clear,in:PixelFrame())
+
+    @ViewBuilder private var stationWindow:some View {
+        if rolling,let result {
+            CraftRollPresentation(roll:result.roll,title:sewing ? "落针定形":"锤落成器",subtitle:mold.name) {
+                rolling=false
+                reveal=true
+            }
+        } else if reveal,let result {
+            resultWindow(result)
+        } else if let started {
+            SceneDialog(preferred:CGSize(width:490,height:370)) {
+                HStack {Text(station.rawValue).font(.title3);Spacer();Button("关闭"){showing=false}}
+            } content: {
+                ForgeSequence(start:started,station:station,materials:materials).frame(height:190)
+            } footer: {
+                Text(mold.name).foregroundStyle(Palette.goldLight)
+            }.task(id:started) {
+                try? await Task.sleep(for:.seconds(3.2))
+                guard !Task.isCancelled else{return}
+                self.started=nil
+                rolling=true
+            }
+        } else {
+            craftingWindow
+        }
+    }
+
+    private var craftingWindow:some View {
+        SceneDialog(preferred:CGSize(width:760,height:560)) {
+            HStack {
+                Text(station.rawValue).font(.title3).foregroundStyle(Palette.goldLight)
+                Spacer()
+                Button("关闭"){showing=false}
+            }
+        } content: {
+            if viewport.width>=470 {
+                HStack(alignment:.top,spacing:compact ? 12:20) {
+                    moldChoices.frame(width:compact ? 154:176)
+                    Rectangle().fill(Palette.line).frame(width:1).frame(minHeight:compact ? 190:320)
+                    workspace.frame(maxWidth:.infinity,alignment:.topLeading)
+                }
+            } else {
+                VStack(alignment:.leading,spacing:16) {
+                    moldChoices
+                    workspace
                 }
             }
-        }.position(x:size.width*0.40,y:size.height*0.22).disabled(working)
-    }
-    private func partTray(_ size:CGSize)->some View {
-        HStack(spacing:8) {
-            ForEach(Array(mold.parts.enumerated()),id:\.element.id) {index,component in
-                ObjectButton(label:"选择\(component.name)",action:{part=index;reveal=false},caption:component.name) {
-                    ZStack {
-                        PixelFrame().fill(Palette.paper.opacity(0.86))
-                        if materials.indices.contains(index),let material=ForgeMaterial.all.first(where:{$0.id == materials[index]}) {GameNatureSprite(key:material.spriteKey,size:size.width*0.065)}
-                        else {Text("+").font(.system(size:23)).foregroundStyle(Palette.goldLight)}
-                    }.frame(width:size.width*0.095,height:size.width*0.09)
-                        .overlay(PixelFrame().stroke(part == index ? Palette.goldLight:Palette.line,lineWidth:part == index ? 2:1))
-                }
-            }
-        }.position(x:size.width*0.5,y:size.height*0.72).disabled(working)
-    }
-    private var basket:some View {
-        VStack(alignment:.leading,spacing:compact ? 4:9) {
-            PixelTabs(selection:$station,items:ForgeStation.allCases.map{($0,$0.rawValue)})
-                .disabled(working).onChange(of:station){_,value in selectStation(value)}
-            HStack(spacing:6) {GameNatureSprite(key:mold.spriteKey,size:compact ? 25:35);Text(mold.name).font(.headline).foregroundStyle(Palette.goldLight)}
-                .help("等级 \(mold.level)")
-            if !compact {Text(mold.description).font(.system(size:11)).foregroundStyle(Palette.ink).fixedSize(horizontal:false,vertical:true)}
-            Text("\(mold.parts[min(part,mold.parts.count-1)].name) · 材料篮").font(.system(size:12)).foregroundStyle(Palette.goldLight)
-            PixelScrollView {
-                LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:7) {
-                    ForEach(ForgeMaterial.all) {material in materialButton(material)}
-                }.padding(.trailing,SceneSizing.scrollGutter)
-            }
+        } footer: {
             let modifier=store.data.forgeModifier(mold:mold,materialIDs:materials)
-            Text("适配 \(modifier>=0 ? "+":"")\(modifier)").font(.system(size:11)).foregroundStyle(Palette.goldLight)
-            Button(station == .sewing ? "开始缝制":"开始锻造") {
-                guard store.commitGameChange({$0.forgeGear(moldID:moldID,materialIDs:materials)}) else{return}
-                reveal=false;started=Date()
-            }.frame(maxWidth:.infinity).buttonStyle(PixelButtonStyle(primary:true))
-                .disabled(working || !store.data.canForge(mold:mold,materialIDs:materials))
-        }.padding(compact ? 7:10).magicSurface(Palette.paper)
-    }
-    private func materialButton(_ material:ForgeMaterial)->some View {
-        let available=store.data.forgeMaterialCount(material.id)
-        let selected=working ? 0:materials.filter{$0 == material.id}.count
-        let compatibility=mold.parts[min(part,mold.parts.count-1)].compatibility(material)
-        return ObjectButton(label:"\(material.name)，库存\(available)，适配\(compatibility)",action:{
-            guard materials.indices.contains(part) else{return}
-            materials[part]=material.id;reveal=false
-            if let empty=materials.firstIndex(of:"") {part=empty}
-        }) {
-            VStack(spacing:3) {
-                GameNatureSprite(key:material.spriteKey,size:32)
-                Text(material.name).font(.system(size:11))
-                Text("\(max(0,available-selected)) · \(compatibility>=0 ? "+":"")\(compatibility)").font(.system(size:compact ? 9:10)).foregroundStyle(Palette.muted).lineLimit(1).minimumScaleFactor(0.75)
-            }.frame(maxWidth:.infinity).padding(5).magicSurface(Palette.card)
-        }.disabled(working || (available<=selected && materials[part] != material.id))
-            .help("\(material.name) · 采集 +\(material.gathering) · 寻踪 +\(material.scouting) · 护行 +\(material.guarding) · \(mold.parts[min(part,mold.parts.count-1)].name)适配 \(compatibility>=0 ? "+":"")\(compatibility)")
-            .accessibilityLabel("\(material.name)，库存\(available)，适配\(compatibility)")
-    }
-    private func resultCard(_ result:ForgeResult,height:CGFloat)->some View {
-        VStack(spacing:9) {
-            PixelScrollView {
-                VStack(spacing:9) {
-                    if let id=result.gearID,let item=store.data.expeditionState.resolveGear(id) {
-                        GameNatureSprite(key:item.spriteKey,size:compact ? 42:72)
-                        Text(item.name).font(.system(size:14,weight:.medium)).foregroundStyle(Palette.goldLight).multilineTextAlignment(.center)
-                        if let lore=item.description {Text(lore).font(.system(size:11)).foregroundStyle(Palette.ink).fixedSize(horizontal:false,vertical:true)}
-                        Text("采集 \(item.gathering) · 寻踪 \(item.scouting) · 护行 \(item.guarding)").font(.system(size:11))
-                        Text("品质 \(result.roll.quality) · \(Money.text(item.salePrice))").font(.system(size:11)).foregroundStyle(Palette.muted)
-                        Button("去商店"){SceneNavigation.open("商店",store:store)}
-                    } else {
-                        Text(ForgeMold.all.first{$0.id == result.moldID}?.station == .sewing ? "断针散线":"坩埚破裂").font(.headline).foregroundStyle(Palette.goldLight)
-                        Text("材料损毁，未获得成品").font(.system(size:12))
-                    }
-                }.frame(maxWidth:.infinity).padding(.trailing,4)
+            HStack(spacing:12) {
+                VStack(alignment:.leading,spacing:4) {
+                    Text(mold.outputName(materialIDs:materials)).foregroundStyle(Palette.goldLight)
+                    Text(unlocked ? "适配 \(modifier>=0 ? "+":"")\(modifier)" : "等级 \(mold.level) 解锁")
+                        .font(.caption).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength:0)
+                Button(sewing ? "开始缝制":"开始锻造",action:begin)
+                    .buttonStyle(PixelButtonStyle(primary:true))
+                    .disabled(!store.data.canForge(mold:mold,materialIDs:materials))
             }
-            Text("d20 · \(result.roll.natural) \(result.roll.modifier>=0 ? "+":"")\(result.roll.modifier) = \(result.roll.total)").font(.system(size:11)).foregroundStyle(Palette.goldLight)
-            Button("继续制作"){reveal=false;materials=Array(repeating:"",count:mold.parts.count);part=0}
-        }.padding(compact ? 9:15).frame(maxWidth:.infinity).frame(height:min(360,max(180,height-16))).magicSurface(Palette.paper,strong:true)
+        }.environment(\.compactSceneControls,compact)
+    }
+
+    private var moldChoices:some View {
+        VStack(alignment:.leading,spacing:8) {
+            Text(sewing ? "纸样":"铸模").font(.headline)
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:compact ? 72:78),spacing:6)],spacing:6) {
+                ForEach(ForgeMold.all.filter{$0.station == station}) {item in
+                    let selected=mold.id == item.id
+                    Button {if !selected {selectMold(item)}} label: {
+                        VStack(spacing:3) {
+                            GameNatureSprite(key:item.spriteKey,size:compact ? 25:31)
+                            Text(item.name).font(.system(size:12)).lineLimit(1).minimumScaleFactor(0.8)
+                        }.frame(maxWidth:.infinity).frame(height:compact ? 40:48)
+                    }.buttonStyle(PixelButtonStyle(primary:selected))
+                        .accessibilityLabel("选择\(item.name)\(sewing ? "纸样":"铸模")")
+                        .accessibilityAddTraits(selected ? .isSelected:[])
+                }
+            }
+        }
+    }
+
+    private var workspace:some View {
+        VStack(alignment:.leading,spacing:10) {
+            Text("部件").font(.headline)
+            HStack(spacing:6) {
+                ForEach(mold.parts.indices,id:\.self) {index in
+                    let material=ForgeMaterial.all.first{$0.id == materials[index]}
+                    let selected=part == index
+                    Button {part=index} label: {
+                        VStack(spacing:4) {
+                            Text(mold.parts[index].name).font(.system(size:12))
+                            Text(material?.name ?? "未选").font(.caption)
+                                .foregroundStyle(material == nil ? Palette.muted:Palette.goldLight)
+                        }.lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity).frame(height:30)
+                    }.buttonStyle(PixelButtonStyle(primary:selected))
+                        .accessibilityLabel(mold.parts[index].name)
+                        .accessibilityValue(material?.name ?? "未选")
+                        .accessibilityAddTraits(selected ? .isSelected:[])
+                }
+            }
+            HStack {
+                Text("\(component.name)材料").font(.headline)
+                Spacer()
+                Button("取回材料"){materials[part]=""}.disabled(materials[part].isEmpty)
+            }.padding(.top,3)
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:65,maximum:92),spacing:6)],spacing:6) {
+                ForEach(ForgeMaterial.all) {material in materialButton(material)}
+            }
+        }
+    }
+
+    private func materialButton(_ material:ForgeMaterial)->some View {
+        let reserved=materials.indices.filter{$0 != part && materials[$0] == material.id}.count
+        let remaining=max(0,store.data.forgeMaterialCount(material)-reserved)
+        let fit=component.compatibility(material)
+        let selected=materials[part] == material.id
+        return Button {
+            materials[part]=material.id
+            if let empty=materials.firstIndex(of:"") {part=empty}
+        } label: {
+            VStack(spacing:4) {
+                GameNatureSprite(key:material.spriteKey,size:27).opacity(remaining>0 ? 1:0.47)
+                Text(material.name).font(.system(size:12))
+                Text("×\(remaining) · \(fit>=0 ? "+":"")\(fit)").font(.system(size:10)).monospacedDigit().foregroundStyle(Palette.muted)
+            }.lineLimit(1).minimumScaleFactor(0.78)
+                .frame(maxWidth:.infinity).frame(height:63)
+                .background(selected ? Palette.moss:Palette.control,in:PixelFrame())
+                .overlay(PixelFrame().strokeBorder(selected ? Palette.gold:Palette.line,lineWidth:1))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).disabled(!unlocked || remaining == 0)
+            .help("\(material.name) · 采集 +\(material.gathering) · 寻踪 +\(material.scouting) · 护行 +\(material.guarding)")
+            .accessibilityLabel(material.name)
+            .accessibilityValue("可用 \(remaining)，适配 \(fit)")
+            .accessibilityAddTraits(selected ? .isSelected:[])
+    }
+
+    private func begin() {
+        guard started == nil,!rolling,!reveal,
+              store.commitGameChange({$0.forgeGear(moldID:mold.id,materialIDs:materials)}) else{return}
+        if reduceMotion {rolling=true}
+        else {started=Date()}
+    }
+
+    private func resultWindow(_ result:ForgeResult)->some View {
+        let item=result.gearID.flatMap{store.data.expeditionState.resolveGear($0)}
+        return SceneDialog(preferred:CGSize(width:480,height:385)) {
+            HStack {Text("制作结果").font(.title3);Spacer();Button("关闭"){showing=false}}
+        } content: {
+            VStack(spacing:10) {
+                if let item {
+                    GameNatureSprite(key:item.spriteKey,size:82)
+                    Text(item.name).font(.headline).foregroundStyle(Palette.goldLight)
+                    if let lore=item.description {Text(lore).font(.caption).foregroundStyle(Palette.ink)}
+                    Text("采集 \(item.gathering) · 寻踪 \(item.scouting) · 护行 \(item.guarding)").font(.caption)
+                    Text("品质 \(result.roll.quality) · \(Money.text(item.salePrice))").font(.caption).foregroundStyle(Palette.muted)
+                } else {
+                    Text(sewing ? "断针散线":"坩埚破裂").font(.headline).foregroundStyle(Palette.goldLight)
+                    Text("材料损毁，未获得成品").font(.caption)
+                }
+                Text("d20 · \(result.roll.natural) \(result.roll.modifier>=0 ? "+":"")\(result.roll.modifier) = \(result.roll.total)")
+                    .font(.caption).foregroundStyle(Palette.goldLight)
+            }.multilineTextAlignment(.center).frame(maxWidth:.infinity)
+        } footer: {
+            HStack {
+                if item != nil {
+                    Button("去商店"){
+                        showing=false
+                        SceneNavigation.open("商店",store:store,from:"锻造室")
+                    }
+                }
+                Spacer()
+                Button("继续制作"){
+                    selectMold(mold)
+                    reveal=false
+                }.buttonStyle(PixelButtonStyle(primary:true))
+            }
+        }
     }
 }
 

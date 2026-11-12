@@ -18,6 +18,7 @@ final class GardenStore: ObservableObject {
     private var journalFollowsToday = true
     func stopFollowingJournalToday() { journalFollowsToday = false }
     @Published var activeTool = "任务"
+    var currentRoute:String {SceneNavigation.canonical(pet == nil || pet?.managerIsOpen == true ? selectedPage:activeTool)}
     @Published var focusDraftMinutes = 25
     @Published var pendingFocusReviewID: UUID? = nil
     @Published var focusReviewRequests: [UUID: UUID] = [:]
@@ -242,8 +243,7 @@ final class GardenStore: ObservableObject {
     var gameFocus: Double { data.gameFocus(at: now) }
     func openJournal(date: Date) {
         journalDate = date
-        selectedPage = "日记"
-        pet?.openTool("日记")
+        SceneNavigation.open("日记",store:self,from:currentRoute)
     }
     var idlePose: Int {
         get { data.preferences.idlePose ?? 0 }
@@ -1029,3 +1029,21 @@ final class KeyCounter {
 }
 
 private extension String { var nilIfBlank: String? { isEmpty ? nil : self } }
+
+extension SceneNavigation {
+    static func back(store:GardenStore) {
+        if let pet=store.pet {pet.back()}
+        else {
+            let route=store.sceneNavigation.goBack(from:store.selectedPage) ?? "菜单"
+            store.selectedPage=route == "计时器" ? "专注":route
+        }
+    }
+    static func open(_ route:String,store:GardenStore,from source:String?=nil) {
+        let route=canonical(route)
+        if let pet=store.pet {pet.openTool(route,from:source)}
+        else {
+            store.sceneNavigation.enter(route,from:source)
+            store.selectedPage=route == "计时器" ? "专注":route
+        }
+    }
+}

@@ -28,10 +28,10 @@ struct MiningScene: View {
                     WalletView(coins: store.data.garden.coins)
                 }
                 SceneToolbar(items: [
-                    SceneToolbarItem("锻造室") { SceneNavigation.open("锻造室", store: store) },
-                    SceneToolbarItem("酒馆") { SceneNavigation.open("酒馆", store: store) },
-                    SceneToolbarItem("户外地图") { SceneNavigation.open("户外地图", store: store) },
-                    SceneToolbarItem("专注") { SceneNavigation.open("计时器", store: store) }
+                    SceneToolbarItem("锻造室") { SceneNavigation.open("锻造室",store:store,from:store.currentRoute) },
+                    SceneToolbarItem("酒馆") { SceneNavigation.open("酒馆",store:store,from:store.currentRoute) },
+                    SceneToolbarItem("户外地图") { SceneNavigation.open("户外地图",store:store,from:store.currentRoute) },
+                    SceneToolbarItem("专注") { SceneNavigation.open("计时器",store:store,from:store.currentRoute) }
                 ])
             }
             SceneCanvas(hasSidebar: true) { size in
@@ -63,7 +63,7 @@ struct MiningScene: View {
                 }.position(x: w * 0.73, y: h * 0.58).allowsHitTesting(false)
             }
             VStack {
-                layerArrow(up: true, layer: layer)
+                if layer.adjacent(-1) != nil {layerArrow(up: true, layer: layer)}
                 Spacer(minLength: 0)
                 layerArrow(up: false, layer: layer)
             }.padding(9)
@@ -72,10 +72,9 @@ struct MiningScene: View {
 
     private func layerArrow(up: Bool, layer: MineLayer) -> some View {
         let next = layer.adjacent(up ? -1 : 1)
-        let label = next.map { (up ? "上行 · " : "下行 · ") + $0.name } ?? (up ? "返回户外地图" : "已到最深层")
+        let label = next.map { (up ? "上行 · " : "下行 · ") + $0.name } ?? "已到最深层"
         return Button {
             if let next { highlighted = next.id; tab = "矿层" }
-            else if up { SceneNavigation.open("户外地图", store: store) }
         } label: {
             Text(up ? "▲" : "▼").font(.system(size: 16)).foregroundStyle(Palette.goldLight)
                 .frame(width: 34, height: 30).background(Palette.paper.opacity(0.94), in: PixelFrame())

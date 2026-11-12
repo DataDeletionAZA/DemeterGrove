@@ -132,7 +132,7 @@ struct StatsPage: View {
             }
         }
     }
-    private func openDay(_ day: Date) { store.journalDate = day; store.selectedPage = "日程"; store.pet?.openTool("日程") }
+    private func openDay(_ day: Date) { store.journalDate = day; SceneNavigation.open("日程",store:store,from:store.currentRoute) }
     private func resetDate() {
         switch range { case .week: weekDate = store.today; case .month: monthDate = store.today; case .year: yearDate = store.today }
     }

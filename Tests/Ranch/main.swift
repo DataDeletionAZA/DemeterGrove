@@ -46,7 +46,7 @@ import Foundation
         fullTrough.garden.economy.ranch = RanchState(trough: 24, feedBags: 1, lastFocus: 0)
         fullTrough.garden.ingredients["玉米"] = 2
         let fullBefore = try encoded(fullTrough)
-        check(!fullTrough.fillRanchTrough(.bag, at: now) && !fullTrough.fillRanchTrough(.corn, at: now))
+        check(!fullTrough.fillRanchTrough(.corn, at: now))
         check(try encoded(fullTrough) == fullBefore)
 
         var timed = fresh
@@ -91,11 +91,37 @@ import Foundation
 
         var noRetro = fixture(focus: 10000)
         check(noRetro.buyRanchAnimal("chicken", at: now))
-        check(noRetro.buyRanchFeed(at: now) && noRetro.fillRanchTrough(.bag, at: now))
-        check(!noRetro.advanceRanch(to: 10000) && noRetro.ranchState.readyCount == 0 && noRetro.ranchState.trough == 6)
+        check(noRetro.buyRanchFeed(at: now))
+        check(!noRetro.advanceRanch(to: 10000) && noRetro.ranchState.readyCount == 0)
+        check(noRetro.ranchState.trough == 0 && noRetro.ranchState.feedBags == 1)
         noRetro.sessions[0].seconds += 900
         check(noRetro.advanceRanch(to: noRetro.totalFocus) && noRetro.ranchState.readyCount == 1)
+        check(noRetro.ranchState.trough == 5 && noRetro.ranchState.feedBags == 0)
         validate(noRetro, at: now, label: "new animal and feed at existing focus")
+
+        let legacyJSON = Data("""
+        {"animals":[{"id":"62F339BD-B810-4515-974C-DFB28FCC1AC3","speciesID":"chicken","progress":450,"fed":true,"ready":1}],
+        "trough":1,"feedBags":2,"expanded":false,"lastFocus":1350}
+        """.utf8)
+        var resumed = fixture(focus: 1350)
+        resumed.garden.economy.ranch = try JSONDecoder().decode(RanchState.self, from: legacyJSON)
+        validate(resumed, at: now, label: "old save with a half-finished meal and both feed stocks")
+        check(resumed.ranchState.feedPortions == 13 && resumed.ranchState.readyCount == 1)
+        resumed.timer = TimerRun(kind: .stopwatch, target: 1800, taskTitle: "阅读", startedAt: now, resumedAt: nil)
+        check(!resumed.advanceRanch(to: resumed.gameFocus(at: now.addingTimeInterval(3000))))
+        resumed.timer?.resume(at: now)
+        check(resumed.advanceRanch(to: resumed.gameFocus(at: now.addingTimeInterval(1350))))
+        check(resumed.ranchState.readyCount == 3 && resumed.ranchState.trough == 0 && resumed.ranchState.feedBags == 2)
+        check(resumed.advanceRanch(to: resumed.gameFocus(at: now.addingTimeInterval(1351))))
+        check(resumed.ranchState.animals[0].progress == 1 && resumed.ranchState.feedPortions == 11 && resumed.ranchState.feedBags == 1)
+        let savedMeal = resumed.ranchState
+        resumed.timer?.pause(at: now.addingTimeInterval(1351))
+        check(!resumed.advanceRanch(to: resumed.gameFocus(at: now.addingTimeInterval(7200))) && resumed.ranchState == savedMeal)
+        resumed.timer?.resume(at: now.addingTimeInterval(7200))
+        check(resumed.advanceRanch(to: resumed.gameFocus(at: now.addingTimeInterval(8099))))
+        check(resumed.ranchState.readyCount == 4 && resumed.ranchState.feedPortions == 11)
+        var fullAnimal = RanchState(animals: [RanchAnimal(speciesID: "chicken", ready: 8)], feedBags: 3, lastFocus: 0)
+        check(fullAnimal.advance(to: 5000) && fullAnimal.feedBags == 3 && fullAnimal.trough == 0)
 
         var expansion = fixture(focus: 100000)
         for _ in 0..<4 { check(expansion.buyRanchAnimal("chicken", at: now)) }
@@ -113,6 +139,12 @@ import Foundation
         check(expansion.collectRanchProduce(materialRanch.animals[4].id, at: now) == ["银色粪肥": 2])
         check(expansion.garden.economy.finds["mooncalf_dung"] == 2 && expansion.garden.ingredients["银色粪肥"] == nil)
         validate(expansion, at: now, label: "expanded ranch and collected mooncalf material")
+        var cashmere = fixture(focus: 100000)
+        check(cashmere.buyRanchAnimal("cashmere_goat", at: now) && cashmere.buyRanchFeed(at: now))
+        cashmere.sessions[0].seconds += 35 * 60
+        check(cashmere.collectRanchProduce(at: now) == ["羊绒": 1])
+        check(cashmere.garden.economy.finds["cashmere"] == 1 && cashmere.ranchState.feedPortions == 5)
+        validate(cashmere, at: now, label: "cashmere goat production and collected material")
         var mixed = fixture(focus: 100000)
         mixed.garden.economy.ranch = RanchState(animals: [RanchAnimal(speciesID: "chicken", ready: 1), RanchAnimal(speciesID: "chicken", ready: 2), RanchAnimal(speciesID: "cow", ready: 3)], trough: 10, lastFocus: mixed.totalFocus)
         let previousEggs = mixed.garden.ingredients["鸡蛋", default: 0], previousMilk = mixed.garden.ingredients["牛奶", default: 0]
@@ -161,7 +193,9 @@ import Foundation
         store.data = fixture()
         check(store.commitGameChange { $0.buyRanchAnimal("chicken", at: now) })
         check(store.commitGameChange { $0.buyRanchFeed(at: now) })
-        check(store.commitGameChange { $0.fillRanchTrough(.bag, at: now) })
+        store.data.timer = TimerRun(kind: .stopwatch, target: 1800, taskTitle: "阅读", startedAt: now, resumedAt: now)
+        store.now = now
+        check(store.save() && store.data.ranchState.feedBags == 1)
         let persisted = try SaveFile.read(store.file)
         check(persisted.ranchState == store.data.ranchState)
         let disk = try Data(contentsOf: store.file)
@@ -170,9 +204,10 @@ import Foundation
         try manager.moveItem(at: store.file, to: backup)
         try manager.createDirectory(at: store.file, withIntermediateDirectories: false)
         try Data([1]).write(to: store.file.appendingPathComponent("blocked"))
+        store.now = now.addingTimeInterval(1)
         check(!store.commitGameChange { $0.buyRanchFeed(at: now) })
         check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
         try manager.removeItem(at: store.file); try manager.moveItem(at: backup, to: store.file)
-        print("PASS: ranch production, paused/rest clocks, feed exhaustion, bounded long focus, no retroactive feed, duplicate species, expansion, collection conservation, invalid saves, persistence and failed-save rollback")
+        print("PASS: ranch production, automatic reserve feeding, paused/rest clocks, feed exhaustion, old save and partial meal, bounded long focus, no retroactive feed, expansion, collection conservation, invalid saves, persistence and failed-save rollback")
     }
 }

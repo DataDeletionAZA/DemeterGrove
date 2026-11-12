@@ -1,7 +1,9 @@
 import Foundation
 
 final class PetController {
-    func openTool(_ name: String) { }
+    var managerIsOpen = false
+    func openTool(_ name: String, from source: String? = nil) { }
+    func back() { }
     func show() { }
     func hide() { }
     func closeMenu() { }

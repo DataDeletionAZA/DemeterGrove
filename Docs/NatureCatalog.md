@@ -142,6 +142,7 @@
 | goat | 奶山羊 | 现实物种 | 3 / 180 | 羊奶 ×1 | 25 | [zoo_goat](https://nationalzoo.si.edu/animals/goat) |
 | sheep | 绵羊 | 现实物种 | 4 / 210 | 羊毛 ×1 | 35 | [sheep_wool](https://www.fao.org/livestock-systems/global-distributions/sheep/en/) |
 | rabbit | 安哥拉兔 | 现实物种 | 4 / 190 | 兔绒 ×1 | 30 | [rabbit_fibre](https://www.fao.org/4/v9384e/v9384e05.htm) |
+| cashmere_goat | 绒山羊 | 现实物种 | 5 / 260 | 羊绒 ×1 | 35 | [ucanr_cashmere](https://ucanr.edu/program/uc-small-farms-network/cashmere-goats) |
 | alpaca | 羊驼 | 现实物种 | 5 / 280 | 羊驼绒 ×1 | 40 | [zoo_alpaca](https://nationalzoo.si.edu/animals/alpaca) |
 | honeybee | 西方蜜蜂 | 现实物种 | 5 / 200 | 蜂蜜 ×1 | 30 | [bee_pollination](https://www.nrcs.usda.gov/sites/default/files/2024-06/Honey%20Bee%20SD-FS-94%206-24.pdf) |
 | mooncalf | 月痴兽 | 哈利·波特 | 6 / 360 | 银色粪肥 ×1 | 40 | [hp_mooncalf](https://www.harrypotter.com/fact-file/creatures/mooncalf) |
@@ -246,6 +247,7 @@
 - `zoo_chicken`：[Smithsonian National Zoo · Chicken](https://nationalzoo.si.edu/animals/chicken)
 - `zoo_cow`：[Smithsonian National Zoo · Cow](https://nationalzoo.si.edu/animals/cow)
 - `zoo_goat`：[Smithsonian National Zoo · Goat](https://nationalzoo.si.edu/animals/goat)
+- `ucanr_cashmere`：[UC Small Farms Network · Cashmere Goats](https://ucanr.edu/program/uc-small-farms-network/cashmere-goats)
 - `zoo_alpaca`：[Smithsonian National Zoo · Alpaca](https://nationalzoo.si.edu/animals/alpaca)
 - `duck_domestication`：[Cornell Lab · Mallard](https://www.allaboutbirds.org/guide/mallard)
 - `sheep_wool`：[FAO · Sheep](https://www.fao.org/livestock-systems/global-distributions/sheep/en/)

@@ -44,7 +44,7 @@ struct PotionScene:View {
                 HStack {
                     Text(ready ? "魔药已熬好" : "还需 \(Int(ceil(max(0,trip.duration-(store.gameFocus-trip.startedAt))/60))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight)
                     Spacer()
-                    if !ready {Button("记录专注"){SceneNavigation.open("计时器",store:store)}}
+                    if !ready {Button("记录专注"){SceneNavigation.open("计时器",store:store,from:store.currentRoute)}}
                 }
             } else {
                 Text(selection.portions.isEmpty ? "桌上还没有材料":"材料 \(selection.portions.count)/2").font(.caption).foregroundStyle(Palette.muted)

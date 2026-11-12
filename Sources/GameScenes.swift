@@ -50,13 +50,17 @@ struct GameRoomView: View {
     }
     private var cooking: Bool { store.now < cookingUntil }
     private var readyToCook:Bool {recipe.map{store.data.canCook($0)} ?? false}
+    private var fieldPlots: [(offset: Int, element: Plot)] {
+        Array(store.data.garden.plots.enumerated()).filter { $0.offset / Garden.plotsPerField == field }
+    }
     private var roomStatus:String {
         if !hint.isEmpty {return hint}
         switch room {
         case "农场":
             if let selectedSeed { return "已选\(selectedSeed.rawValue)种子 · 剩余 \(store.data.garden.cropSeeds[selectedSeed.rawValue,default:0]) 袋" }
-            let empty=store.data.garden.plots.filter{$0.crop == nil}.count
-            let mature=store.data.garden.plots.filter{$0.crop != nil && $0.progress(store.gameFocus)>=1}.count
+            let plots = fieldPlots.map(\.element)
+            let empty=plots.filter{$0.crop == nil}.count
+            let mature=plots.filter{$0.crop != nil && $0.progress(store.gameFocus)>=1}.count
             return "空地 \(empty) · 已成熟 \(mature)"
         case "厨房":return cooking ? "正在料理…" : additions.isEmpty ? "料理台还没有食材" : "已放入 \(selection.portions.count)/6 份食材"
         default:return "在售 \(store.data.garden.shopOrderCount) · 待收款 \(Money.text(store.data.garden.autoShopState.receivables))"
@@ -70,8 +74,8 @@ struct GameRoomView: View {
                     resource(9,"露水",store.data.garden.water)
                     WalletView(coins:store.data.garden.coins)
                     Spacer(minLength:0)
-                    if room == "农场",store.data.garden.plots.count>6 {
-                        PixelSelect(selection:$field,items:(0..<(store.data.garden.plots.count/6)).map{($0,"田地 \($0+1)")}).frame(width:100)
+                    if room == "农场",store.data.garden.fieldCount > 1 {
+                        PixelSelect(selection:$field,items:(0..<store.data.garden.fieldCount).map{($0,"田地 \($0+1)")}).frame(width:100)
                     }
                 }
                 SceneToolbar(items:toolbarItems)
@@ -80,11 +84,11 @@ struct GameRoomView: View {
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name: room == "农场" ? "Garden" : room == "厨房" ? "Kitchen" : "Shop").frame(width:w,height:h)
-                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
+                    if room == "商店" {SceneTarget(object:.shopExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store,from:store.currentRoute)}}
                     if room == "农场" {gardenScene(w:w,h:h)}
                     else if room == "厨房" {kitchenScene(w:w,h:h)}
                     else {shopScene(w:w,h:h)}
-                    if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store)}}
+                    if room == "农场" {SceneTarget(object:.gardenExit,sceneSize:size,label:"回到小院"){SceneNavigation.open("首页",store:store,from:store.currentRoute)}}
                     SceneParticles()
                     SceneArrows(store:store,scene:room)
                 }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
@@ -120,7 +124,7 @@ struct GameRoomView: View {
         }
     }
     private var toolbarItems:[SceneToolbarItem] {
-        var items=[SceneToolbarItem("成长"){SceneNavigation.open("成长",store:store)},
+        var items=[SceneToolbarItem("成长"){SceneNavigation.open("成长",store:store,from:store.currentRoute)},
                    SceneToolbarItem("库存"){if let pet=store.pet {pet.openInventory()} else {inventory=true}}]
         if room == "厨房" {
             items.append(SceneToolbarItem("配方册"){book=true})
@@ -134,7 +138,7 @@ struct GameRoomView: View {
         HStack(spacing: 3) { GameSprite(index:index,size:28); Text("\(count)").monospacedDigit().font(.system(size:13,weight:.medium)) }.help("\(name) \(count)").accessibilityLabel("\(name) \(count)")
     }
     @ViewBuilder private func gardenScene(w: CGFloat, h: CGFloat) -> some View {
-        ForEach(Array(store.data.garden.plots.enumerated()).filter{$0.offset/6 == field}, id: \.element.id) { index, plot in
+        ForEach(fieldPlots, id: \.element.id) { index, plot in
             let soil = SceneObject.gardenPlots[index % SceneObject.gardenPlots.count]
             let center = soil.target
             let x = w * center.x, y = h * center.y
@@ -180,10 +184,7 @@ struct GameRoomView: View {
             PixelScrollView {
                 seedCards(plot:nil)
             }
-            Button(action:scatterSeeds) {
-                HStack(spacing:5) {GameSprite(index:8,size:18);Text("撒一把种子")}.frame(maxWidth:.infinity)
-            }.buttonStyle(PixelButtonStyle(primary:true))
-                .disabled(ownedSeeds.isEmpty || store.data.garden.water < 1 || !store.data.garden.plots.contains{$0.crop == nil})
+            scatterButton
             if selectedSeed != nil {Button("取消播种"){selectedSeed=nil;hint=""}}
             if ownedSeeds.isEmpty {Text("种子柜空空的").font(.caption).foregroundStyle(Palette.muted)}
         }.padding(10).magicSurface(Palette.paper)
@@ -215,18 +216,26 @@ struct GameRoomView: View {
     }
     private func scatterSeeds() {
         var count=0
-        guard store.commitGameChange({count=$0.plantRandomly(at:store.now);return count > 0}) else {return}
+        guard store.commitGameChange({count=$0.plantRandomly(startingOn:field,at:store.now);return count > 0}) else {return}
         plantingPlot=nil;seedCabinet=false;hint="";store.message="种下了 \(count) 袋种子。"
     }
+    private var scatterButton: some View {
+        Button(action:scatterSeeds) {
+            HStack(spacing:5) {GameSprite(index:8,size:18);Text("撒一把种子")}.frame(maxWidth:.infinity)
+        }.buttonStyle(PixelButtonStyle(primary:true))
+            .disabled(ownedSeeds.isEmpty || store.data.garden.water < 1 || !store.data.garden.plots.contains{$0.crop == nil})
+            .help("从当前田地开始，依次播种空地")
+    }
     private func seedSelection(_ plot:Plot?) -> some View {
-        VStack(alignment:.leading,spacing:14) {
+        SceneDialog(preferred:CGSize(width:460,height:370)) {
             HStack {Text(plot == nil ? "种子柜":"选择种子").font(.title3);Spacer();Button("关闭"){plantingPlot=nil;seedCabinet=false}}
             Text("露水 \(store.data.garden.water) · 播种消耗 1 袋种子、1 滴露水").font(.caption).foregroundStyle(Palette.muted)
+        } content: {
             if ownedSeeds.isEmpty {Text("种子柜空空的").padding(.vertical,20)}
-            PixelScrollView {
-                seedCards(plot:plot)
-            }
-        }.padding(20).frame(width:460,height:370).magicSurface(Palette.paper,strong:true).magicControls().foregroundStyle(Palette.ink)
+            seedCards(plot:plot)
+        } footer: {
+            if plot == nil { scatterButton }
+        }
     }
     private var methodSelection:some View {
         SceneDialog(preferred:CGSize(width:530,height:460)) {
@@ -339,7 +348,7 @@ struct GameRoomView: View {
                     TextField("料理名称",text:$dishName).textFieldStyle(PixelTextFieldStyle()).frame(height:32).onSubmit{rename(dish)}
                     Button("命名"){rename(dish)}.frame(height:32).disabled(dishName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
                     if dish.outputIngredient == nil {
-                        Button("去上架"){SceneNavigation.open("商店",store:store)}.frame(height:32)
+                        Button("去上架"){SceneNavigation.open("商店",store:store,from:store.currentRoute)}.frame(height:32)
                     }
                 }
                 if dish.outputIngredient != nil {Text("已放入食材柜").font(.caption).foregroundStyle(Palette.goldLight)}

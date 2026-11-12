@@ -49,16 +49,6 @@ extension SceneCanvas where Sidebar == EmptyView {
     }
 }
 
-extension SceneNavigation {
-    static func open(_ route:String,store:GardenStore,from source:String?=nil) {
-        let route=canonical(route)
-        if let pet=store.pet {pet.openTool(route,from:source)}
-        else {
-            store.sceneNavigation.enter(route,from:source)
-            store.selectedPage=route == "计时器" ? "专注":route
-        }
-    }
-}
 
 struct SceneArrows:View {
     @ObservedObject var store:GardenStore
@@ -73,7 +63,7 @@ struct SceneArrows:View {
         }
     }
     private func arrow(_ glyph:String,route:String)->some View {
-        Button {SceneNavigation.open(route,store:store)} label: {
+        Button {SceneNavigation.open(route,store:store,from:store.currentRoute)} label: {
             Text(glyph).font(.system(size:16)).foregroundStyle(Palette.goldLight)
                 .frame(width:30,height:34).background(Palette.paper.opacity(0.92),in:PixelFrame())
         }.buttonStyle(.plain).help(SceneNavigation.title(route)).accessibilityLabel("前往\(SceneNavigation.title(route))")

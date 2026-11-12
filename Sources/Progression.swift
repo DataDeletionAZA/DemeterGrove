@@ -204,7 +204,7 @@ extension AppData {
         let rank=garden.rank(item)
         guard rank<item.limit,levelProgress.level>=item.level(rank),garden.coins>=item.price(rank) else{return false}
         garden.coins -= item.price(rank);garden.economy.upgrades[item.rawValue]=rank+1
-        if item == .farmland { garden.plots += (0..<6).map{_ in Plot()} }
+        if item == .farmland { garden.plots += (0..<Garden.plotsPerField).map{_ in Plot()} }
         return true
     }
     mutating func buyCosmetic(_ item:Cosmetic,at date:Date) -> Bool {

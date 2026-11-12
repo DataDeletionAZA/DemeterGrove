@@ -46,6 +46,22 @@ import Foundation
         check(limited.plantRandomly(at:now) == 2)
         check(limited.garden.seeds == 14 && limited.garden.water == 0)
 
+        var currentField = fixture(fields:3,seeds:[Crop.carrot.rawValue:5],water:4)
+        for index in [6, 8, 9, 11] {
+            currentField.garden.plots[index].crop = .tomato
+        }
+        let seededBefore = try encoded(currentField)
+        check(try currentField.plantRandomly(startingOn:-1,at:now) == 0 && encoded(currentField) == seededBefore)
+        check(try currentField.plantRandomly(startingOn:3,at:now) == 0 && encoded(currentField) == seededBefore)
+        check(currentField.plantRandomly(startingOn:1,at:now) == 4)
+        check(currentField.garden.plots.indices.filter { currentField.garden.plots[$0].crop == .carrot } == [7, 10, 12, 13])
+        check(currentField.garden.seeds == 1 && currentField.garden.water == 0)
+        var lastField = fixture(fields:3,seeds:[Crop.mint.rawValue:2],water:5)
+        for index in 12..<17 { lastField.garden.plots[index].crop = .tomato }
+        check(lastField.plantRandomly(startingOn:2,at:now) == 2)
+        check(lastField.garden.plots.indices.filter { lastField.garden.plots[$0].crop == .mint } == [0, 17])
+        check(lastField.garden.seeds == 0 && lastField.garden.water == 3)
+
         for fields in [2,3] {
             var expanded=fixture(fields:fields,seeds:[Crop.carrot.rawValue:30],water:30)
             expanded.garden.plots[0]=Plot(id:expanded.garden.plots[0].id,crop:.tomato,plantedAt:0,duration:900,bonus:60)
@@ -98,10 +114,11 @@ import Foundation
         store.data=fixture(fields:3,seeds:[Crop.carrot.rawValue:4,Crop.mint.rawValue:3],water:20)
         check(store.commitGameChange{$0.plant(.mint,in:$0.garden.plots[0].id,at:now)})
         var count=0
-        check(store.commitGameChange{count=$0.plantRandomly(at:now);return count > 0})
+        check(store.commitGameChange{count=$0.plantRandomly(startingOn:1,at:now);return count > 0})
         check(count == 6)
         let persisted=try SaveFile.read(store.file)
         check(try encoded(persisted.garden) == encoded(store.data.validated().garden))
+        check(persisted.garden.plots.indices.filter { persisted.garden.plots[$0].crop != nil } == [0, 6, 7, 8, 9, 10, 11])
         check(persisted.garden.cropSeeds.values.allSatisfy{$0 >= 0} && persisted.garden.water == 13)
 
         store.data=fixture(seeds:[Crop.carrot.rawValue:4],water:10)
@@ -132,6 +149,6 @@ import Foundation
         shop.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:now,seconds:300)]
         check(shop.collectSale(order.id,at:now) && shop.garden.coins == 4321+order.price)
         check(!shop.collectSale(order.id,at:now))
-        print("PASS: repeated planting, exhausted/occupied guards, partial random sowing, water limits, all expanded fields, new-crop reminders, saved inventory, failed-save rollback, frozen sale proceeds")
+        print("PASS: repeated planting, exhausted/occupied guards, current field and page order, seed and water limits, expanded fields, new-crop reminders, saved inventory, failed-save rollback, frozen sale proceeds")
     }
 }

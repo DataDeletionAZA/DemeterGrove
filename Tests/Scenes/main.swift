@@ -21,7 +21,7 @@ assert(SceneNavigation.neighbors(of:"首页") == nil)
 assert(SceneNavigation.neighbors(of:"其他") == nil)
 assert(SceneNavigation.neighbors(of:"书房")!.0 == "锻造室")
 assert(SceneNavigation.neighbors(of:"商店")!.1 == "炼金室")
-for group in [SceneNavigation.rooms,SceneNavigation.wilds] {
+for group in [SceneNavigation.rooms,FishingLocation.all.map{"钓鱼/"+$0.id},ExpeditionLocation.all.map{"探险/"+$0.id}] {
     for scene in group {
         let (previous,next)=SceneNavigation.neighbors(of:scene)!
         assert(SceneNavigation.neighbors(of:previous)!.1 == scene)
@@ -181,28 +181,43 @@ assert(!ShopCustomerPose(progress:1).behindCounter)
 print("PASS: fixed parent routes, alchemy aliases, bounded dialog and customer feet/depth")
 
 var navigation = SceneNavigation.Context()
-for route in ["任务", "待办", "四象限", "习惯", "日程", "日记", "计时器", "专注"] {
-    navigation.enter(route,from:"书房")
-    assert(navigation.parent(of:route) == "书房")
-    assert(navigation.parent(of:"书房") == nil)
-    navigation.enter("书房")
-    assert(navigation.parent(of:route) == nil)
+for route in SceneNavigation.rooms + SceneNavigation.wilds + ["任务","习惯","日记","户外地图"] {
     navigation.enter(route)
     assert(navigation.parent(of:route) == nil)
+    assert(navigation.goBack(from:route) == nil)
 }
-for source in ["菜单", "首页", "厨房", "商店"] {
-    navigation.enter("任务",from:source)
-    assert(navigation.parent(of:"任务") == nil)
+for source in ["书房","厨房","锻造室","首页","户外地图"] {
+    navigation.enter(source)
+    for route in ["任务","习惯","日程","日记","计时器","成长","商店"] where route != source {
+        navigation.enter(route,from:source)
+        assert(navigation.parent(of:route) == source)
+        assert(navigation.goBack(from:route) == source)
+        assert(navigation.parent(of:source) == nil)
+    }
 }
-navigation.enter("习惯",from:"书房")
-assert(navigation.parent(of:"任务") == nil)
-navigation.enter("任务")
-assert(navigation.parent(of:"习惯") == nil)
-for route in ["成长", "农场", "户外地图"] + SceneNavigation.wilds {
-    navigation.enter(route,from:"书房")
-    assert(navigation.parent(of:route) == SceneNavigation.parent(of:route))
-}
-print("PASS: study content entry context, aliases, direct-entry reset and fixed parent preservation")
+navigation.enter("书房")
+navigation.enter("锻造室",from:"书房")
+navigation.enter("商店",from:"锻造室")
+assert(navigation.goBack(from:"商店") == "锻造室")
+assert(navigation.goBack(from:"锻造室") == "书房")
+assert(navigation.goBack(from:"书房") == nil)
+navigation.enter("地图")
+navigation.enter("户外地图",from:"小院")
+navigation.enter("钓鱼/lake",from:"户外地图")
+navigation.enter("钓鱼/river",from:"钓鱼/lake")
+assert(navigation.goBack(from:"钓鱼/river") == "钓鱼/lake")
+assert(navigation.goBack(from:"钓鱼/lake") == "户外地图")
+assert(navigation.goBack(from:"户外地图") == "首页")
+navigation.enter("专注",from:"书房")
+assert(navigation.parent(of:"计时器") == "书房")
+navigation.enter("日记")
+assert(navigation.parent(of:"日记") == nil && navigation.parent(of:"计时器") == nil)
+assert(SceneNavigation.neighbors(of:"矿洞") == nil)
+assert(SceneNavigation.neighbors(of:"湖畔钓鱼")?.0.hasPrefix("钓鱼/") == true)
+assert(SceneNavigation.neighbors(of:"林间冒险")?.1.hasPrefix("探险/") == true)
+for location in FishingLocation.all {assert(SceneNavigation.title("钓鱼/"+location.id) == location.name)}
+for location in ExpeditionLocation.all {assert(SceneNavigation.title("探险/"+location.id) == location.name)}
+print("PASS: entry-source back paths, aliases, direct-entry reset, isolated fishing/adventure arrows and destination labels")
 
 for viewportWidth:CGFloat in [240,460,1000,1800,2600] {
     let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth)

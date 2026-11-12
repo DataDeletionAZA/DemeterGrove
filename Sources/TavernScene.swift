@@ -18,10 +18,10 @@ struct TavernScene: View {
                     WalletView(coins:store.data.garden.coins)
                 }
                 SceneToolbar(items:[
-                    SceneToolbarItem("出发探险"){SceneNavigation.open("探险",store:store)},
-                    SceneToolbarItem("锻造室"){SceneNavigation.open("锻造室",store:store)},
-                    SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store)},
-                    SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store)}
+                    SceneToolbarItem("出发探险"){SceneNavigation.open("探险",store:store,from:"酒馆")},
+                    SceneToolbarItem("锻造室"){SceneNavigation.open("锻造室",store:store,from:"酒馆")},
+                    SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"酒馆")},
+                    SceneToolbarItem("小院"){SceneNavigation.open("首页",store:store,from:"酒馆")}
                 ])
             }
             SceneCanvas(hasSidebar:true) { size in
@@ -45,6 +45,7 @@ struct TavernScene: View {
                         }.opacity(store.data.levelProgress.level >= person.level ? 1:0.55)
                 }.position(x:x,y:y)
             }
+            SceneArrows(store:store,scene:"酒馆")
         }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
     }
 

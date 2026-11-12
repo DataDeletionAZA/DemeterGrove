@@ -9,8 +9,10 @@ struct ForgeMaterial:Identifiable {
     let scouting:Int
     let guarding:Int
     let value:Int
+    var isMineral:Bool {Mineral.all.contains{$0.id == id}}
+    var isForage:Bool {!isMineral && NatureCatalog.forage.contains{$0.id == id}}
     var spriteKey:String {
-        if Mineral.all.contains(where:{$0.id == id}) {return "mineral_"+id}
+        if isMineral {return "mineral_"+id}
         return NatureItemInfo.find(id)?.spriteKey ?? "ranch_"+id
     }
     static let all:[ForgeMaterial]=[
@@ -26,7 +28,11 @@ struct ForgeMaterial:Identifiable {
         .init(id:"sheep_wool",name:"羊毛",kind:"纤维",gathering:0,scouting:0,guarding:1,value:5),
         .init(id:"rabbit_fibre",name:"兔绒",kind:"纤维",gathering:1,scouting:0,guarding:0,value:6),
         .init(id:"alpaca_fibre",name:"羊驼绒",kind:"纤维",gathering:0,scouting:1,guarding:1,value:8),
-        .init(id:"cloud_fleece",name:"云绒",kind:"纤维",gathering:1,scouting:1,guarding:0,value:10)
+        .init(id:"cloud_fleece",name:"云绒",kind:"纤维",gathering:1,scouting:1,guarding:0,value:10),
+        .init(id:"cashmere",name:"羊绒",kind:"纤维",gathering:0,scouting:0,guarding:2,value:9),
+        .init(id:"rattan",name:"藤条",kind:"藤材",gathering:1,scouting:0,guarding:2,value:7),
+        .init(id:"willow_twig",name:"白柳落枝",kind:"木材",gathering:1,scouting:0,guarding:0,value:3),
+        .init(id:"driftwood",name:"海漂木",kind:"木材",gathering:0,scouting:1,guarding:1,value:4)
     ]
 }
 struct ForgePart:Identifiable {
@@ -38,9 +44,32 @@ struct ForgePart:Identifiable {
         if id == "grip" && material.id == "gold" {return -2}
         if (id == "cloth" || id == "lining") && material.kind != "纤维" {return -2}
         if (id == "blade" || id == "frame") && material.kind == "纤维" {return -2}
+        if id == "shaft" && material.kind != "木材" {return -2}
+        if id == "body" && material.kind != "纤维" {return -2}
         return 0
     }
 }
+
+enum ForgeGarment:String,CaseIterable {
+    case mail, rattan, cloth, cashmere
+
+    init(material:ForgeMaterial) {
+        if material.kind == "金属" || material.kind == "软金属" {self = .mail}
+        else if material.id == "rattan" {self = .rattan}
+        else if material.id == "cashmere" {self = .cashmere}
+        else {self = .cloth}
+    }
+
+    func name(for slot:GearSlot)->String {
+        switch self {
+        case .mail:return slot == .trousers ? "锁子护腿":"锁子甲"
+        case .rattan:return slot == .trousers ? "藤编护腿":"藤甲"
+        case .cloth:return slot == .trousers ? "布裤":"布衣"
+        case .cashmere:return slot == .trousers ? "羊绒裤":"羊绒衫"
+        }
+    }
+}
+
 struct ForgeMold:Identifiable {
     let id:String
     let name:String
@@ -53,23 +82,70 @@ struct ForgeMold:Identifiable {
     let guarding:Int
     var spriteKey:String {"forge_mold_"+id}
     var gearSpriteKey:String {"forge_gear_"+id}
-    var description:String {
-        switch id {
-        case "sword":return "剑刃、剑柄与缠带组成的行路短剑，适合清理挡路的枝条。"
-        case "sickle":return "弯刃与握柄组成的采集工具，收割时能避开尚在生长的嫩芽。"
-        case "pendant":return "坠心嵌入小巧的镶框，随旅人寻找林间细微的踪迹。"
-        default:return "衣身、衬里与衣扣组成的远行外衣，在风里多留一层暖意。"
-        }
+    private var hasGarmentVariants:Bool {id == "top" || id == "trousers"}
+
+    func outputName(materialIDs:[String])->String {
+        guard let main=ForgeMaterial.all.first(where:{$0.id == materialIDs.first}) else{return name}
+        if hasGarmentVariants {return ForgeGarment(material:main).name(for:slot)}
+        return specialName(materialIDs:materialIDs) ?? main.name+name
     }
+
+    func specialName(materialIDs:[String])->String? {
+        if id == "sword" && materialIDs == ["iron","copper","sheep_wool"] {return "牧途守望剑"}
+        if id == "coat" && materialIDs == ["cloud_fleece","alpaca_fibre","moonstone"] {return "月云护行衣"}
+        return nil
+    }
+
+    func outputSprite(material:ForgeMaterial)->String {
+        hasGarmentVariants ? gearSpriteKey+"_"+ForgeGarment(material:material).rawValue:gearSpriteKey
+    }
+
+    func supportsGearSprite(_ sprite:String)->Bool {
+        if hasGarmentVariants {return ForgeGarment.allCases.contains{sprite == gearSpriteKey+"_"+$0.rawValue}}
+        return sprite == gearSpriteKey
+    }
+
+    func modifier(materialIDs:[String])->Int {
+        guard materialIDs.count == parts.count else{return 0}
+        let total=zip(parts,materialIDs).reduce(0){total,pair in
+            total+(ForgeMaterial.all.first{$0.id == pair.1}.map{pair.0.compatibility($0)} ?? 0)
+        }
+        return max(-6,min(6,total))
+    }
+
+    private static let grip=ForgePart(id:"grip",name:"握柄",preferred:["copper","iron","willow_twig","driftwood"])
+    private static let wrap=ForgePart(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre","rabbit_fibre","cashmere"])
+    private static let core=ForgePart(id:"gem",name:"杖芯",preferred:["quartz","moonstone","diamond","starlight_ore"])
+    private static let lining=ForgePart(id:"lining",name:"衬里",preferred:["sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere"])
+    private static let bodyMaterials=["iron","copper","rattan","sheep_wool","rabbit_fibre","alpaca_fibre","cloud_fleece","cashmere"]
     static let all:[ForgeMold]=[
-        .init(id:"sword",name:"行路剑",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"剑刃",preferred:["iron","obsidian"]),.init(id:"grip",name:"剑柄",preferred:["copper","iron"]),.init(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre"])],gathering:1,scouting:0,guarding:1),
-        .init(id:"sickle",name:"采集镰",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"镰刃",preferred:["copper","obsidian"]),.init(id:"grip",name:"握柄",preferred:["iron","copper"])],gathering:2,scouting:0,guarding:0),
-        .init(id:"pendant",name:"寻踪坠",station:.furnace,slot:.charm,level:5,parts:[.init(id:"gem",name:"坠心",preferred:["quartz","moonstone","diamond"]),.init(id:"frame",name:"镶框",preferred:["silver","gold"])],gathering:0,scouting:2,guarding:0),
-        .init(id:"coat",name:"护行外衣",station:.sewing,slot:.coat,level:5,parts:[.init(id:"cloth",name:"衣身",preferred:["sheep_wool","cloud_fleece"]),.init(id:"lining",name:"衬里",preferred:["rabbit_fibre","alpaca_fibre"]),.init(id:"buckle",name:"衣扣",preferred:["copper","moonstone"])],gathering:0,scouting:0,guarding:2)
+        .init(id:"machete",name:"砍刀",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"blade",name:"厚刃",preferred:["iron","copper","obsidian"]),grip],gathering:3,scouting:0,guarding:1),
+        .init(id:"saber",name:"弯刀",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"blade",name:"弯刃",preferred:["iron","silver","obsidian"]),grip],gathering:2,scouting:0,guarding:2),
+        .init(id:"longsword",name:"长剑",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"blade",name:"长剑刃",preferred:["iron","starlight_ore"]),grip,wrap],gathering:0,scouting:0,guarding:4),
+        .init(id:"shortsword",name:"短剑",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"blade",name:"短剑刃",preferred:["iron","copper","obsidian"]),grip,wrap],gathering:1,scouting:1,guarding:2),
+        .init(id:"wand",name:"魔杖",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"shaft",name:"细杖身",preferred:["willow_twig","driftwood"]),core],gathering:1,scouting:3,guarding:0),
+        .init(id:"staff",name:"法杖",station:.furnace,slot:.tool,level:5,
+              parts:[.init(id:"shaft",name:"长杖身",preferred:["driftwood","willow_twig"]),core,
+                     .init(id:"frame",name:"杖箍",preferred:["copper","silver","iron"])],gathering:0,scouting:3,guarding:2),
+        .init(id:"sword",name:"单手剑",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"剑刃",preferred:["iron","obsidian"]),.init(id:"grip",name:"剑柄",preferred:["copper","iron"]),.init(id:"wrap",name:"缠带",preferred:["sheep_wool","alpaca_fibre"])],gathering:1,scouting:0,guarding:1),
+        .init(id:"sickle",name:"镰刀",station:.furnace,slot:.tool,level:5,parts:[.init(id:"blade",name:"镰刃",preferred:["copper","obsidian"]),.init(id:"grip",name:"握柄",preferred:["iron","copper"])],gathering:2,scouting:0,guarding:0),
+        .init(id:"pendant",name:"吊坠",station:.furnace,slot:.charm,level:5,parts:[.init(id:"gem",name:"坠心",preferred:["quartz","moonstone","diamond"]),.init(id:"frame",name:"镶框",preferred:["silver","gold"])],gathering:0,scouting:2,guarding:0),
+        .init(id:"top",name:"上衣",station:.sewing,slot:.coat,level:5,
+              parts:[.init(id:"body",name:"衣身",preferred:bodyMaterials),lining,
+                     .init(id:"buckle",name:"衣扣",preferred:["copper","iron","moonstone","rattan"])],gathering:0,scouting:0,guarding:2),
+        .init(id:"trousers",name:"下装",station:.sewing,slot:.trousers,level:5,
+              parts:[.init(id:"body",name:"裤身",preferred:bodyMaterials),lining,
+                     .init(id:"wrap",name:"系带",preferred:wrap.preferred+["rattan"])],gathering:0,scouting:0,guarding:2),
+        .init(id:"coat",name:"外套",station:.sewing,slot:.coat,level:5,parts:[.init(id:"cloth",name:"衣身",preferred:["sheep_wool","cloud_fleece"]),.init(id:"lining",name:"衬里",preferred:["rabbit_fibre","alpaca_fibre"]),.init(id:"buckle",name:"衣扣",preferred:["copper","moonstone"])],gathering:0,scouting:0,guarding:2)
     ]
 }
 extension CraftedGear {
-    var description:String? {ForgeMold.all.first{$0.gearSpriteKey == spriteKey}?.description ?? ItemLore.text(for:"gear:"+id)}
+    var description:String? {ItemLore.text(for:"gear:"+(forgeSprite ?? id))}
 }
 struct ForgeResult:Codable,Equatable,Identifiable {
     var id=UUID()
@@ -88,7 +164,7 @@ struct ForgeState:Codable,Equatable {
               result.materialIDs.count == mold.parts.count,
               result.materialIDs.allSatisfy({id in ForgeMaterial.all.contains{$0.id == id}}),
               result.roll.isValid,
-              result.roll.modifier == max(-6,min(6,zip(mold.parts,result.materialIDs).reduce(0){total,pair in total+pair.0.compatibility(ForgeMaterial.all.first{$0.id == pair.1}!)})),
+              result.roll.modifier == mold.modifier(materialIDs:result.materialIDs),
               !result.name.isEmpty,result.name.count<=60 else{return false}
         if result.roll.criticalFailure {return result.gearID == nil}
         return result.gearID == result.expectedGearID && result.gearID.flatMap{expedition.resolveGear($0)}?.name == result.name
@@ -102,51 +178,55 @@ extension ExpeditionState {
 }
 extension AppData {
     var forgeState:ForgeState {garden.economy.forge ?? ForgeState()}
-    func forgeMaterialCount(_ id:String)->Int {
-        Mineral.all.contains{$0.id == id} ? miningState.inventory[id,default:0]:garden.economy.finds[id,default:0]
+    func forgeMaterialCount(_ material:ForgeMaterial)->Int {
+        if material.isMineral {return miningState.inventory[material.id,default:0]}
+        if material.isForage {return expeditionState.inventory[material.id,default:0]}
+        return garden.economy.finds[material.id,default:0]
     }
     func forgeModifier(mold:ForgeMold,materialIDs:[String])->Int {
-        guard materialIDs.count == mold.parts.count else{return 0}
-        return max(-6,min(6,zip(mold.parts,materialIDs).reduce(0){total,pair in
-            total+(ForgeMaterial.all.first{$0.id == pair.1}.map{pair.0.compatibility($0)} ?? 0)
-        }))
+        mold.modifier(materialIDs:materialIDs)
     }
     func canForge(mold:ForgeMold,materialIDs:[String])->Bool {
-        guard levelProgress.level>=mold.level,materialIDs.count == mold.parts.count,
-              materialIDs.allSatisfy({id in ForgeMaterial.all.contains{$0.id == id}}),expeditionState.gear.count<4096 else{return false}
+        guard levelProgress.level>=mold.level,materialIDs.count == mold.parts.count,expeditionState.gear.count<4096 else{return false}
         let counts=Dictionary(materialIDs.map{($0,1)},uniquingKeysWith:+)
-        return counts.allSatisfy{forgeMaterialCount($0.key)>=$0.value}
+        return counts.allSatisfy{id,count in
+            guard let material=ForgeMaterial.all.first(where:{$0.id == id}) else{return false}
+            return forgeMaterialCount(material)>=count
+        }
     }
     mutating func forgeGear(moldID:String,materialIDs:[String],natural:Int?=nil)->Bool {
         guard let mold=ForgeMold.all.first(where:{$0.id == moldID}),canForge(mold:mold,materialIDs:materialIDs),
               natural.map({(1...20).contains($0)}) ?? true else{return false}
+        let materials=materialIDs.compactMap{id in ForgeMaterial.all.first{$0.id == id}}
+        guard let main=materials.first else{return false}
         let roll=CraftRoll(natural:natural ?? Int.random(in:1...20),modifier:forgeModifier(mold:mold,materialIDs:materialIDs))
         var result=ForgeResult(moldID:mold.id,materialIDs:materialIDs,roll:roll,name:roll.criticalFailure ? "锻造失败":mold.name)
-        guard roll.criticalFailure || expeditionState.gear[result.expectedGearID,default:0]<1_000_000_000 else{return false}
+        var expedition=expeditionState
+        guard roll.criticalFailure || (expedition.gear[result.expectedGearID,default:0]<1_000_000_000
+            && (expedition.generatedGear?[result.expectedGearID] != nil || (expedition.generatedGear?.count ?? 0)<4096)) else{return false}
         var mining=miningState
-        for id in materialIDs {
-            if Mineral.all.contains(where:{$0.id == id}) {mining.inventory[id,default:0]-=1}
-            else {garden.economy.finds[id,default:0]-=1}
+        for material in materials {
+            if material.isMineral {mining.inventory[material.id,default:0]-=1}
+            else if material.isForage {expedition.inventory[material.id,default:0]-=1}
+            else {garden.economy.finds[material.id,default:0]-=1}
         }
         garden.economy.mining=mining
         if !roll.criticalFailure {
-            let materials=materialIDs.compactMap{id in ForgeMaterial.all.first{$0.id == id}}
-            let special:String? = mold.id == "sword" && materialIDs == ["iron","copper","sheep_wool"] ? "牧途守望剑":mold.id == "coat" && materialIDs == ["cloud_fleece","alpaca_fibre","moonstone"] ? "月云护行衣":nil
-            let name=(special ?? (materials.first?.name ?? "")+mold.name)+" · "+roll.tierTitle
+            let specialBonus=mold.specialName(materialIDs:materialIDs) == nil ? 0:1
+            let name=mold.outputName(materialIDs:materialIDs)+" · "+roll.tierTitle
             let scale=max(1,roll.quality/20)
             let id=result.expectedGearID
-            let item=CraftedGear(id:id,name:name,slot:mold.slot,level:mold.level,minerals:[:],price:0,
-                gathering:max(0,(mold.gathering+materials.reduce(0){$0+$1.gathering})*scale/2+(special == nil ? 0:1)),
-                scouting:max(0,(mold.scouting+materials.reduce(0){$0+$1.scouting})*scale/2+(special == nil ? 0:1)),
-                guarding:max(0,(mold.guarding+materials.reduce(0){$0+$1.guarding})*scale/2+(special == nil ? 0:1)),
-                forgeSprite:mold.gearSpriteKey,saleValue:max(1,materials.reduce(0){$0+$1.value}*(20+roll.quality)/50))
-            var expedition=expeditionState
+            let item=expedition.generatedGear?[id] ?? CraftedGear(id:id,name:name,slot:mold.slot,level:mold.level,minerals:[:],price:0,
+                gathering:max(0,(mold.gathering+materials.reduce(0){$0+$1.gathering})*scale/2+specialBonus),
+                scouting:max(0,(mold.scouting+materials.reduce(0){$0+$1.scouting})*scale/2+specialBonus),
+                guarding:max(0,(mold.guarding+materials.reduce(0){$0+$1.guarding})*scale/2+specialBonus),
+                forgeSprite:mold.outputSprite(material:main),saleValue:max(1,materials.reduce(0){$0+$1.value}*(20+roll.quality)/50))
             expedition.generatedGear=expedition.generatedGear ?? [:]
             expedition.generatedGear?[id]=item
             expedition.gear[id,default:0]+=1
-            garden.economy.expedition=expedition
-            result.gearID=id;result.name=name
+            result.gearID=id;result.name=item.name
         }
+        if !roll.criticalFailure || materials.contains(where:\.isForage) {garden.economy.expedition=expedition}
         garden.economy.forge=ForgeState(lastResult:result)
         return true
     }

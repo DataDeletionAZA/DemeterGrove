@@ -361,7 +361,7 @@ struct HabitEvidenceEditor: View {
                         Text("未设置审核服务").font(.caption).foregroundStyle(Palette.muted)
                         Spacer()
                         Button("打开设置") {
-                            dismiss(); store.selectedPage = "设置"; store.pet?.openTool("设置")
+                            dismiss(); SceneNavigation.open("设置",store:store,from:store.currentRoute)
                         }.buttonStyle(PixelButtonStyle())
                     }
                 }

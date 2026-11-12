@@ -30,15 +30,28 @@ struct SceneSizing {
 
 enum SceneNavigation {
     struct Context: Equatable {
-        private var studyRoute: String?
+        private var path: [String] = []
         init() {}
         mutating func enter(_ route: String, from source: String? = nil) {
             let route = SceneNavigation.canonical(route)
-            studyRoute = source.map(SceneNavigation.canonical) == "书房" && ["任务", "习惯", "日程", "日记", "计时器"].contains(route) ? route : nil
+            guard let source = source.map(SceneNavigation.canonical), source != "菜单" else {
+                path = [route]
+                return
+            }
+            if path.last != source { path = [source] }
+            if route != source { path.append(route) }
         }
         func parent(of route: String) -> String? {
             let route = SceneNavigation.canonical(route)
-            return studyRoute == route ? "书房" : SceneNavigation.parent(of: route)
+            return path.last == route && path.count > 1 ? path[path.count - 2] : nil
+        }
+        mutating func goBack(from route: String) -> String? {
+            guard path.last == SceneNavigation.canonical(route), path.count > 1 else {
+                path.removeAll()
+                return nil
+            }
+            path.removeLast()
+            return path.last
         }
     }
     static let rooms=["书房","农场","牧场","厨房","商店","炼金室","酒馆","锻造室"]
@@ -50,12 +63,19 @@ enum SceneNavigation {
     }
     static func parent(of route:String)->String? {let route=canonical(route);return isWild(route) ? "户外地图":route == "户外地图" ? "首页":nil}
     static func neighbors(of scene:String)->(String,String)? {
-        let scene=canonical(scene)
-        let group=rooms.contains(scene) ? rooms:wilds
+        var scene=canonical(scene)
+        if ["湖畔钓鱼","钓鱼"].contains(scene) {scene="钓鱼/lake"}
+        if ["林间冒险","探险"].contains(scene) {scene="探险/forest"}
+        let group=rooms.contains(scene) ? rooms : scene.hasPrefix("钓鱼/") ? FishingLocation.all.map{"钓鱼/"+$0.id} : scene.hasPrefix("探险/") ? ExpeditionLocation.all.map{"探险/"+$0.id} : []
         guard let index=group.firstIndex(of:scene) else{return nil}
         return (group[(index+group.count-1)%group.count],group[(index+1)%group.count])
     }
-    static func title(_ route:String)->String {let route=canonical(route);return route == "首页" ? "小院":route.components(separatedBy:"/")[0]}
+    static func title(_ route:String)->String {
+        let route=canonical(route)
+        if route.hasPrefix("钓鱼/"),let place=FishingLocation.all.first(where:{$0.id == String(route.dropFirst(3))}) {return place.name}
+        if route.hasPrefix("探险/"),let place=ExpeditionLocation.all.first(where:{$0.id == String(route.dropFirst(3))}) {return place.name}
+        return route == "首页" ? "小院":route.components(separatedBy:"/")[0]
+    }
 }
 
 struct ShopCustomerPose {
