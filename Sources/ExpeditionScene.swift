@@ -26,7 +26,7 @@ struct ExpeditionScene: View {
                     HStack {
                         if initialLocation == nil {Text(location.name).font(.headline)}
                         Spacer(minLength:0)
-                        if locked {ThemeLabel("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
+                        if locked {Label("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
                     }
                 }
                 SceneToolbar(items:[

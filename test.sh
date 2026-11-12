@@ -3,18 +3,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/demetergrove-checks.XXXXXX")"
 trap 'rm -rf "$checks_dir"' EXIT
-model=(Sources/EconomyBalance.swift Sources/PetDialogue.swift Sources/AppTheme.swift Sources/Model.swift Sources/Cooking.swift Sources/Progression.swift Sources/HabitProgress.swift Sources/ActionCounts.swift Sources/PotionSelection.swift Sources/SceneGeometry.swift Sources/ToastLifetime.swift Sources/CalendarDates.swift Sources/Recurrence.swift Sources/ReminderPlanner.swift Sources/AIConfiguration.swift Sources/AIPrompts.swift Sources/FocusRecords.swift Sources/Inventory.swift)
+model=(Sources/EconomyBalance.swift Sources/PetDialogue.swift Sources/Model.swift Sources/Cooking.swift Sources/Progression.swift Sources/HabitProgress.swift Sources/ActionCounts.swift Sources/PotionSelection.swift Sources/SceneGeometry.swift Sources/ToastLifetime.swift Sources/CalendarDates.swift Sources/Recurrence.swift Sources/ReminderPlanner.swift Sources/AIConfiguration.swift Sources/AIPrompts.swift Sources/FocusRecords.swift Sources/Inventory.swift)
 model+=(Sources/AutoShop.swift Sources/Ranch.swift Sources/Pond.swift Sources/NatureCatalog.swift Sources/Fishing.swift Sources/Mining.swift Sources/Expedition.swift Sources/FocusWorld.swift Sources/Forging.swift Sources/CraftRoll.swift Sources/FoodContent.swift Sources/ItemLore.swift)
-xcrun swiftc -swift-version 5 -parse-as-library "${model[@]}" Sources/ThemePalette.swift Sources/ThemeIcons.swift Tests/ThemeIcons/main.swift -o "$checks_dir/theme-icons" -framework AppKit -framework SwiftUI
-"$checks_dir/theme-icons"
 for suite in Model Kitchen Crafting FoodContent Forge Habits Scenes Feedback Recurrence Focus Inventory Economy AutoShop Expedition PotionMaterials; do
     file="Tests/$suite/main.swift"
     [[ "$suite" != Model ]] || file=Tests/main.swift
     xcrun swiftc -swift-version 5 "${model[@]}" "$file" -o "$checks_dir/$suite"
     "$checks_dir/$suite"
 done
-xcrun swiftc -swift-version 5 -parse-as-library "${model[@]}" Tests/ThemeChecks.swift -o "$checks_dir/themes"
-"$checks_dir/themes"
 xcrun swiftc Sources/CalendarDates.swift Tests/Calendar/main.swift -o "$checks_dir/calendar"
 "$checks_dir/calendar"
 xcrun swiftc "${model[@]}" Sources/StatsPeriod.swift Sources/HabitDayState.swift Sources/DailyRecords.swift Tests/Statistics/main.swift -o "$checks_dir/statistics"
@@ -27,7 +23,7 @@ xcrun swiftc Sources/PetPlacement.swift Tests/Placement/main.swift -o "$checks_d
 "$checks_dir/placement"
 xcrun swiftc Sources/WindowResize.swift Tests/Resize/main.swift -o "$checks_dir/resize" -framework SwiftUI -framework AppKit
 "$checks_dir/resize"
-xcrun swiftc -swift-version 5 "${model[@]}" Sources/ChibiWardrobe.swift Sources/ThemePalette.swift Sources/Artwork.swift Sources/DollAnimation.swift Sources/ChibiAnimation.swift Tests/Chibi/main.swift -o "$checks_dir/chibi" -framework SwiftUI -framework AppKit
+xcrun swiftc -swift-version 5 "${model[@]}" Sources/ChibiWardrobe.swift Sources/Artwork.swift Sources/DollAnimation.swift Sources/ChibiAnimation.swift Tests/Chibi/main.swift -o "$checks_dir/chibi" -framework SwiftUI -framework AppKit
 "$checks_dir/chibi"
 xcrun swiftc Sources/SceneObject.swift Tests/SceneObjects/main.swift -o "$checks_dir/scenes" -framework AppKit -framework SwiftUI
 "$checks_dir/scenes" Resources/Game

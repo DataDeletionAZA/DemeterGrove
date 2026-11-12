@@ -146,7 +146,6 @@ struct WearAdjustment: Codable, Equatable {
 struct Economy: Codable {
     var upgrades: [String:Int] = [:]
     var owned: Set<String> = []
-    var ownedThemes: Set<AppTheme>? = nil
     var outfit = ""
     var hat = ""
     var equipped: [String:String]? = nil

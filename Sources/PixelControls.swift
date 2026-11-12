@@ -50,7 +50,6 @@ private final class ScrollSkinView: NSView {
             if horizontal, scroll.hasHorizontalScroller != enabled { scroll.hasHorizontalScroller = enabled }
             if !horizontal, scroll.hasVerticalScroller != enabled { scroll.hasVerticalScroller = enabled }
             let old = horizontal ? scroll.horizontalScroller : scroll.verticalScroller
-            old?.needsDisplay = true
             guard enabled, !(old is PixelScroller) else { continue }
             let bar = PixelScroller(frame: old?.frame ?? (horizontal ? NSRect(x: 0,y: 0,width: 100,height: 14) : NSRect(x: 0,y: 0,width: 14,height: 100)))
             bar.scrollerStyle = .legacy
@@ -70,9 +69,7 @@ final class WindowScrollSkinView: NSView {
         if let scroll=view as? NSScrollView {
             if scroll.scrollerStyle != .legacy { scroll.scrollerStyle = .legacy }
             for horizontal in [false,true] {
-                guard let old=horizontal ? scroll.horizontalScroller:scroll.verticalScroller else { continue }
-                old.needsDisplay = true
-                guard !(old is PixelScroller) else { continue }
+                guard let old=horizontal ? scroll.horizontalScroller:scroll.verticalScroller, !(old is PixelScroller) else { continue }
                 let bar=PixelScroller(frame:old.frame);bar.scrollerStyle = .legacy
                 if horizontal {scroll.horizontalScroller=bar} else {scroll.verticalScroller=bar}
                 scroll.reflectScrolledClipView(scroll.contentView)
@@ -85,25 +82,16 @@ final class WindowScrollSkinView: NSView {
 final class PixelScroller: NSScroller {
     override class var isCompatibleWithOverlayScrollers: Bool { false }
     override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
-        if ThemeAppearance.shared.theme == .liquidGlass {return}
         NSColor(Palette.paper).setFill(); bounds.fill()
         let vertical = bounds.height > bounds.width
         let track = bounds.insetBy(dx: vertical ? 5 : 1, dy: vertical ? 1 : 5)
-        NSColor(Palette.line.opacity(ThemeAppearance.shared.theme == .original ? 1:0.3)).setFill(); track.fill()
+        NSColor(Palette.line).setFill(); track.fill()
     }
     override func drawKnob() {
         let vertical = bounds.height > bounds.width
-        let theme=ThemeAppearance.shared.theme
-        if theme == .liquidGlass || theme == .christmas {
-            let knob=rect(for:.knob).insetBy(dx:vertical ? 5:1,dy:vertical ? 1:5)
-            let shape=NSBezierPath(roundedRect:knob,xRadius:3,yRadius:3)
-            NSColor(theme == .liquidGlass ? Color.gray.opacity(0.5) : Palette.goldLight.opacity(0.65)).setFill()
-            shape.fill();return
-        }
         let knob = rect(for: .knob).insetBy(dx: vertical ? 3 : 1, dy: vertical ? 1 : 3)
-        let shape = NSBezierPath(rect:knob)
-        NSColor(Palette.moss).setFill(); shape.fill()
-        NSColor(Palette.gold).setStroke(); shape.lineWidth=1; shape.stroke()
+        NSColor(Palette.moss).setFill(); knob.fill()
+        NSColor(Palette.gold).setStroke(); NSBezierPath(rect: knob.insetBy(dx:0.5,dy:0.5)).stroke()
         NSColor(Palette.goldLight).setFill()
         let grip = vertical ? NSRect(x:knob.minX+2,y:knob.midY-1,width:max(1,knob.width-4),height:2) : NSRect(x:knob.midX-1,y:knob.minY+2,width:2,height:max(1,knob.height-4))
         grip.fill()

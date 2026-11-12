@@ -64,11 +64,11 @@ struct SchedulePage: View {
     private var dayTitle: some View { Text(CalendarDates.key(selected, calendar: store.calendar)).fontWeight(.semibold) }
     private var addButton: some View { Button("添加日程", systemImage: "plus") { adding = true }.buttonStyle(PixelButtonStyle(primary: true)) }
     @ViewBuilder private var legend: some View {
-        ThemeLabel("日程", systemImage: "square.fill").foregroundStyle(Palette.clay)
-        ThemeLabel("任务", systemImage: "square.fill").foregroundStyle(Palette.sage)
-        ThemeLabel("日记", systemImage: "square.fill").foregroundStyle(Palette.goldLight)
-        ThemeLabel("习惯", systemImage: "square.fill").foregroundStyle(Color.purple.opacity(0.8))
-        ThemeLabel("计时", systemImage: "square.fill").foregroundStyle(Color.blue.opacity(0.8))
+        Label("日程", systemImage: "square.fill").foregroundStyle(Palette.clay)
+        Label("任务", systemImage: "square.fill").foregroundStyle(Palette.sage)
+        Label("日记", systemImage: "square.fill").foregroundStyle(Palette.goldLight)
+        Label("习惯", systemImage: "square.fill").foregroundStyle(Color.purple.opacity(0.8))
+        Label("计时", systemImage: "square.fill").foregroundStyle(Color.blue.opacity(0.8))
     }
     private func markers(_ day: Date) -> [Color] {
         let item = DailyRecords(date: day, calendar: store.calendar, rolloverMinutes: store.dayBoundary.rolloverMinutes)
@@ -180,8 +180,8 @@ struct EventRow: View {
                         .font(.caption).foregroundStyle(Palette.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(.plain).help("编辑日程")
-            if event.remind { ThemeSymbol(systemName: "bell").font(.caption).foregroundStyle(Palette.muted) }
-            Button { deleting = true } label: { ThemeSymbol(systemName: "trash") }.buttonStyle(.plain).help("删除日程")
+            if event.remind { Image(systemName: "bell").font(.caption).foregroundStyle(Palette.muted) }
+            Button { deleting = true } label: { Image(systemName: "trash") }.buttonStyle(.plain).help("删除日程")
         }.padding(.vertical, 5)
             .sheet(isPresented: $editing) { EventEditor(store: store, event: event) }
             .alert("删除这条日程？", isPresented: $deleting) {
@@ -286,7 +286,7 @@ struct DiaryPage: View {
             HStack {
                 Text("\(diary.characters) 字符（不含空白）")
                 Spacer()
-                ThemeLabel(store.saveStatus, systemImage: "externaldrive")
+                Label(store.saveStatus, systemImage: "externaldrive")
             }.font(.caption).foregroundStyle(Palette.muted)
         }
     }

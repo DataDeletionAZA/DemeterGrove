@@ -348,7 +348,7 @@ final class PetController {
             inventory.isMovable=false;inventory.isReleasedWhenClosed=false;inventory.hidesOnDeactivate=false
             inventory.level = .floating;inventory.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
             inventory.minSize=NSSize(width:340,height:300);inventory.title="库存"
-            inventory.contentView=NSHostingView(rootView:InventoryView(store:store,close:{[weak self] in self?.closeInventory()}).appTheme(store)
+            inventory.contentView=NSHostingView(rootView:InventoryView(store:store,close:{[weak self] in self?.closeInventory()})
                 .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:340,height:300),began:{[weak self] in self?.resizingInventory=true},ended:{[weak self] in self?.resizingInventory=false;self?.positionInventory()})})
             inventoryPanel=inventory
             inventory.setContentSize(NSSize(width:min(580,screenArea.width-16),height:min(600,screenArea.height-16)))
@@ -377,8 +377,6 @@ final class PetController {
         if manager == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.isOpaque = false
-            window.backgroundColor = .clear
             window.title = "暮色小院 · 管理"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: RootView(store: store))
@@ -404,7 +402,7 @@ struct DesktopPet: View {
         let count = [store.data.availableActions,store.todayActions,store.data.totalActions][countScope]
         return Button { countScope = (countScope+1)%3 } label: {
             HStack(spacing:6) {
-                ThemeSymbol(systemName:"keyboard")
+                Image(systemName:"keyboard")
                 Text(title).foregroundStyle(Palette.muted)
                 Text(compactActionCount(count)).monospacedDigit()
             }.font(.system(size:11,weight:.medium)).foregroundStyle(Palette.ink)
@@ -423,14 +421,14 @@ struct DesktopPet: View {
             HStack(spacing: 6) {
                 countBadge
                 Button(action:menu) {
-                    ThemeSymbol(systemName:"ellipsis").font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.ink)
+                    Image(systemName:"ellipsis").font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.ink)
                         .frame(width:24,height:24).magicSurface(Palette.card.opacity(0.94))
                 }.buttonStyle(.plain).accessibilityLabel("功能菜单").help("功能菜单")
             }
             if let timer = store.data.timer {
                 Button { store.pet?.openTool("计时器") } label: {
                     HStack(spacing: 6) {
-                        ThemeSymbol(systemName: timer.resumedAt == nil ? "pause.fill" : timer.kind == .rest ? "moon.fill" : "timer").font(.system(size:10))
+                        Image(systemName: timer.resumedAt == nil ? "pause.fill" : timer.kind == .rest ? "moon.fill" : "timer").font(.system(size:10))
                         Text(clockText(timer.display(at:store.now))).font(.system(size:14,weight:.medium)).monospacedDigit()
                         Text(timer.resumedAt == nil ? "暂停" : timer.kind == .rest ? "休息" : "专注").font(.system(size:10))
                     }.foregroundStyle(Palette.goldLight).padding(.horizontal,9).frame(height:28).magicSurface(Palette.card.opacity(0.94))
@@ -438,7 +436,7 @@ struct DesktopPet: View {
             }
             }
             Spacer(minLength: 0)
-        }.frame(width:200,height:store.petDocked ? 225:310,alignment:.top).appTheme(store,backdrop:false)
+        }.frame(width:200,height:store.petDocked ? 225:310,alignment:.top).preferredColorScheme(.dark)
             .onChange(of:store.error) { _,value in
                 if !value.isEmpty {store.animatePet(PetMotion.failed.rawValue,seconds:PetMotion.failed.duration)}
             }
@@ -514,11 +512,11 @@ struct PetMenu: View {
                 if store.counter == nil {
                     Button { store.setTyping(true) } label: {
                         HStack(spacing: 7) {
-                            ThemeSymbol(systemName:"exclamationmark.circle.fill")
+                            Image(systemName:"exclamationmark.circle.fill")
                             Text("操作计数未开启").font(.system(size:12,weight:.medium))
                             Spacer()
-                            ThemeSymbol(systemName:"chevron.right").font(.system(size:10))
-                        }.foregroundStyle(Palette.clay).padding(9)
+                            Image(systemName:"chevron.right").font(.system(size:10))
+                        }.foregroundStyle(Color(red:1,green:0.53,blue:0.48)).padding(9)
                             .background(Color.red.opacity(0.10),in:PixelFrame())
                     }.buttonStyle(.plain).accessibilityLabel("开启操作计数")
                 }
@@ -530,8 +528,8 @@ struct PetMenu: View {
                             Text(run.taskTitle).font(.caption).lineLimit(1).foregroundStyle(Palette.muted)
                         }
                         Spacer()
-                        Button { _ = run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer() } label: { ThemeSymbol(systemName: run.resumedAt == nil ? "play.fill" : "pause.fill") }
-                        Button { store.finishTimer() } label: { ThemeSymbol(systemName: "stop.fill") }.help("结束并记录")
+                        Button { _ = run.resumedAt == nil ? store.resumeTimer() : store.pauseTimer() } label: { Image(systemName: run.resumedAt == nil ? "play.fill" : "pause.fill") }
+                        Button { store.finishTimer() } label: { Image(systemName: "stop.fill") }.help("结束并记录")
                     }.padding(10).magicSurface(Palette.paper)
                 }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
@@ -542,7 +540,7 @@ struct PetMenu: View {
                                 Text(tool.0).font(.system(size: 14))
                                 Spacer(minLength: 0)
                             }.frame(maxWidth: .infinity).frame(height: 28)
-                        }.buttonStyle(ThemeMenuButtonStyle())
+                        }.buttonStyle(PixelButtonStyle())
                     }
                 }
                 HStack {
@@ -557,8 +555,8 @@ struct PetMenu: View {
                 }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted).padding(.top, 4)
             }.padding(16)
             }
-        }.frame(width: 320).frame(maxHeight: .infinity).modifier(ThemeNavigationSurface(framed:true))
-            .foregroundStyle(Palette.ink).magicControls().appTheme(store)
+        }.frame(width: 320).frame(maxHeight: .infinity).magicSurface(Palette.card, strong: true)
+            .foregroundStyle(Palette.ink).magicControls()
             .environment(\.calendar,store.calendar)
             .environment(\.dayBoundary,store.dayBoundary)
             .environment(\.timeZone,store.calendar.timeZone)
@@ -615,7 +613,7 @@ struct ToolPanelView: View {
                 .environment(\.sceneViewport,CGSize(width:max(200,viewport.size.width-36),height:max(180,viewport.size.height-36)))
         }
         }
-        }.magicSurface(Palette.card, strong: true).foregroundStyle(Palette.ink).magicControls().appTheme(store)
+        }.magicSurface(Palette.card, strong: true).foregroundStyle(Palette.ink).magicControls()
             .overlay { WindowResizeBorder(began:{store.pet?.beginToolResize()},ended:{store.pet?.finishToolResize()}) }
             .environment(\.locale, Locale(identifier: "zh_CN"))
             .environment(\.calendar,store.calendar)

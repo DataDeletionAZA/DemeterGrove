@@ -119,13 +119,13 @@ struct FocusRecordDetails: View {
             }
             if let segments = session.segments {
                 Button { showingSegments.toggle() } label: {
-                    HStack { Text(session.kind == .rest ? "休息片段" : "实际专注片段"); Spacer(); ThemeSymbol(systemName: showingSegments ? "chevron.up" : "chevron.down") }
+                    HStack { Text(session.kind == .rest ? "休息片段" : "实际专注片段"); Spacer(); Image(systemName: showingSegments ? "chevron.up" : "chevron.down") }
                 }.buttonStyle(PixelButtonStyle()).accessibilityLabel(session.kind == .rest ? "休息片段" : "实际专注片段").accessibilityValue(showingSegments ? "已展开" : "已收起")
                 if showingSegments { ForEach(Array(segments.enumerated()), id: \.offset) { _, interval in intervalRow(interval) } }
             } else { Text("实际片段：未知").font(.caption).foregroundStyle(Palette.muted) }
             if session.kind != .rest, let pauses = session.pauseIntervals, !pauses.isEmpty {
                 Button { showingPauses.toggle() } label: {
-                    HStack { Text("暂停区间"); Spacer(); ThemeSymbol(systemName: showingPauses ? "chevron.up" : "chevron.down") }
+                    HStack { Text("暂停区间"); Spacer(); Image(systemName: showingPauses ? "chevron.up" : "chevron.down") }
                 }.buttonStyle(PixelButtonStyle()).accessibilityLabel("暂停区间").accessibilityValue(showingPauses ? "已展开" : "已收起")
                 if showingPauses { ForEach(Array(pauses.enumerated()), id: \.offset) { _, interval in intervalRow(interval) } }
             }

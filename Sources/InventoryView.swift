@@ -90,7 +90,7 @@ struct ItemDescriptionButton:View {
     @State private var showing=false
     var body:some View {
         Button {showing.toggle()} label: {
-            ThemeSymbol(systemName:"info.circle").font(.system(size:13)).frame(width:24,height:24)
+            Image(systemName:"info.circle").font(.system(size:13)).frame(width:24,height:24)
         }.buttonStyle(.plain).foregroundStyle(Palette.goldLight).accessibilityLabel("查看\(title)详情")
             .popover(isPresented:$showing) {
                 VStack(alignment:.leading,spacing:8) {

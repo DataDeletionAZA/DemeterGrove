@@ -41,7 +41,7 @@ struct HabitsPage: View {
                 HStack(spacing: 12) {
                     ForEach(HabitProgress.milestones, id: \.self) { milestone in
                         VStack(spacing: 5) {
-                            ThemeSymbol(systemName: store.data.habitProgress?.milestones.contains(milestone) == true ? "seal.fill" : "seal")
+                            Image(systemName: store.data.habitProgress?.milestones.contains(milestone) == true ? "seal.fill" : "seal")
                             Text("\(milestone) 天").font(.caption)
                             Text(HabitProgress.rewardName(milestone)).font(.system(size: 10)).multilineTextAlignment(.center)
                         }.frame(maxWidth: .infinity).foregroundStyle(total >= milestone ? Palette.goldLight : Palette.muted)
@@ -61,8 +61,8 @@ struct HabitsPage: View {
                         HStack(spacing: 12) {
                             HabitRow(store: store, habit: habit, date: date)
                             if habit.archivedAt == nil {
-                            Button { editing = habit } label: { ThemeSymbol(systemName: "pencil") }.buttonStyle(.plain).help("编辑习惯").accessibilityLabel("编辑习惯：" + habit.title)
-                            Button { deleting = habit } label: { ThemeSymbol(systemName: "trash") }.buttonStyle(.plain).help("归档习惯").accessibilityLabel("归档习惯：" + habit.title)
+                            Button { editing = habit } label: { Image(systemName: "pencil") }.buttonStyle(.plain).help("编辑习惯").accessibilityLabel("编辑习惯：" + habit.title)
+                            Button { deleting = habit } label: { Image(systemName: "trash") }.buttonStyle(.plain).help("归档习惯").accessibilityLabel("归档习惯：" + habit.title)
                             }
                         }
                         HStack(spacing: 6) {
@@ -122,8 +122,8 @@ struct HabitWeekBoard: View {
             HStack {
                 Text(CalendarDates.key(days.first!, calendar: store.calendar) + " — " + CalendarDates.key(days.last!, calendar: store.calendar)).font(.callout).foregroundStyle(Palette.goldLight)
                 Spacer(minLength: 6)
-                Button { move(-1) } label: { ThemeSymbol(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一周")
-                Button { move(1) } label: { ThemeSymbol(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一周")
+                Button { move(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一周")
+                Button { move(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一周")
                     .disabled(store.calendar.date(byAdding: .day, value: 7, to: days.first!)! > store.today)
             }
             HStack { Button("回到今天") { selection = store.today }.buttonStyle(PixelButtonStyle()).disabled(store.calendar.isDate(selection, inSameDayAs: store.today)); Spacer() }
@@ -172,7 +172,7 @@ struct HabitDayCard: View {
                 ForEach(habits) { habit in
                     let state = HabitDayState.value(for: habit, on: day, today: today, calendar: calendar)
                     HStack(alignment: .top, spacing: 7) {
-                        ThemeSymbol(systemName: symbol(state)).font(.system(size: 12)).foregroundStyle(color(state)).padding(.top, 2)
+                        Image(systemName: symbol(state)).font(.system(size: 12)).foregroundStyle(color(state)).padding(.top, 2)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(habit.title).font(.system(size: 12)).lineLimit(1)
                             Text(state.rawValue).font(.system(size: 10)).foregroundStyle(color(state))
@@ -204,7 +204,7 @@ struct HabitRow: View {
     private var pendingSchedule: ScheduleRevision? { today ? Recurrence.nextRevision(habit.scheduleRevisions, after: date, calendar: store.calendar) : nil }
     var body: some View {
         HStack {
-            ThemeSymbol(systemName: completed ? "checkmark.circle.fill" : "leaf").foregroundStyle(Palette.sage)
+            Image(systemName: completed ? "checkmark.circle.fill" : "leaf").foregroundStyle(Palette.sage)
             VStack(alignment: .leading, spacing: 5) {
                 Text(habit.title + (habit.archivedAt == nil ? "" : " · 已归档")).lineLimit(2)
                 if let pending = pendingSchedule, let rule = pending.rule {
@@ -213,7 +213,7 @@ struct HabitRow: View {
                 if let rule = Recurrence.revision(habit.scheduleRevisions, on: date, calendar: store.calendar)?.rule {
                     Text((pendingSchedule == nil ? "" : "当前：") + rule.summary).font(.caption).foregroundStyle(Palette.muted)
                 }
-                if habit.archivedAt == nil, let minutes = habit.reminderMinutes { ThemeLabel(String(format: "%02d:%02d 提醒", minutes / 60, minutes % 60), systemImage: "bell").font(.system(size: 10)).foregroundStyle(Palette.muted) }
+                if habit.archivedAt == nil, let minutes = habit.reminderMinutes { Label(String(format: "%02d:%02d 提醒", minutes / 60, minutes % 60), systemImage: "bell").font(.system(size: 10)).foregroundStyle(Palette.muted) }
             }
             Spacer()
             Text("累计 \(habit.days.count) 天").font(.caption).foregroundStyle(Palette.muted)
@@ -329,7 +329,7 @@ struct HabitEvidenceEditor: View {
         PixelScrollView { VStack(alignment: .leading, spacing: 17) {
             Text(habit?.title ?? "习惯打卡").font(.title2)
             Text(CalendarDates.key(date, calendar: store.calendar)).font(.caption).foregroundStyle(Palette.muted)
-            if reviewing { ThemeLabel("审核中", systemImage: "hourglass").foregroundStyle(Palette.goldLight) }
+            if reviewing { Label("审核中", systemImage: "hourglass").foregroundStyle(Palette.goldLight) }
             else if let entry { Text("状态：\(entry.status.title)").foregroundStyle(Palette.goldLight) }
             if habit?.archivedAt != nil { Text("已归档 · 历史材料").font(.caption).foregroundStyle(Palette.muted) }
             if let entry {
@@ -354,7 +354,7 @@ struct HabitEvidenceEditor: View {
             if editable {
                 AIWritingPresetPicker(store: store, feature: .habitReview)
                 if let profile {
-                    ThemeLabel("发送至 \(AIProfile.secureURL(profile.baseURL)?.host ?? profile.name) · \(profile.model)", systemImage: "sparkles")
+                    Label("发送至 \(AIProfile.secureURL(profile.baseURL)?.host ?? profile.name) · \(profile.model)", systemImage: "sparkles")
                         .font(.caption).foregroundStyle(Palette.muted).textSelection(.enabled)
                 } else {
                     HStack {
@@ -453,7 +453,7 @@ struct HabitHistoryView: View {
                                 HStack { Text(day); Spacer(); Text(habit?.days.contains(day) == true ? "已完成" : (habit?.checkIns?[day]?.status.title ?? "已记录")) }
                                 if let entry = habit?.checkIns?[day] {
                                     if !entry.text.isEmpty { Text(entry.text).lineLimit(2).font(.caption).foregroundStyle(Palette.muted) }
-                                    if entry.image != nil { ThemeLabel("有照片 · 点击回看", systemImage: "photo").font(.caption).foregroundStyle(Palette.muted) }
+                                    if entry.image != nil { Label("有照片 · 点击回看", systemImage: "photo").font(.caption).foregroundStyle(Palette.muted) }
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(PixelButtonStyle()).accessibilityLabel("查看" + day + "材料")

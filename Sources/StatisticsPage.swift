@@ -45,8 +45,8 @@ struct StatsPage: View {
             HStack {
                 Text(periodName).font(.title2).foregroundStyle(Palette.goldLight)
                 Spacer()
-                Button { shift(-1) } label: { ThemeSymbol(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一" + range.rawValue)
-                Button { shift(1) } label: { ThemeSymbol(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一" + range.rawValue)
+                Button { shift(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("上一" + range.rawValue)
+                Button { shift(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(PixelButtonStyle()).accessibilityLabel("下一" + range.rawValue)
             }
             Text(period.title).font(.callout).foregroundStyle(Palette.muted)
             HStack {

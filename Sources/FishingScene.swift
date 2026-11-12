@@ -42,7 +42,7 @@ struct FishingScene:View {
             SceneHeader {
                 HStack {
                     if initialLocation == nil {Text(location.name).font(.headline)}
-                    if locked {ThemeLabel("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
+                    if locked {Label("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
                     Spacer(minLength:0)
                     WalletView(coins:store.data.garden.coins)
                 }

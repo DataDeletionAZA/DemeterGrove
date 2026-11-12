@@ -277,7 +277,6 @@ struct Preferences: Codable {
     var idlePose: Int? = nil
     var petSkin: String? = nil
     var selectedPetSkin: PetSkin { PetSkin(rawValue: petSkin ?? "") ?? .casual }
-    var selectedTheme: AppTheme? = nil
     var weekStartsOn: Int? = nil
     var dayTimeZoneID: String? = nil
     var dayRolloverMinutes: Int? = nil
@@ -477,7 +476,6 @@ struct AppData: Codable {
         try require(ai?.isValid ?? true)
         try require(petDialogue?.isValid ?? true)
         try require(preferences.dayBoundary.isValid && (habitRewardNotBefore.map(validDate) ?? true))
-        try require(preferences.selectedTheme.map(ownsTheme) ?? true)
         try require((1...4).contains(version))
         try require(validDate(savedAt))
         try require(tasks.allSatisfy { ($0.due.map(validDate) ?? true) && ($0.completedAt.map(validDate) ?? true) })

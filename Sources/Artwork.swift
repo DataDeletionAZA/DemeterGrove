@@ -1,6 +1,20 @@
 import SwiftUI
 import AppKit
 
+enum Palette {
+    static let paper = Color(red: 0.10, green: 0.085, blue: 0.14)
+    static let card = Color(red: 0.17, green: 0.14, blue: 0.21)
+    static let control = Color(red: 0.23, green: 0.19, blue: 0.28)
+    static let gold = Color(red: 0.69, green: 0.57, blue: 0.36)
+    static let goldLight = Color(red: 0.91, green: 0.82, blue: 0.62)
+    static let lavender = Color(red: 0.58, green: 0.49, blue: 0.65)
+    static let sage = Color(red: 0.65, green: 0.72, blue: 0.54)
+    static let moss = Color(red: 0.31, green: 0.24, blue: 0.36)
+    static let ink = Color(red: 0.91, green: 0.87, blue: 0.77)
+    static let muted = Color(red: 0.66, green: 0.61, blue: 0.58)
+    static let clay = Color(red: 0.74, green: 0.49, blue: 0.43)
+    static let line = Color(red: 0.37, green: 0.30, blue: 0.37)
+}
 
 enum SpriteImages {
     static let frames: [NSImage] = {

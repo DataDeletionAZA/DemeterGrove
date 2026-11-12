@@ -71,7 +71,6 @@ struct CraftDie: View {
         [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],
         [3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]]
     var body: some View {
-        let theme = ThemeAppearance.shared.theme
         Canvas { context, size in
             let p = CraftRollMotion.progress(elapsed), turn = CraftRollMotion.turns(elapsed)
             let t = (1+sqrt(5.0))/2
@@ -96,10 +95,8 @@ struct CraftDie: View {
                 var shape = Path(); shape.move(to:points[0]); shape.addLine(to:points[1]); shape.addLine(to:points[2]); shape.closeSubpath()
                 let z = face.reduce(0) { $0+vertices[$1].z }/3
                 let light = max(0.12,min(0.8,0.38+z*0.15))
-                let original = roll.criticalFailure && p>=1 ? Color(red:0.32+light*0.22,green:0.13+light*0.14,blue:0.16+light*0.12) :
+                let base = roll.criticalFailure && p>=1 ? Color(red:0.32+light*0.22,green:0.13+light*0.14,blue:0.16+light*0.12) :
                     Color(red:0.19+light*0.25,green:0.16+light*0.22,blue:0.27+light*0.32)
-                let base = theme == .original ? original :
-                    (roll.criticalFailure && p>=1 ? Palette.clay : Palette.control).opacity(0.55+light*0.5)
                 context.fill(shape,with:.color(base))
                 context.stroke(shape,with:.color(Palette.goldLight.opacity(0.75)),lineWidth:1.2)
                 if z > 0.35 {

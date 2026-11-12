@@ -107,7 +107,7 @@ struct ReminderMessagesEditor: View {
                         HStack(alignment: .top) {
                             TextField("激励语", text: $phrase.text, axis: .vertical).lineLimit(1...4).textFieldStyle(PixelTextFieldStyle())
                             if phrase.text.count > ReminderTextLibrary.maximumTextLength { Text("内容过长").font(.caption).foregroundStyle(Palette.clay) }
-                            Button { library.phrases.removeAll { $0.id == phrase.id } } label: { ThemeSymbol(systemName: "minus.circle") }.buttonStyle(.plain).accessibilityLabel("删除激励语")
+                            Button { library.phrases.removeAll { $0.id == phrase.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).accessibilityLabel("删除激励语")
                         }
                     }
                 }

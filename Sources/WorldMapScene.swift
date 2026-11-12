@@ -50,7 +50,7 @@ struct WorldMapScene: View {
                             HStack(spacing: 5) {
                                 Text(activity.name).lineLimit(1).minimumScaleFactor(0.8)
                                 Spacer(minLength: 4)
-                                if !unlocked { ThemeSymbol(systemName: "lock.fill").font(.system(size: 9)).accessibilityHidden(true) }
+                                if !unlocked { Image(systemName: "lock.fill").font(.system(size: 9)).accessibilityHidden(true) }
                                 Text(activity.requirement).font(.caption).lineLimit(1).fixedSize(horizontal: true, vertical: false)
                             }.frame(maxWidth: .infinity)
                         }.buttonStyle(PixelButtonStyle()).disabled(!unlocked)
@@ -79,7 +79,7 @@ struct WorldMapScene: View {
         } label: {
             VStack(spacing:2) {
                 HStack(spacing:4) {
-                    if !unlocked {ThemeSymbol(systemName:"lock.fill").font(.system(size:9))}
+                    if !unlocked {Image(systemName:"lock.fill").font(.system(size:9))}
                     Text(place.name).font(.system(size:12,weight:.semibold))
                 }
                 if !unlocked {Text(place.requirement).font(.system(size:10))}
