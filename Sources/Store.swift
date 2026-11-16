@@ -682,10 +682,22 @@ final class GardenStore: ObservableObject {
     }
     @discardableResult
     func commitGameChange(_ edit: (inout AppData) -> Bool) -> Bool {
+        commitGameChange(advanceBeforeEdit: true, edit)
+    }
+
+    func toggleShopRestock(_ id: String) -> Bool {
+        commitGameChange(advanceBeforeEdit: false) { $0.toggleAutoShopDish(id, at: now) }
+    }
+
+    func unstockShopDish(_ id: UUID) -> Bool {
+        commitGameChange(advanceBeforeEdit: false) { $0.stopRestockingAndUnstock(id, at: now) }
+    }
+
+    private func commitGameChange(advanceBeforeEdit: Bool, _ edit: (inout AppData) -> Bool) -> Bool {
         guard !storageLocked else { return false }
         let previous = data
         var candidate = data
-        candidate.advanceFocusWorld(at:now,settleLegacy:false)
+        if advanceBeforeEdit { candidate.advanceFocusWorld(at: now, settleLegacy: false) }
         guard edit(&candidate) else { return false }
         candidate.advanceFocusWorld(at:now,settleLegacy:false)
         data = candidate
@@ -1038,11 +1050,11 @@ extension SceneNavigation {
             store.selectedPage=route == "计时器" ? "专注":route
         }
     }
-    static func open(_ route:String,store:GardenStore,from source:String?=nil) {
+    static func open(_ route:String,store:GardenStore,from source:String?=nil,sideways:Bool=false) {
         let route=canonical(route)
-        if let pet=store.pet {pet.openTool(route,from:source)}
+        if let pet=store.pet {pet.openTool(route,from:source,sideways:sideways)}
         else {
-            store.sceneNavigation.enter(route,from:source)
+            store.sceneNavigation.enter(route,from:source,sideways:sideways)
             store.selectedPage=route == "计时器" ? "专注":route
         }
     }

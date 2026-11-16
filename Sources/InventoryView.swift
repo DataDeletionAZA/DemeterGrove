@@ -73,6 +73,10 @@ struct InventoryView:View {
     }
     private func closeWindow() {if let close {close()} else {dismiss()}}
     private func lore(_ entry:InventoryEntry)->String {
+        if entry.id.hasPrefix("alchemy:"),let batch=store.data.alchemyState.batches.first(where:{"alchemy:"+$0.id.uuidString == entry.id}) {
+            return "\(CraftRoll.title(quality:batch.outcome.quality)) · 品质 \(batch.outcome.quality)\n\n" +
+                batch.outcome.effects.map{$0.text(quality:batch.outcome.quality)}.joined(separator:"\n")
+        }
         if entry.id.hasPrefix("dish:"),let dish=store.data.garden.menu.first(where:{"dish:"+$0.id == entry.id}) {
             return CraftRoll.title(quality:dish.quality)+" · 品质 \(dish.quality)\n\n"+(ItemLore.text(for:"dish:"+dish.canonicalID) ?? dish.recipeText)
         }

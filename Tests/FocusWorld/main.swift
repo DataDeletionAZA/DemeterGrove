@@ -174,6 +174,26 @@ import Foundation
         reopened.tick(now.addingTimeInterval(300))
         check(reopened.data.garden.sales == 1)
 
+        for elapsed in [299.0, 300.0] {
+            var shop = AppData()
+            shop.preferences.sound = false
+            shop.garden.dishes[Dish.soup.id] = 3
+            check(shop.stock(.soup, at: now))
+            let order = shop.garden.orders[0]
+            shop.garden.economy.autoShop = AutoShopState(enabled: true, dishIDs: [Dish.soup.id], lastAdvancedFocus: 0)
+            shop.timer = TimerRun(kind: .stopwatch, target: 1800, taskTitle: "阅读", startedAt: now, resumedAt: now)
+            reopened.data = shop
+            reopened.now = now.addingTimeInterval(elapsed)
+            check(reopened.toggleShopRestock(Dish.soup.id))
+            let savedShop = try SaveFile.read(reopened.file).garden
+            check(savedShop.dishes[Dish.soup.id] == 2 && savedShop.autoShopState.dishIDs.isEmpty)
+            check(savedShop.orders.first?.id == (elapsed < 300 ? order.id : nil))
+            reopened.tick(now.addingTimeInterval(300))
+            check(reopened.data.garden.orders.isEmpty && reopened.data.garden.dishes[Dish.soup.id] == 2)
+            check(reopened.data.garden.sales == 1 && reopened.data.garden.autoShopState.receivables == order.price)
+        }
+        print("PASS: cancelling automatic restock keeps inventory and settled sales on either side of a sale deadline")
+
         reopened.data=AppData();reopened.data.preferences.sound=false
         let levelThree=Double((LevelProgress.requirement(1)+LevelProgress.requirement(2))*60)
         reopened.data.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:now,seconds:levelThree)]

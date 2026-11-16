@@ -150,10 +150,10 @@ enum ItemLore {
         "gear:forge_gear_trousers_rattan":"编紧的藤片护住小腿，屈膝处留出活动的空隙。",
         "gear:forge_gear_trousers_cloth":"布面沿裤线缝合，宽松的裤脚便于蹲下拾东西。",
         "gear:forge_gear_trousers_cashmere":"山羊绒织出一双软暖的裤腿，弹性的裤口贴住脚踝。",
-        "gear:潮灯坠":"原创。锡制镶框围住一粒萤石，坠心映着潮湿石壁上的细光。",
-        "gear:潮绸远行衣":"原创。礁丝衣身配柔软的羊驼绒衬里，雨水顺着铂扣两边滑落。",
-        "gear:曦石寻路杖":"原创。回声藤绞成杖身，日光石装在铂箍里，随着落地的节奏轻闪。",
-        "gear:陨纹长剑":"原创。陨铁刃上留有细密的交错纹路，礁丝缠带在潮气里仍便于握持。",
+        "gear:锡边萤石吊坠":"原创。锡制镶框围住一粒萤石，坠心映着潮湿石壁上的细光。",
+        "gear:铂扣礁丝外套":"原创。礁丝衣身配柔软的羊驼绒衬里，雨水顺着铂扣两边滑落。",
+        "gear:日光石法杖":"原创。回声藤绞成杖身，日光石装在铂箍里，随着落地的节奏轻闪。",
+        "gear:锌柄陨铁长剑":"原创。陨铁刃上留有细密的交错纹路，礁丝缠带在潮气里仍便于握持。",
         "rod:willow":"轻巧的入门钓竿，适合第一次把安静带到湖边。",
         "rod:ash":"结实的竿身传来水下轻震，握稳比握紧更有用。",
         "rod:river":"为河流中的长久等待准备，收线时也经得住一点急脾气。",
@@ -228,6 +228,8 @@ enum ItemLore {
         "focusSuit":"适合在书桌旁久坐的常服，舒适到不必频繁想起衣服。"
     ]
 
+    private static let previousGearNames = ["潮灯坠": "锡边萤石吊坠", "潮绸远行衣": "铂扣礁丝外套", "曦石寻路杖": "日光石法杖", "陨纹长剑": "锌柄陨铁长剑"]
+
     static func text(for key: String) -> String? {
         let parts=key.split(separator:":",maxSplits:1).map(String.init)
         let prefix=parts.count == 2 ? parts[0]:""
@@ -244,7 +246,8 @@ enum ItemLore {
         case "wildlife": return NatureCatalog.wildlife.first{$0.id == value}?.description
         case "product": return product(value)
         case "mineral","mining": return equipmentDescriptions["mineral:"+value]
-        case "gear","rod","pickaxe","potion": return equipmentDescriptions[key]
+        case "gear": return equipmentDescriptions["gear:" + (previousGearNames[value] ?? value)]
+        case "rod","pickaxe","potion": return equipmentDescriptions[key]
         case "companion": return companionDescriptions[value]
         case "clothing": return clothingDescriptions[value]
         case "find": return equipmentDescriptions["potion:"+value] ?? natural(value)

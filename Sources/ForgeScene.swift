@@ -3,6 +3,7 @@ import SwiftUI
 struct ForgeScene:View {
     @ObservedObject var store:GardenStore
     @State private var showing=false
+    @State private var book=false
     @State private var mold=ForgeMold.all[0]
     @State private var materials=["",""]
     @State private var part=0
@@ -27,6 +28,7 @@ struct ForgeScene:View {
                     SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:"锻造室")},
                     SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"锻造室")},
                     SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store,from:"锻造室")},
+                    SceneToolbarItem("配方册",action:openRecipeBook),
                     SceneToolbarItem("上次结果",disabled:result == nil){openResult()},
                     SceneToolbarItem("小屋"){SceneNavigation.open("首页",store:store,from:"锻造室")}
                 ])
@@ -36,12 +38,18 @@ struct ForgeScene:View {
                     RoomBackdrop(name:"Forge").frame(width:size.width,height:size.height)
                     SceneImageHotspot(background:"Forge",rect:CGRect(x:0.72,y:0.08,width:0.23,height:0.44),size:size,label:"熔炉"){openStation(.furnace)}
                     SceneImageHotspot(background:"Forge",rect:CGRect(x:0.07,y:0.34,width:0.33,height:0.28),size:size,label:"缝纫台"){openStation(.sewing)}
+                    ObjectButton(label: "打开配方册", action: openRecipeBook, caption: "配方册") {
+                        PixelIcon(name: "配方册", size: max(28, size.width * 0.09))
+                    }.position(x: size.width * 0.42, y: size.height * 0.69)
                     SceneArrows(store:store,scene:"锻造室")
                 }.frame(width:size.width,height:size.height).clipShape(PixelFrame())
                     .overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
             } sidebar: {materialBasket}
         }.sheet(isPresented:$showing,onDismiss:clearPresentation) {
-            stationWindow.onExitCommand{showing=false}
+            Group {
+                if book { recipeBook }
+                else { stationWindow }
+            }.onExitCommand { showing = false }
         }
     }
 
@@ -87,6 +95,7 @@ struct ForgeScene:View {
     }
 
     private func clearPresentation() {
+        book=false
         started=nil
         rolling=false
         reveal=false
@@ -96,6 +105,58 @@ struct ForgeScene:View {
         mold=value
         materials=Array(repeating:"",count:value.parts.count)
         part=0
+    }
+
+    private func openRecipeBook() {
+        clearPresentation()
+        book = true
+        showing = true
+    }
+
+    private var recipeBook: some View {
+        SceneDialog(preferred: CGSize(width: 650, height: 495)) {
+            HStack {
+                PixelIcon(name: "配方册", size: 25)
+                Text("配方册").font(.title3).foregroundStyle(Palette.goldLight)
+                Spacer()
+                Button("关闭") { showing = false }
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(ForgeStation.allCases, id: \.self) { station in
+                    Text(station.rawValue).font(.headline).foregroundStyle(Palette.goldLight)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 196), spacing: 8)], spacing: 8) {
+                        ForEach(ForgeMold.all.filter { $0.station == station }) { mold in
+                            ForEach(mold.specialRecipes, id: \.name) { recipe in
+                                recipeCard(mold, name: recipe.name, materialIDs: recipe.materials)
+                            }
+                        }
+                    }
+                }
+            }
+        } footer: {
+            EmptyView()
+        }
+    }
+
+    private func recipeCard(_ mold: ForgeMold, name: String, materialIDs: [String]) -> some View {
+        Button {
+            selectMold(mold)
+            materials = materialIDs
+            book = false
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                GameNatureSprite(key: mold.gearSpriteKey, size: 30)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.goldLight)
+                    ForEach(mold.parts.indices, id: \.self) { index in
+                        if let material = ForgeMaterial.all.first(where: { $0.id == materialIDs[index] }) {
+                            Text(mold.parts[index].name + " · " + material.name).font(.caption).foregroundStyle(Palette.muted)
+                        }
+                    }
+                }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.buttonStyle(PixelButtonStyle()).help("选用\(name)的配方")
     }
 
     @ViewBuilder private var stationWindow:some View {
@@ -197,12 +258,6 @@ struct ForgeScene:View {
                         .accessibilityValue(material?.name ?? "未选")
                         .accessibilityAddTraits(selected ? .isSelected:[])
                 }
-            }
-            ForEach(mold.specialRecipes.indices, id: \.self) { index in
-                let recipe = mold.specialRecipes[index]
-                let names = recipe.materials.compactMap { id in ForgeMaterial.all.first { $0.id == id }?.name }
-                Text(recipe.name + " · " + names.joined(separator: " + "))
-                    .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Text("\(component.name)材料").font(.headline)

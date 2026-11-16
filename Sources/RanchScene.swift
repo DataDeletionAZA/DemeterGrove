@@ -21,7 +21,7 @@ struct RanchScene: View {
             SceneHeader {
                 HStack(spacing: 14) {
                     Text("伙伴 \(ranch.animals.count)/\(ranch.capacity)").font(.system(size: 13))
-                    Text("饲料 \(ranch.feedPortions) 份").font(.system(size: 13)).foregroundStyle(Palette.goldLight)
+                    Text("饲料总量 \(ranch.feedPortions) 份").font(.system(size: 13)).foregroundStyle(Palette.goldLight)
                     Spacer(minLength: 0)
                     WalletView(coins: store.data.garden.coins)
                 }
@@ -67,7 +67,8 @@ struct RanchScene: View {
                                 GameNatureSprite(key: species.spriteKey, size: artSize)
                                     .scaleEffect(x: pose.facingRight ? -1 : 1, y: pose.eating ? 0.96 : 1, anchor: .bottom)
                                     .rotationEffect(.degrees(pose.tilt), anchor: .bottom)
-                            }.position(x: w * pose.x, y: h * pose.y - bounce)
+                            }.accessibilityAddTraits(tab == "伙伴" && selected == animal.id ? .isSelected : [])
+                                .position(x: w * pose.x, y: h * pose.y - bounce)
                             if animal.ready > 0 {
                                 ObjectButton(label: "收取\(species.productName) ×\(animal.ready)", action: { collect(animal.id) }, caption: "收取\(species.productName)") {
                                     VStack(spacing: 1) {
@@ -81,7 +82,7 @@ struct RanchScene: View {
                     }
                 }.frame(width: w, height: h)
             }
-            SceneImageHotspot(background: "Ranch", rect: CGRect(x: 0.33, y: 0.81, width: 0.30, height: 0.10), size: size, label: "饲料槽 · \(ranch.feedPortions) 份可用") { tab = "饲料" }
+            SceneImageHotspot(background: "Ranch", rect: CGRect(x: 0.33, y: 0.81, width: 0.30, height: 0.10), size: size, label: "饲料槽 · \(ranch.trough)/\(ranch.troughCapacity) 份") { tab = "饲料" }
             if !ranch.expanded {
                 SceneImageHotspot(background: "Ranch", rect: CGRect(x: 0.78, y: 0.765, width: 0.16, height: 0.13), size: size, label: "扩建牧场") { tab = "伙伴" }
             }
@@ -98,24 +99,24 @@ struct RanchScene: View {
         VStack(alignment: .leading, spacing: 9) {
             Text("牧场小柜").font(.headline).foregroundStyle(Palette.goldLight)
             PixelTabs(selection: $tab, items: [("饲料", "饲料"), ("出产", "出产"), ("伙伴", "伙伴")])
-            PixelScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if tab == "饲料" { feedShelf }
-                    else if tab == "出产" { produceShelf }
-                    else { animalShelf }
-                }.padding(.trailing, 2)
+            ScrollViewReader { reader in
+                PixelScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if tab == "饲料" {
+                            troughMeter.id("饲料")
+                            feedShelf
+                            buyFeedButton
+                        }
+                        else if tab == "出产" { produceShelf }
+                        else { animalShelf }
+                    }.padding(.trailing, SceneSizing.scrollGutter)
+                }.onChange(of: selected) { _, animal in
+                    if let animal { reader.scrollTo(animal, anchor: .center) }
+                }.onChange(of: tab) { _, current in
+                    if current == "饲料" { reader.scrollTo(current, anchor: .top) }
+                }
             }
-            if tab == "饲料" {
-                Button {
-                    if store.commitGameChange({ $0.buyRanchFeed(at: store.now) }) { store.message = "已储备一袋混合饲料（\(RanchState.feedBagPortions) 份）。" }
-                } label: {
-                    VStack(spacing: 3) {
-                        Text("购买混合饲料")
-                        Text("\(RanchState.feedBagPortions) 份 · " + Money.text(RanchState.feedBagPrice)).font(.system(size: 10))
-                    }.frame(maxWidth: .infinity)
-                }.buttonStyle(PixelButtonStyle()).disabled(store.data.garden.coins < RanchState.feedBagPrice)
-                    .help(ItemLore.text(for: "feed:feed_bag") ?? "混合饲料")
-            } else if tab == "出产" {
+            if tab == "出产" {
                 Button("收取全部 · \(ranch.readyCount)") { collect(nil) }.frame(maxWidth: .infinity)
                     .buttonStyle(PixelButtonStyle(primary: true)).disabled(ranch.readyCount == 0)
                 let fertilizer = store.data.garden.economy.finds["mooncalf_dung", default: 0]
@@ -131,11 +132,35 @@ struct RanchScene: View {
         }.padding(10).magicSurface(Palette.paper)
     }
 
+    private var buyFeedButton: some View {
+        Button {
+            if store.commitGameChange({ $0.buyRanchFeed(at: store.now) }) { store.message = "已储备一袋混合饲料（\(RanchState.feedBagPortions) 份）。" }
+        } label: {
+            VStack(spacing: 3) {
+                Text("购买混合饲料")
+                Text("\(RanchState.feedBagPortions) 份 · " + Money.text(RanchState.feedBagPrice)).font(.system(size: 10))
+            }.frame(maxWidth: .infinity)
+        }.buttonStyle(PixelButtonStyle()).disabled(store.data.garden.coins < RanchState.feedBagPrice)
+            .help(ItemLore.text(for: "feed:feed_bag") ?? "混合饲料")
+    }
+
+    private var troughMeter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text("饲料槽").font(.caption).foregroundStyle(Palette.goldLight)
+                Spacer(minLength: 0)
+                Text("\(ranch.trough)/\(ranch.troughCapacity) 份").font(.caption).monospacedDigit()
+            }
+            PixelProgress(value: Double(ranch.trough) / Double(ranch.troughCapacity))
+                .accessibilityLabel("饲料槽容量")
+            Text(ranch.troughSpace == 0 ? "饲料槽已满 · 备用 \(ranch.feedBags) 袋" : "还可装 \(ranch.troughSpace) 份 · 备用 \(ranch.feedBags) 袋")
+                .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+        }.padding(7).magicSurface(Palette.card)
+    }
+
     private var feedShelf: some View {
         VStack(alignment: .leading, spacing: 9) {
             if !ranch.animals.isEmpty { Text(feedingStatus).font(.caption).foregroundStyle(Palette.goldLight) }
-            Text("槽内 \(ranch.trough)/\(ranch.troughCapacity) · 备用 \(ranch.feedBags) 袋")
-                .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             ForEach(RanchFeed.allCases) { feed in
                 let count = store.data.garden.ingredients[feed.rawValue, default: 0]
                 Button { addFeed(feed) } label: {
@@ -147,7 +172,7 @@ struct RanchScene: View {
                         }
                         Spacer(minLength: 0)
                     }.frame(maxWidth: .infinity)
-                }.disabled(count < 1 || ranch.trough + feed.portions > ranch.troughCapacity)
+                }.disabled(count < 1 || feed.portions > ranch.troughSpace)
                     .accessibilityLabel("向饲料槽添加" + feed.rawValue)
             }
         }
@@ -180,17 +205,24 @@ struct RanchScene: View {
                 if let species = animal.species {
                     VStack(alignment: .leading, spacing: 5) {
                         Button { visit(animal) } label: {
-                            HStack(spacing: 6) { GameNatureSprite(key: species.spriteKey, size: 34); Text(species.name).font(.system(size: 12)); Spacer(minLength: 0) }
+                            HStack(spacing: 6) {
+                                GameNatureSprite(key: species.spriteKey, size: 34)
+                                Text(species.name).font(.system(size: 12))
+                                Spacer(minLength: 0)
+                                Image(systemName: selected == animal.id ? "chevron.up" : "chevron.down").font(.system(size: 9))
+                            }
                         }.buttonStyle(PixelButtonStyle(primary: selected == animal.id))
+                            .accessibilityValue(selected == animal.id ? "已展开" : "已收起")
                         if selected == animal.id {
                             Text(status(animal)).font(.caption).foregroundStyle(Palette.goldLight)
+                            PixelProgress(value: animal.progress / animal.productionSeconds).accessibilityLabel("出产进度")
                             Text(species.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
                             if let description=ItemLore.text(for:"product:"+species.productID) {
                                 Text(species.productName+" · "+description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                             }
                             Text("每 \(species.productionMinutes) 分钟专注 · \(species.productName) ×\(species.productCount)").font(.system(size: 10)).fixedSize(horizontal: false, vertical: true)
                         }
-                    }
+                    }.id(animal.id)
                 }
             }
             if !ranch.expanded {
@@ -244,13 +276,15 @@ struct RanchScene: View {
 
     private func status(_ animal: RanchAnimal) -> String {
         if animal.ready >= animal.storageLimit { return "出产已装满，收取后继续" }
-        if animal.fed { return "已进食 · 还需 \(Int(ceil((animal.productionSeconds - animal.progress) / 60))) 分钟专注" }
+        if animal.fed { return "出产还需 \(Int(ceil((animal.productionSeconds - animal.progress) / 60))) 分钟专注" }
         return ranch.feedPortions > 0 ? "饲料已备好" : "饲料不足"
     }
 
     private func visit(_ animal: RanchAnimal) {
-        selected = animal.id; touchedAt = Date(); tab = "伙伴"
-        store.message = (animal.species?.name ?? "伙伴") + " · " + status(animal)
+        let closing = tab == "伙伴" && selected == animal.id
+        selected = closing ? nil : animal.id
+        touchedAt = Date()
+        tab = "伙伴"
     }
 
     private func addFeed(_ feed: RanchFeed) {

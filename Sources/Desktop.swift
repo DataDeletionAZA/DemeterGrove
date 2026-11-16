@@ -6,8 +6,8 @@ import UserNotifications
 let desktopTools: [(String, String)] = [
     ("任务", "checklist"), ("计时器", "timer"),
     ("日程", "calendar"), ("习惯", "checkmark.circle"), ("日记", "book.closed"),
-    ("书房", "book.closed"), ("农场", "carrot"), ("牧场", "leaf"), ("池塘", "fish"), ("酒馆", "tavern"), ("锻造室", "forge"), ("厨房", "frying.pan"), ("商店", "storefront"), ("炼金室", "flask"), ("统计", "chart.bar"),
-    ("成长", "sparkles"), ("小屋", "home"), ("后院", "garden"), ("户外地图", "map"), ("衣柜", "tshirt")
+    ("书房", "book.closed"), ("统计", "chart.bar"),
+    ("成长", "sparkles"), ("小屋", "home"), ("后院", "garden"), ("世界地图", "map"), ("衣柜", "tshirt")
 ]
 
 @main
@@ -124,7 +124,10 @@ final class PetController {
         panel.title = "暮色小院 · 桌宠"
         panel.isReleasedWhenClosed = false
         panel.setFrameAutosaveName("DaygardenPet")
-        panel.contentView = NSHostingView(rootView: DesktopPet(store: store, click: { [weak self] in self?.store.clickPet() }, menu: { [weak self] in self?.toggleMenu() }, drag: { [weak self] direction in
+        panel.contentView = NSHostingView(rootView: DesktopPet(store: store, click: { [weak self] in
+            self?.raiseOpenWindows()
+            self?.store.clickPet()
+        }, menu: { [weak self] in self?.toggleMenu() }, drag: { [weak self] direction in
             self?.store.dragPet(direction)
         }, drop: { [weak self] in self?.finishPetDrag() }, move: { [weak self] origin, pointer in self?.movePet(to: origin, pointer: pointer) }))
         if !panel.setFrameUsingName("DaygardenPet"), let screen = NSScreen.main {
@@ -138,7 +141,7 @@ final class PetController {
         menuPanel.isOpaque = false
         menuPanel.backgroundColor = .clear
         menuPanel.hasShadow = false
-        menuPanel.level = .floating
+        menuPanel.level = .normal
         menuPanel.hidesOnDeactivate = false
         menuPanel.isMovable = false
         menuPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -259,36 +262,44 @@ final class PetController {
         toolPanel.setFrameOrigin(placement.0)
     }
     func show() { panel.orderFrontRegardless() }
-    func hide() { dismissFloating(); panel.orderOut(nil) }
-    func closeMenu() { panel.removeChildWindow(menuPanel); menuPanel.orderOut(nil); menuSide = nil }
+    func hide() { closeInventory(); closeMenu(); closeTool(); panel.orderOut(nil) }
+    func closeMenu() { menuPanel.orderOut(nil); menuSide = nil }
     func closeTool() {
-        closeInventory()
-        if let toolPanel { panel.removeChildWindow(toolPanel); toolPanel.orderOut(nil); toolPanel.contentView = nil }
+        if let toolPanel {
+            if inventoryPanel?.parent === toolPanel { closeInventory() }
+            toolPanel.orderOut(nil)
+            toolPanel.contentView = nil
+        }
         toolViews.removeAll()
         toolSide = nil
     }
-    private func dismissFloating() { closeMenu(); closeTool() }
+    private func raiseOpenWindows() {
+        let windows = [menuPanel, toolPanel, manager, inventoryPanel].compactMap { $0 }
+        let ordered = (NSWindow.windowNumbers() ?? []).compactMap { number in
+            windows.first { $0.isVisible && $0.windowNumber == number.intValue }
+        }
+        guard let front = ordered.first else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        for window in ordered.reversed() { window.orderFront(nil) }
+        (front.attachedSheet ?? front).makeKeyAndOrderFront(nil)
+    }
     func back() {
         let route=managerIsOpen ? store.selectedPage:store.activeTool
         if let parent=store.sceneNavigation.goBack(from:route) {displayTool(parent)}
-        else {manager?.orderOut(nil);closeTool();showMenu()}
+        else {manager?.orderOut(nil);closeInventory();closeTool();showMenu()}
     }
     func toggleMenu() {
         if managerIsOpen { openManager(); return }
-        if menuPanel.isVisible { menuPanel.makeKeyAndOrderFront(nil); return }
-        closeTool()
         showMenu()
     }
     private func showMenu() {
-        menuPanel.setContentSize(NSSize(width:320,height:min(store.data.timer == nil ? 590:670,screenArea.height-20)))
         positionMenu()
-        panel.addChildWindow(menuPanel, ordered: .above)
         NSApp.activate(ignoringOtherApps: true)
         menuPanel.makeKeyAndOrderFront(nil)
     }
-    func openTool(_ name: String, from source: String? = nil) {
+    func openTool(_ name: String, from source: String? = nil, sideways: Bool = false) {
         let name=SceneNavigation.canonical(name)
-        store.sceneNavigation.enter(name,from:source)
+        store.sceneNavigation.enter(name,from:source,sideways:sideways)
         displayTool(name)
     }
     private func displayTool(_ name:String) {
@@ -313,7 +324,7 @@ final class PetController {
             panel.hasShadow = false
             panel.isReleasedWhenClosed = false
             panel.hidesOnDeactivate = false
-            panel.level = .floating
+            panel.level = .normal
             panel.isMovable = false
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.minSize = NSSize(width: 460, height: 420)
@@ -322,7 +333,7 @@ final class PetController {
         }
         guard let toolPanel else { return }
         if toolViews[name] == nil { toolViews[name] = NSHostingView(rootView: ToolPanelView(store: store, tool: name)) }
-        toolPanel.contentView = toolViews[name]
+        if toolPanel.contentView !== toolViews[name] { toolPanel.contentView = toolViews[name] }
         toolPanel.title = SceneNavigation.title(name)
         let area = screenArea
         toolPanel.minSize = NSSize(width: min(460, area.width-16), height: min(420,area.height-16))
@@ -337,7 +348,6 @@ final class PetController {
             }
         }
         positionTool()
-        if toolPanel.parent !== panel { panel.addChildWindow(toolPanel, ordered: .above) }
         NSApp.activate(ignoringOtherApps: true)
         toolPanel.makeKeyAndOrderFront(nil)
     }
@@ -346,7 +356,7 @@ final class PetController {
             let inventory=MagicPanel(contentRect:.zero,styleMask:[.borderless,.resizable],backing:.buffered,defer:false)
             inventory.isOpaque=false;inventory.backgroundColor = .clear;inventory.hasShadow=false
             inventory.isMovable=false;inventory.isReleasedWhenClosed=false;inventory.hidesOnDeactivate=false
-            inventory.level = .floating;inventory.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
+            inventory.level = .normal;inventory.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
             inventory.minSize=NSSize(width:340,height:300);inventory.title="库存"
             inventory.contentView=NSHostingView(rootView:InventoryView(store:store,close:{[weak self] in self?.closeInventory()})
                 .overlay {WindowResizeBorder(minimumContentSize:NSSize(width:340,height:300),began:{[weak self] in self?.resizingInventory=true},ended:{[weak self] in self?.resizingInventory=false;self?.positionInventory()})})
@@ -354,16 +364,20 @@ final class PetController {
             inventory.setContentSize(NSSize(width:min(580,screenArea.width-16),height:min(600,screenArea.height-16)))
         }
         guard let inventoryPanel else{return}
-        let host:NSWindow=(toolPanel?.isVisible == true ? toolPanel:nil) ?? (managerIsOpen ? manager:nil) ?? panel
-        if inventoryPanel.parent !== host {inventoryPanel.parent?.removeChildWindow(inventoryPanel);host.addChildWindow(inventoryPanel,ordered:.above)}
-        positionInventory();inventoryPanel.makeKeyAndOrderFront(nil)
+        let host:NSWindow?=(toolPanel?.isVisible == true ? toolPanel:nil) ?? (managerIsOpen ? manager:nil)
+        if inventoryPanel.parent !== host {
+            inventoryPanel.parent?.removeChildWindow(inventoryPanel)
+            host?.addChildWindow(inventoryPanel,ordered:.above)
+        }
+        positionInventory(opening:true);inventoryPanel.makeKeyAndOrderFront(nil)
     }
     func closeInventory() {
         guard let inventoryPanel else{return}
         inventoryPanel.parent?.removeChildWindow(inventoryPanel);inventoryPanel.orderOut(nil);inventorySide=nil
     }
-    private func positionInventory() {
-        guard let inventoryPanel,let host=inventoryPanel.parent,!resizingInventory else{return}
+    private func positionInventory(opening:Bool=false) {
+        guard let inventoryPanel,opening || inventoryPanel.isVisible,!resizingInventory else{return}
+        let host=inventoryPanel.parent ?? panel
         let area=PetPlacement.screen(for:host.frame,screens:NSScreen.screens.map(\.visibleFrame))
         if inventoryPanel.frame.width>area.width-16 || inventoryPanel.frame.height>area.height-16 {
             inventoryPanel.setContentSize(NSSize(width:min(inventoryPanel.frame.width,area.width-16),height:min(inventoryPanel.frame.height,area.height-16)))
@@ -385,7 +399,7 @@ final class PetController {
         }
         NSApp.activate(ignoringOtherApps: true)
         if manager?.isMiniaturized == true { manager?.deminiaturize(nil) }
-        manager?.makeKeyAndOrderFront(nil)
+        if let manager { (manager.attachedSheet ?? manager).makeKeyAndOrderFront(nil) }
     }
 }
 
@@ -567,7 +581,7 @@ struct ToolPanelView: View {
     @ObservedObject var store: GardenStore
     var tool: String
     private var sceneMetadata:String {
-        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","后院","户外地图"].contains(tool) else{return ""}
+        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","后院","世界地图"].contains(tool) else{return ""}
         let level="等级 \(store.data.levelProgress.level)"
         return tool == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
     }
@@ -594,7 +608,7 @@ struct ToolPanelView: View {
                     case "地图": HomeScene(store:store)
                     case "后院": HomeScene(store:store,backyard:true)
                     case "池塘": PondScene(store:store)
-                    case "户外地图": WorldMapScene(store:store)
+                    case "世界地图": WorldMapScene(store:store)
                     case "湖畔钓鱼", "钓鱼": FishingScene(store:store)
                     case "林间冒险", "探险": ExpeditionScene(store:store)
                     case "炼金室", "熬制魔药": MapPage(store:store,journey:.potions)

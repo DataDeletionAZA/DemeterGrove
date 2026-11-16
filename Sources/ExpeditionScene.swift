@@ -7,6 +7,8 @@ struct ExpeditionScene: View {
     @State private var tab = "行程"
     @State private var forageNote: String?
     @State private var showInventory = false
+    @State private var showParty = false
+    @State private var equipmentCompanion: Companion?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var state: ExpeditionState { store.data.expeditionState }
     private var location: ExpeditionLocation {
@@ -15,6 +17,7 @@ struct ExpeditionScene: View {
     }
     private var route: String { "探险/" + location.id }
     private var locked: Bool { store.data.levelProgress.level < location.level }
+    private var localTrip: ExpeditionTrip? { state.trip.flatMap{$0.locationID == location.id ? $0:nil} }
     private var legacyTrip: Bool { store.data.garden.economy.trip(.adventure) != nil }
     private var minuteInput: String { minutes ?? String(state.preferredMinutes) }
     private var duration: Int? { Int(minuteInput.trimmingCharacters(in:.whitespacesAndNewlines)).flatMap{(1...1440).contains($0) ? $0:nil} }
@@ -30,8 +33,8 @@ struct ExpeditionScene: View {
                     }
                 }
                 SceneToolbar(items:[
-                    SceneToolbarItem("酒馆与装备"){SceneNavigation.open("酒馆",store:store,from:store.currentRoute)},
-                    SceneToolbarItem("户外地图"){SceneNavigation.open("户外地图",store:store,from:store.currentRoute)},
+                    SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:store.currentRoute)},
+                    SceneToolbarItem("世界地图"){SceneNavigation.open("世界地图",store:store,from:store.currentRoute)},
                     SceneToolbarItem("记录专注"){SceneNavigation.open("计时器",store:store,from:store.currentRoute)}
                 ])
             }
@@ -39,6 +42,8 @@ struct ExpeditionScene: View {
         }.onChange(of:location.id) { _,_ in forageNote=nil }
             .onChange(of:state.history.last?.id) { _,_ in tab="记录";forageNote=nil }
             .sheet(isPresented:$showInventory) { InventoryView(store:store) }
+            .sheet(isPresented:$showParty) { ExpeditionPartySheet(store:store,location:location) }
+            .sheet(item:$equipmentCompanion) { person in CompanionEquipmentSheet(store:store,person:person) }
     }
 
     private func elapsed(_ trip: ExpeditionTrip) -> Double { max(0,min(trip.duration,store.gameFocus-trip.startedFocus)) }
@@ -52,8 +57,8 @@ struct ExpeditionScene: View {
 
     private func landscape(_ size:CGSize) -> some View {
         let w=size.width,h=size.height
-        let trip=state.trip.flatMap{$0.locationID == location.id ? $0:nil}
-        let party=trip?.companions ?? (state.trip == nil && !locked ? state.team:[])
+        let trip=localTrip
+        let party=trip?.companions ?? (locked ? []:state.team(at:location.id).filter{!state.isTraveling($0)})
         let distance=trip.map{0.05+progress($0)*0.07} ?? 0
         let eligible=NatureCatalog.forage.filter{!locked && $0.locations.contains(location.id) && $0.level <= (trip?.level ?? store.data.levelProgress.level)}
         let ready=eligible.filter{(trip?.unpackedCount($0.id) ?? 0)>0}
@@ -62,7 +67,7 @@ struct ExpeditionScene: View {
             RoomBackdrop(name:location.backdrop).frame(width:w,height:h)
             ForEach(Array(party.enumerated()),id:\.element) {index,id in
                 if let person=Companion.all.first(where:{$0.id == id}) {
-                    ObjectButton(label:"同行伙伴\(person.name)",action:{store.message="\(person.name) · \(person.role)"},caption:person.name) {
+                    ObjectButton(label:"查看\(person.name)的装备",action:{equipmentCompanion=person},caption:person.name) {
                         GameNatureSprite(key:person.spriteKey,size:w*0.12)
                     }.position(x:w*(0.23+Double(index)*0.15+distance),y:h*(index%2 == 0 ? 0.55:0.63))
                         .animation(reduceMotion ? nil:.easeOut(duration:0.3),value:trip?.id)
@@ -130,19 +135,16 @@ struct ExpeditionScene: View {
 
     private var itinerary: some View {
         VStack(alignment:.leading,spacing:9) {
-            if let trip=state.trip {
-                if let destination=ExpeditionLocation.all.first(where:{$0.id == trip.locationID}), destination.id != location.id {
-                    Button("返回\(destination.name)的行程") { SceneNavigation.open("探险/"+destination.id,store:store,from:store.currentRoute) }
-                        .fixedSize(horizontal:false,vertical:true)
-                }
+            if let trip=localTrip {
                 Text("\(Int(elapsed(trip)/60)) / \(Int(trip.duration/60)) 分钟专注").font(.system(size:11)).monospacedDigit()
                 PixelProgress(value:progress(trip))
                 Text("收获 \(trip.rewards.values.reduce(0,+)) 份 · 发现 \(trip.discoveries.count) 种").font(.system(size:11)).foregroundStyle(Palette.muted)
                 Text("采集 \(trip.gathering) · 寻踪 \(trip.scouting) · 护行 \(trip.guarding)").font(.system(size:10)).foregroundStyle(Palette.goldLight)
-                if trip.locationID == location.id {
-                    Text("待收入行囊 \(trip.rewards.keys.reduce(0){$0+trip.unpackedCount($1)}) 份")
-                        .font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
-                }
+                Text("待收入行囊 \(trip.rewards.keys.reduce(0){$0+trip.unpackedCount($1)}) 份")
+                    .font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+            } else if let trip=state.trip, let destination=ExpeditionLocation.all.first(where:{$0.id == trip.locationID}) {
+                Button("查看\(destination.name)的行程") { SceneNavigation.open("探险/"+destination.id,store:store,from:store.currentRoute) }
+                    .fixedSize(horizontal:false,vertical:true)
             } else if legacyTrip {
                 Text("行程进行中").font(.caption).fixedSize(horizontal:false,vertical:true)
             } else if locked {
@@ -163,27 +165,31 @@ struct ExpeditionScene: View {
                     Text("分钟").font(.system(size:11))
                 }
                 if duration == nil {Text("请输入 1～1440 的整数分钟。").font(.system(size:10)).foregroundStyle(Palette.goldLight)}
-                Text(state.team.isEmpty ? "你独自出发":"与你同行："+state.team.compactMap{id in Companion.all.first{$0.id == id}?.name}.joined(separator:"、"))
-                    .font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
             }
         }
     }
 
     @ViewBuilder private var itineraryAction: some View {
-        if let trip=state.trip {
-            if trip.locationID == location.id {
-                Button("提前返回") {
-                    if store.commitGameChange({$0.returnExpedition(at:store.now)}) {tab="记录"}
-                }.frame(maxWidth:.infinity)
-            }
+        if localTrip != nil {
+            Button("提前返回") {
+                if store.commitGameChange({$0.returnExpedition(at:store.now)}) {tab="记录"}
+            }.frame(maxWidth:.infinity)
         } else {
-            Button("出发探险") {
-                guard let duration else{return}
-                if store.commitGameChange({$0.embarkExpedition(locationID:location.id,minutes:duration,at:store.now)}) {
-                    forageNote=nil
+            VStack(spacing:6) {
+                if !locked {
+                    Button("队伍 · \(state.team(at:location.id).count)/4") {showParty=true}
+                        .frame(maxWidth:.infinity)
                 }
-            }.frame(maxWidth:.infinity).buttonStyle(PixelButtonStyle(primary:true))
-                .disabled(locked || legacyTrip || duration == nil)
+                if state.trip == nil {
+                    Button("出发探险") {
+                        guard let duration else{return}
+                        if store.commitGameChange({$0.embarkExpedition(locationID:location.id,minutes:duration,at:store.now)}) {
+                            forageNote=nil
+                        }
+                    }.frame(maxWidth:.infinity).buttonStyle(PixelButtonStyle(primary:true))
+                        .disabled(locked || legacyTrip || duration == nil)
+                }
+            }
         }
     }
 
@@ -250,6 +256,53 @@ struct ExpeditionScene: View {
                         }
                     }
                 }.frame(maxWidth:.infinity,alignment:.leading).padding(8).magicSurface(Palette.card)
+            }
+        }
+    }
+}
+
+private struct ExpeditionPartySheet: View {
+    @ObservedObject var store:GardenStore
+    @Environment(\.dismiss) private var dismiss
+    let location:ExpeditionLocation
+    private var state:ExpeditionState { store.data.expeditionState }
+    private var party:[String] { state.team(at:location.id) }
+
+    var body: some View {
+        SceneDialog(preferred:CGSize(width:450,height:480)) {
+            VStack(alignment:.leading,spacing:6) {
+                Text("\(location.name)的队伍 · \(party.count)/4").font(.headline)
+                let stats = store.data.expeditionStats(at:location.id)
+                Text("采集 \(stats.gathering) · 寻踪 \(stats.scouting) · 护行 \(stats.guarding)")
+                    .font(.caption).foregroundStyle(Palette.goldLight)
+            }
+        } content: {
+            VStack(alignment:.leading,spacing:8) {
+                if state.hired.isEmpty { Text("还没有同行伙伴。可以先去酒馆招募。").foregroundStyle(Palette.muted) }
+                ForEach(Companion.all.filter{state.hired.contains($0.id)}) { person in
+                    let selected = party.contains(person.id)
+                    HStack(spacing:8) {
+                        GameNatureSprite(key:person.spriteKey,size:44)
+                        VStack(alignment:.leading,spacing:3) {
+                            Text(person.name)
+                            Text(state.isTraveling(person.id) ? "正在远行":person.role).font(.caption).foregroundStyle(Palette.muted)
+                        }
+                        Spacer(minLength:0)
+                        Button(selected ? "移出":"加入") {
+                            store.commitGameChange { $0.toggleExpeditionCompanion(person.id,at:location.id) }
+                        }.buttonStyle(PixelButtonStyle(primary:selected))
+                            .disabled(!selected && party.count>=4)
+                            .accessibilityLabel(selected ? "移出\(person.name)":"加入\(person.name)")
+                    }.padding(7).magicSurface(Palette.card)
+                }
+            }
+        } footer: {
+            HStack(spacing:8) {
+                if !state.hired.isEmpty {
+                    Text("点击场景里的队员可查看装备。").font(.caption).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength:0)
+                Button("完成"){dismiss()}.keyboardShortcut(.cancelAction)
             }
         }
     }

@@ -25,13 +25,13 @@ for entrances in [HomeEntrance.house,HomeEntrance.backyard] {
     assert(Set(entrances.map(\.id)).count == entrances.count)
     for entrance in entrances {assert(CGRect(x:0,y:0,width:1,height:1).contains(entrance.rect))}
 }
-assert(Set(HomeEntrance.house.map(\.id)) == Set(SceneNavigation.indoorRooms+["后院","户外地图"]))
+assert(Set(HomeEntrance.house.map(\.id)) == Set(SceneNavigation.indoorRooms+["后院","世界地图"]))
 assert(Set(HomeEntrance.backyard.map(\.id)) == Set(SceneNavigation.outdoorRooms+["首页"]))
 assert(SceneNavigation.neighbors(of:"首页") == nil)
 assert(SceneNavigation.neighbors(of:"其他") == nil)
 assert(SceneNavigation.neighbors(of:"书房")!.0 == "锻造室")
 assert(SceneNavigation.neighbors(of:"商店")!.1 == "炼金室")
-for group in [SceneNavigation.rooms,FishingLocation.all.map{"钓鱼/"+$0.id},ExpeditionLocation.all.map{"探险/"+$0.id}] {
+for group in [SceneNavigation.indoorRooms,SceneNavigation.outdoorRooms,FishingLocation.all.map{"钓鱼/"+$0.id},ExpeditionLocation.all.map{"探险/"+$0.id},MineLayer.areas.map{"矿洞/"+$0}] {
     for scene in group {
         let (previous,next)=SceneNavigation.neighbors(of:scene)!
         assert(SceneNavigation.neighbors(of:previous)!.1 == scene)
@@ -160,17 +160,20 @@ assert((try? simultaneous.validated(at:journeyDate)) == nil)
 print("PASS: independent fishing/adventure/potion runs, same-kind exclusion, separate one-time collection, exact legacy progress migration, new save reload and duplicate-kind rejection")
 
 var mismatch=PotionSelection()
-assert(mismatch.add("薄荷",kind:.material,available:1))
-assert(mismatch.add("月光草",kind:.ingredient,available:1))
+assert(!mismatch.add("薄荷",kind:.material,available:1))
+assert(!mismatch.add("月光草",kind:.ingredient,available:1))
 assert(!mismatch.matches(Potion.all[0]))
 print("PASS: scene bounds, reciprocal routes, potion staging/cancel, exact recipe matching, single stock deduction and focus-gated collection")
 
 assert(SceneNavigation.canonical("地图") == "首页")
 assert(SceneNavigation.canonical("小院") == "首页")
+assert(SceneNavigation.canonical("户外地图") == "世界地图")
 assert(SceneNavigation.canonical("熬制魔药") == "炼金室")
 assert(SceneNavigation.title("熬制魔药") == "炼金室")
-for room in SceneNavigation.rooms+["任务","习惯","日记","日程","计时器","首页"] {assert(SceneNavigation.parent(of:room) == nil)}
-for route in SceneNavigation.wilds {assert(SceneNavigation.parent(of:route) == "户外地图")}
+for route in ["任务","习惯","日记","日程","计时器","首页"] {assert(SceneNavigation.parent(of:route) == nil)}
+for route in SceneNavigation.outdoorRooms {assert(SceneNavigation.parent(of:route) == "后院")}
+for route in SceneNavigation.indoorRooms+["后院","世界地图"] {assert(SceneNavigation.parent(of:route) == "首页")}
+for route in SceneNavigation.wilds {assert(SceneNavigation.parent(of:route) == "世界地图")}
 assert(SceneNavigation.parent(of:"户外地图") == "首页")
 assert(!SceneNavigation.wilds.contains("熬制魔药"))
 for width:CGFloat in [320,460,760,1200] {
@@ -193,16 +196,16 @@ print("PASS: fixed parent routes, alchemy aliases, bounded dialog and customer f
 var navigation = SceneNavigation.Context()
 for route in SceneNavigation.rooms + SceneNavigation.wilds + ["任务","习惯","日记","户外地图"] {
     navigation.enter(route)
-    assert(navigation.parent(of:route) == nil)
-    assert(navigation.goBack(from:route) == nil)
+    assert(navigation.parent(of:route) == SceneNavigation.parent(of:route))
+    assert(navigation.goBack(from:route) == SceneNavigation.parent(of:route))
 }
-for source in ["书房","厨房","锻造室","首页","户外地图"] {
+for source in ["书房","厨房","锻造室","首页","世界地图"] {
     navigation.enter(source)
     for route in ["任务","习惯","日程","日记","计时器","成长","商店"] where route != source {
         navigation.enter(route,from:source)
         assert(navigation.parent(of:route) == source)
         assert(navigation.goBack(from:route) == source)
-        assert(navigation.parent(of:source) == nil)
+        assert(navigation.parent(of:source) == SceneNavigation.parent(of:source))
     }
 }
 navigation.enter("书房")
@@ -210,24 +213,42 @@ navigation.enter("锻造室",from:"书房")
 navigation.enter("商店",from:"锻造室")
 assert(navigation.goBack(from:"商店") == "锻造室")
 assert(navigation.goBack(from:"锻造室") == "书房")
-assert(navigation.goBack(from:"书房") == nil)
+assert(navigation.goBack(from:"书房") == "首页")
 navigation.enter("地图")
 navigation.enter("户外地图",from:"小院")
 navigation.enter("钓鱼/lake",from:"户外地图")
-navigation.enter("钓鱼/river",from:"钓鱼/lake")
-assert(navigation.goBack(from:"钓鱼/river") == "钓鱼/lake")
-assert(navigation.goBack(from:"钓鱼/lake") == "户外地图")
-assert(navigation.goBack(from:"户外地图") == "首页")
+navigation.enter("钓鱼/river",from:"钓鱼/lake",sideways:true)
+navigation.enter("钓鱼/lake",from:"钓鱼/river",sideways:true)
+navigation.enter("酒馆",from:"钓鱼/lake")
+assert(navigation.goBack(from:"酒馆") == "钓鱼/lake")
+assert(navigation.goBack(from:"钓鱼/lake") == "世界地图")
+assert(navigation.goBack(from:"世界地图") == "首页")
+for route in ["钓鱼/lake", "探险/forest", "矿洞/旧矿场"] {
+    let adjacent=SceneNavigation.neighbors(of:route)!.1
+    navigation.enter("世界地图")
+    navigation.enter(route,from:"世界地图")
+    navigation.enter(adjacent,from:route,sideways:true)
+    assert(navigation.goBack(from:adjacent) == "世界地图")
+}
+navigation.enter("后院")
+navigation.enter("农场",from:"后院")
+navigation.enter("商店",from:"农场")
+navigation.enter("厨房",from:"商店",sideways:true)
+assert(navigation.goBack(from:"厨房") == "农场")
+navigation.enter("池塘",from:"农场",sideways:true)
+assert(navigation.goBack(from:"池塘") == "后院")
 navigation.enter("专注",from:"书房")
 assert(navigation.parent(of:"计时器") == "书房")
+assert(navigation.goBack(from:"专注") == "书房")
 navigation.enter("日记")
 assert(navigation.parent(of:"日记") == nil && navigation.parent(of:"计时器") == nil)
-assert(SceneNavigation.neighbors(of:"矿洞") == nil)
+assert(SceneNavigation.neighbors(of:"矿洞")?.1 == "矿洞/群山矿洞")
 assert(SceneNavigation.neighbors(of:"湖畔钓鱼")?.0.hasPrefix("钓鱼/") == true)
 assert(SceneNavigation.neighbors(of:"林间冒险")?.1.hasPrefix("探险/") == true)
 for location in FishingLocation.all {assert(SceneNavigation.title("钓鱼/"+location.id) == location.name)}
 for location in ExpeditionLocation.all {assert(SceneNavigation.title("探险/"+location.id) == location.name)}
-print("PASS: entry-source back paths, aliases, direct-entry reset, isolated fishing/adventure arrows and destination labels")
+for area in MineLayer.areas {assert(SceneNavigation.title("矿洞/"+area) == area)}
+print("PASS: parent routes after sideways travel and explicit links, direct-entry reset, map aliases and location labels")
 
 for viewportWidth:CGFloat in [240,460,1000,1800,2600] {
     let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth)

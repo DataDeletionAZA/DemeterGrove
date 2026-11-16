@@ -1,7 +1,7 @@
 import Foundation
 
 struct PotionSelection {
-    enum Kind {case ingredient,material}
+    enum Kind: String, Codable {case ingredient,material}
     struct Portion:Identifiable {
         let id=UUID()
         var name:String
@@ -12,9 +12,9 @@ struct PotionSelection {
     private(set) var portions:[Portion]=[]
     mutating func add(_ name:String,kind:Kind,available:Int)->Bool {
         let name=kind == .material ? Potion.materialName(name):name
-        guard available>portions.filter({$0.name == name && $0.kind == kind}).count,
-              portions.count<2 else{return false}
-        let slot=(0..<2).first{candidate in !portions.contains{$0.slot == candidate}}!
+        guard available>0, !portions.contains(where:{$0.name == name && $0.kind == kind}),
+              AlchemyMaterial(name:name,kind:kind).profile != nil, portions.count<5 else{return false}
+        let slot=(0..<5).first{candidate in !portions.contains{$0.slot == candidate}}!
         portions.append(Portion(name:name,kind:kind,slot:slot));return true
     }
     mutating func remove(_ id:UUID) {portions.removeAll{$0.id == id}}
@@ -32,26 +32,34 @@ extension Potion {
     var forageID:String? {
         switch material {case "月光草":return "moon_herb";case "琥珀石":return "amber";case "星砂":return "star_sand";default:return nil}
     }
-    static func materialName(_ value:String)->String {all.first{$0.forageID == value}?.material ?? value}
+    static func materialName(_ value:String)->String {
+        all.first{$0.forageID == value}?.material ?? NatureCatalog.forage.first{$0.id == value}?.name ?? value
+    }
 }
 
 extension AppData {
     func potionMaterialCount(_ value:String)->Int {
         let name=Potion.materialName(value)
-        guard let id=Potion.all.first(where:{$0.material == name})?.forageID else {return garden.economy.finds[name,default:0]}
+        guard let id=NatureCatalog.forage.first(where:{$0.name == name})?.id else {return garden.economy.finds[name,default:0]}
         return garden.economy.finds[name,default:0] + garden.economy.finds[id,default:0] + (garden.economy.expedition?.inventory[id,default:0] ?? 0)
     }
     var potionMaterialNames:[String] {
-        Set(Potion.all.map(\.material)).filter{potionMaterialCount($0)>0}.sorted()
+        Set(NatureCatalog.forage.map(\.name)).filter{potionMaterialCount($0)>0}.sorted()
     }
     mutating func consumePotionMaterials(_ potion:Potion)->Bool {
         guard garden.ingredients[potion.ingredient,default:0]>0,potionMaterialCount(potion.material)>0 else {return false}
-        let keys=[potion.material,potion.forageID].compactMap{$0}
+        guard consumePotionMaterial(potion.material) else{return false}
+        garden.ingredients[potion.ingredient,default:0]-=1
+        return true
+    }
+    mutating func consumePotionMaterial(_ material:String)->Bool {
+        let name=Potion.materialName(material)
+        let id=NatureCatalog.forage.first{$0.name == name}?.id
+        let keys=[name,id].compactMap{$0}
         if let key=keys.first(where:{garden.economy.finds[$0,default:0]>0}) {garden.economy.finds[key,default:0]-=1}
-        else if let id=potion.forageID,garden.economy.expedition?.inventory[id,default:0] ?? 0 > 0 {
+        else if let id,garden.economy.expedition?.inventory[id,default:0] ?? 0 > 0 {
             garden.economy.expedition?.inventory[id,default:0]-=1
         } else {return false}
-        garden.ingredients[potion.ingredient,default:0]-=1
         return true
     }
 }

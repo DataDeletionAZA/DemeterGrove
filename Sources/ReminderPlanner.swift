@@ -47,6 +47,9 @@ extension AppData {
             return GameReadyEvent(id: "journey/\(trip.kind.rawValue)/\(trip.startedAt)", kind: kind,
                                  name: trip.recipe.flatMap { id in Potion.all.first { $0.id == id }?.name } ?? trip.kind.rawValue)
         }
+        if let brew=garden.economy.alchemy?.active,brew.progress(focus)>=1 {
+            events.append(GameReadyEvent(id:"alchemy/\(brew.id)",kind:.potions,name:"魔药熬制"))
+        }
         events += (garden.economy.fishing?.catches ?? []).suffix(32).filter{$0.focus <= focus}.map { item in
             GameReadyEvent(id:"catch/\(item.id)",kind:.fishing,
                            name:item.itemID.flatMap{NatureItemInfo.fishingCatch($0)?.name} ?? "空钩",stored:true,quantity:item.itemID == nil ? 0:1)

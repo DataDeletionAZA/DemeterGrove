@@ -15,22 +15,87 @@ func encode<T:Encodable>(_ value:T)throws->Data {
     let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
     return try encoder.encode(value)
 }
+func recruit(_ id:String, in data:inout AppData)->Bool {
+    _ = data.openTavern(at:now)
+    for _ in Companion.all {
+        if data.tavernVisitors.contains(where:{$0.id == id}) {return data.hireCompanion(id)}
+        guard data.refreshTavern(at:now) else {return false}
+    }
+    return false
+}
+
+var tavern=fixture(level:6)
+assert(tavern.openTavern(at:now))
+assert(!tavern.openTavern(at:now))
+assert(tavern.tavernVisitors.map(\.id) == ["rowan","mira"])
+assert(!tavern.hireCompanion("oswin") && !tavern.hireCompanion("iris"))
+var broke=tavern
+broke.garden.coins=TavernRoster.refreshPrice-1
+assert(!broke.refreshTavern(at:now) && broke.garden.coins == TavernRoster.refreshPrice-1)
+assert(broke.expeditionState.tavern == tavern.expeditionState.tavern)
+let beforeRefresh=tavern.garden.coins
+assert(tavern.refreshTavern(at:now))
+assert(tavern.garden.coins == beforeRefresh-TavernRoster.refreshPrice)
+assert(tavern.tavernVisitors.map(\.id) == ["rowan","oswin"])
+assert(tavern.hireCompanion("oswin"))
+assert(tavern.tavernVisitors.map(\.id) == ["rowan"])
+let beforeAuto=tavern.garden.coins
+let beforeCycle=tavern.expeditionState.tavern
+tavern.timer=TimerRun(kind:.stopwatch,target:3600,taskTitle:"阅读",startedAt:now,resumedAt:now)
+_ = tavern.advanceFocusWorld(at:now.addingTimeInterval(1799))
+assert(tavern.expeditionState.tavern == beforeCycle)
+tavern.timer?.pause(at:now.addingTimeInterval(1799))
+_ = tavern.advanceFocusWorld(at:now.addingTimeInterval(3600))
+assert(tavern.expeditionState.tavern == beforeCycle)
+let pauseTime=now.addingTimeInterval(3600)
+tavern.timer?.resumedAt=pauseTime
+assert(tavern.advanceFocusWorld(at:pauseTime.addingTimeInterval(1)))
+assert(tavern.tavernVisitors.map(\.id) == ["rowan","mira"] && tavern.garden.coins == beforeAuto)
+assert(!tavern.refreshTavern(at:pauseTime.addingTimeInterval(1)))
+let tavernSave=try encode(tavern)
+let reloadedTavern=try JSONDecoder().decode(AppData.self,from:tavernSave)
+assert(reloadedTavern.expeditionState.tavern == tavern.expeditionState.tavern)
+let cycleStart=tavern.expeditionState.tavern!.refreshedAtFocus
+var restTavern=tavern
+_ = restTavern.finishTimer(at:pauseTime.addingTimeInterval(1))
+restTavern.timer=TimerRun(kind:.rest,target:3600,taskTitle:"休息",startedAt:now,resumedAt:now)
+_ = restTavern.advanceFocusWorld(at:now.addingTimeInterval(3600))
+assert(restTavern.expeditionState.tavern?.refreshedAtFocus == cycleStart)
+var lockedTavern=fixture(level:1)
+assert(lockedTavern.openTavern(at:now) && lockedTavern.tavernVisitors.isEmpty)
+assert(!lockedTavern.canRefreshTavern && !lockedTavern.refreshTavern(at:now))
+lockedTavern.sessions=fixture(level:5).sessions
+assert(lockedTavern.advanceFocusWorld(at:now))
+assert(lockedTavern.tavernVisitors.map(\.id) == ["rowan","mira"])
+var rotatingTavern=fixture(level:18)
+assert(rotatingTavern.openTavern(at:now))
+var steppingTavern=rotatingTavern
+for interval in 1...8 {
+    assert(steppingTavern.advanceTavern(to:steppingTavern.totalFocus+Double(interval)*TavernRoster.interval))
+}
+assert(rotatingTavern.advanceTavern(to:rotatingTavern.totalFocus+8*TavernRoster.interval))
+assert(rotatingTavern.expeditionState.tavern == steppingTavern.expeditionState.tavern)
 
 var team=fixture()
 assert(team.levelProgress.level == 25)
 let beforeHire=team.garden.coins
 assert(!team.hireCompanion("unknown"))
+assert(team.openTavern(at:now))
 assert(team.hireCompanion("rowan"))
 assert(team.garden.coins == beforeHire-Companion.all[0].price)
 assert(!team.hireCompanion("rowan"))
-assert(!team.toggleExpeditionCompanion("mira"))
-for person in Companion.all.dropFirst() where person.level<=25 {assert(team.hireCompanion(person.id))}
-for person in Companion.all.prefix(4) {assert(team.toggleExpeditionCompanion(person.id))}
-assert(team.expeditionState.hired.count == 8 && team.expeditionState.team.count == 4)
-assert(!team.toggleExpeditionCompanion("cedar"))
-assert(team.toggleExpeditionCompanion("mira"))
-assert(team.toggleExpeditionCompanion("cedar"))
-assert(team.expeditionState.team == ["rowan","oswin","iris","cedar"])
+assert(!team.toggleExpeditionCompanion("mira",at:"forest"))
+for person in Companion.all.dropFirst() where person.level<=25 {assert(recruit(person.id,in:&team))}
+for person in Companion.all.prefix(4) {assert(team.toggleExpeditionCompanion(person.id,at:"forest"))}
+assert(team.expeditionState.hired.count == 8 && team.expeditionState.team(at:"forest").count == 4)
+assert(!team.toggleExpeditionCompanion("cedar",at:"forest"))
+assert(team.toggleExpeditionCompanion("mira",at:"forest"))
+assert(team.toggleExpeditionCompanion("cedar",at:"forest"))
+assert(team.expeditionState.team(at:"forest") == ["rowan","oswin","iris","cedar"])
+assert(team.expeditionState.team(at:"river").isEmpty)
+assert(team.toggleExpeditionCompanion("mira",at:"river"))
+assert(!team.toggleExpeditionCompanion("mira",at:"reef"))
+assert(!team.toggleExpeditionCompanion("mira",at:"missing"))
 
 team.garden.economy.expedition?.gear=["copper_sickle":2,"iron_coat":1]
 assert(team.equipExpeditionGear("copper_sickle",companion:"rowan",slot:.tool))
@@ -51,8 +116,11 @@ assert(team.embarkExpedition(locationID:"forest",minutes:30,at:now))
 assert(!team.embarkExpedition(locationID:"river",minutes:30,at:now))
 let trip=team.expeditionState.trip!
 assert(trip.companions.count == 4 && trip.gathering == stats.gathering && trip.guarding == stats.guarding)
-assert(team.toggleExpeditionCompanion("rowan"))
-assert(team.equipExpeditionGear(nil,companion:"rowan",slot:.tool))
+assert(!team.toggleExpeditionCompanion("rowan",at:"forest"))
+assert(team.toggleExpeditionCompanion("rowan",at:"river"))
+assert(!team.equipExpeditionGear(nil,companion:"rowan",slot:.tool))
+assert(team.equipExpeditionGear("copper_sickle",companion:"mira",slot:.tool))
+assert(team.expeditionState.gear["copper_sickle"] == 2 && team.expeditionState.wornCount("copper_sickle") == 2)
 assert(team.expeditionState.trip == trip)
 let started=trip.startedFocus
 assert(!team.advanceExpedition(to:started+299))
@@ -197,12 +265,17 @@ for (location,level,materials,wildlife) in [
 var expandedTeam=fixture(level:40)
 for (id,level) in [("coralie",30),("arden",35),("sable",40)] {
     var locked=fixture(level:level-1), unlocked=fixture(level:level)
+    assert(locked.openTavern(at:now))
     assert(!locked.hireCompanion(id))
     let person=Companion.all.first{$0.id == id}!
+    assert(unlocked.openTavern(at:now))
+    for _ in Companion.all where !unlocked.tavernVisitors.contains(where:{$0.id == id}) {
+        assert(unlocked.refreshTavern(at:now))
+    }
     let coins=unlocked.garden.coins
     assert(person.level == level && unlocked.hireCompanion(id) && !unlocked.hireCompanion(id))
     assert(unlocked.garden.coins == coins-person.price)
-    assert(expandedTeam.hireCompanion(id) && expandedTeam.toggleExpeditionCompanion(id))
+    assert(recruit(id,in:&expandedTeam) && expandedTeam.toggleExpeditionCompanion(id,at:"ruins"))
 }
 assert(expandedTeam.embarkExpedition(locationID:"ruins",minutes:30,at:now))
 let expandedSave=try encode(expandedTeam)
@@ -214,13 +287,30 @@ var legacy=fixture()
 legacy.garden.economy.journey=Journey(kind:.adventure,startedAt:legacy.totalFocus,duration:600)
 assert(!legacy.embarkExpedition(locationID:"forest",minutes:30,at:now))
 
+var previousTeam=fixture()
+previousTeam.garden.economy.expedition?.preferredLocation="river"
+previousTeam.garden.economy.expedition?.team=["rowan"]
+previousTeam.garden.economy.expedition?.hired=["rowan"]
+let previousTeamSave=try encode(previousTeam)
+previousTeam=try JSONDecoder().decode(AppData.self,from:previousTeamSave)
+assert(previousTeam.expeditionState.locationTeams == nil && previousTeam.expeditionState.team(at:"river") == ["rowan"])
+assert(previousTeam.embarkExpedition(locationID:"forest",minutes:1,at:now))
+assert(previousTeam.expeditionState.trip?.companions == [] && previousTeam.expeditionState.team(at:"river") == ["rowan"])
+assert(previousTeam.returnExpedition(at:now))
+assert(previousTeam.embarkExpedition(locationID:"river",minutes:1,at:now))
+assert(previousTeam.expeditionState.trip?.companions == ["rowan"])
+_ = try previousTeam.validated(at:now)
+
 let snapshot=try encode(team)
 let decoded=try JSONDecoder().decode(AppData.self,from:snapshot)
 assert(decoded.expeditionState == team.expeditionState)
 assert(decoded.expeditionState.isValid(focus:decoded.gameFocus(at:now)))
 _ = try decoded.validated(at:now)
 var bad=decoded.expeditionState
-bad.team.append(bad.team[0])
+bad.locationTeams?["forest"]?.append("rowan")
+assert(!bad.isValid(focus:decoded.gameFocus(at:now)))
+bad=decoded.expeditionState
+bad.tavern?.visitors=["unknown"]
 assert(!bad.isValid(focus:decoded.gameFocus(at:now)))
 bad=decoded.expeditionState
 bad.inventory["unknown"]=1
@@ -246,4 +336,4 @@ oldGarden["economy"]=oldEconomy;oldObject["garden"]=oldGarden
 let oldData=try JSONDecoder().decode(AppData.self,from:JSONSerialization.data(withJSONObject:oldObject))
 assert(oldData.garden.economy.expedition == nil && oldData.garden.coins == decoded.garden.coins)
 assert(oldData.miningState == decoded.miningState && oldData.garden.economy.finds == decoded.garden.economy.finds)
-print("PASS: expedition team, equipment, effective-focus timing, manual forage, return, completion, all regions and save validation")
+print("PASS: tavern roster, local expedition teams, equipment, effective-focus timing, manual forage, return, completion, all regions and save validation")

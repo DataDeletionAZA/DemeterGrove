@@ -2,7 +2,7 @@ import Foundation
 
 final class PetController {
     var managerIsOpen = false
-    func openTool(_ name: String, from source: String? = nil) { }
+    func openTool(_ name: String, from source: String? = nil, sideways: Bool = false) { }
     func back() { }
     func show() { }
     func hide() { }

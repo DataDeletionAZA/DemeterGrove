@@ -193,6 +193,21 @@ import Foundation
         let manager = FileManager.default
         let folder = store.file.deletingLastPathComponent()
         defer { store.storageLocked = true; try? manager.removeItem(at: folder) }
+        store.now = now
+        store.data = fullTrough
+        store.data.garden.economy.ranch?.trough -= RanchFeed.carrot.portions
+        for feed in RanchFeed.allCases { store.data.garden.ingredients[feed.rawValue] = 2 }
+        let almostFull = try encoded(store.data)
+        check(!store.commitGameChange { $0.fillRanchTrough(.corn, at: now) })
+        check(try encoded(store.data) == almostFull)
+        check(store.commitGameChange { $0.fillRanchTrough(.carrot, at: now) })
+        check(store.data.ranchState.troughSpace == 0 && store.data.garden.ingredients["胡萝卜"] == 1)
+        let nowFull = try encoded(store.data)
+        for feed in RanchFeed.allCases {
+            check(!store.commitGameChange { $0.fillRanchTrough(feed, at: now) })
+        }
+        check(try encoded(store.data) == nowFull)
+
         store.data = fixture()
         check(store.commitGameChange { $0.buyRanchAnimal("chicken", at: now) })
         check(store.commitGameChange { $0.buyRanchFeed(at: now) })

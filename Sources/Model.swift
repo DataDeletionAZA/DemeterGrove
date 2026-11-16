@@ -520,6 +520,8 @@ struct AppData: Codable {
         try require(garden.economy.fishing?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.expedition?.isValid(focus:availableGameFocus) ?? true)
         try require(garden.economy.mining?.isValid(focus:availableGameFocus) ?? true)
+        try require(garden.economy.alchemy?.isValid(focus:availableGameFocus) ?? true)
+        try require(garden.economy.alchemy?.active == nil || garden.economy.trip(.potions) == nil)
         try require(garden.economy.forge?.isValid(in:expeditionState) ?? true)
         try require(garden.economy.kitchenResult?.isValid ?? true)
         try require(garden.plots.allSatisfy { $0.plantedAt.isFinite && $0.plantedAt >= 0 && $0.plantedAt <= availableGameFocus })

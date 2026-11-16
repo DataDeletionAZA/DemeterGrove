@@ -17,6 +17,7 @@ extension AppData {
         changed = advanceFishing(to:focus,active:active && garden.economy.trip(.fishing) == nil) || changed
         changed = advanceMining(to:focus) || changed
         changed = advanceExpedition(to:focus) || changed
+        changed = advanceTavern(to:focus) || changed
         return changed
     }
 }

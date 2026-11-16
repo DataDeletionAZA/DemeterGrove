@@ -47,7 +47,7 @@ struct FishingScene:View {
                     WalletView(coins:store.data.garden.coins)
                 }
                 SceneToolbar(items:[.init("渔具",disabled:locked,action:openConfiguration),.init("鱼类图鉴",action:{codex=true}),
-                    .init("库存",action:{inventory=true}),.init("户外地图",action:{SceneNavigation.open("户外地图",store:store,from:store.currentRoute)})])
+                    .init("库存",action:{inventory=true}),.init("世界地图",action:{SceneNavigation.open("世界地图",store:store,from:store.currentRoute)})])
             }
             SceneCanvas(hasSidebar:true) {size in stage(size)} sidebar:{catchCabinet}
         }.sheet(isPresented:$configuration){fishingConfiguration}
@@ -192,9 +192,6 @@ struct FishingScene:View {
                     let validBait=place.baits.first{$0.id == bait}?.id
                     if store.commitGameChange({$0.configureFishing(enabled:automatic,location:place.id,rod:rod,bait:validBait,at:store.now)}) {
                         configuration=false
-                        if let initialLocation,initialLocation != place.id {
-                            SceneNavigation.open("钓鱼/"+place.id,store:store,from:store.currentRoute)
-                        }
                     }
                 }.buttonStyle(PixelButtonStyle(primary:true))
             }

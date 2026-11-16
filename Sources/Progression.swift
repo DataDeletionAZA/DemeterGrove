@@ -165,6 +165,7 @@ struct Economy: Codable {
     var mining: MiningState? = nil
     var forge: ForgeState? = nil
     var kitchenResult: KitchenResult? = nil
+    var alchemy: AlchemyState? = nil
     var activeJourneys: [Journey] {
         get { journeys ?? journey.map { [$0] } ?? [] }
         set { journeys = newValue; journey = nil }
@@ -236,6 +237,7 @@ extension AppData {
     }
     mutating func embark(_ kind:JourneyKind,recipe:String?=nil,at date:Date=Date()) -> Bool {
         guard levelProgress.level>=kind.level,garden.economy.trip(kind) == nil else{return false}
+        guard kind != .potions || alchemyState.active == nil else{return false}
         let duration:Double
         if kind == .potions {
             guard let potion=Potion.all.first(where:{$0.id == recipe}),consumePotionMaterials(potion) else{return false}
@@ -253,6 +255,10 @@ extension AppData {
         case .potions:guard let id=trip.recipe,Potion.all.contains(where:{$0.id == id}) else{return nil};item=id;count=1
         }
         garden.economy.finds[item,default:0]+=count;garden.economy.activeJourneys.removeAll{$0.kind == kind};garden.economy.expeditions+=1
+        if kind == .potions,let potion=Potion.all.first(where:{$0.id == item}),
+           let formula=AlchemyFormula.catalog.first(where:{$0.name == potion.name}) {
+            var state=alchemyState;state.known.insert(formula.id);garden.economy.alchemy=state
+        }
         return "获得 \(Potion.all.first{$0.id == item}?.name ?? item) ×\(count)"
     }
     func findPrice(_ item:String) -> Int {

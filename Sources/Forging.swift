@@ -104,12 +104,12 @@ struct ForgeMold:Identifiable {
 
     var specialRecipes: [(name:String, materials:[String])] {
         switch id {
-        case "sword": return [("牧途守望剑",["iron","copper","sheep_wool"])]
-        case "coat": return [("月云护行衣",["cloud_fleece","alpaca_fibre","moonstone"]),
-                            ("潮绸远行衣",["reef_silk","alpaca_fibre","platinum"])]
-        case "pendant": return [("潮灯坠",["fluorite","tin"])]
-        case "staff": return [("曦石寻路杖",["echo_vine","sunstone","platinum"])]
-        case "longsword": return [("陨纹长剑",["meteor_iron","zinc","reef_silk"])]
+        case "sword": return [("铁制单手剑",["iron","copper","sheep_wool"])]
+        case "coat": return [("月长石扣云绒外套",["cloud_fleece","alpaca_fibre","moonstone"]),
+                            ("铂扣礁丝外套",["reef_silk","alpaca_fibre","platinum"])]
+        case "pendant": return [("锡边萤石吊坠",["fluorite","tin"])]
+        case "staff": return [("日光石法杖",["echo_vine","sunstone","platinum"])]
+        case "longsword": return [("锌柄陨铁长剑",["meteor_iron","zinc","reef_silk"])]
         default: return []
         }
     }

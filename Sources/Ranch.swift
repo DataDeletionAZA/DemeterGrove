@@ -19,6 +19,7 @@ struct RanchState: Codable, Equatable {
     var lastFocus: Double? = nil
     var capacity: Int { expanded ? 8 : 4 }
     var troughCapacity: Int { expanded ? 48 : 24 }
+    var troughSpace: Int { troughCapacity - trough }
     var feedPortions: Int { trough + feedBags * Self.feedBagPortions }
     var readyCount: Int { animals.reduce(0) { $0 + $1.ready } }
     static let expansionPrice = 720
@@ -114,7 +115,7 @@ extension AppData {
         var ranch = ranchState
         ranch.advance(to: gameFocus(at: date))
         guard garden.ingredients[food.rawValue, default: 0] > 0,
-              ranch.trough + food.portions <= ranch.troughCapacity else { return false }
+              food.portions <= ranch.troughSpace else { return false }
         garden.ingredients[food.rawValue, default: 0] -= 1
         ranch.trough += food.portions
         garden.economy.ranch = ranch

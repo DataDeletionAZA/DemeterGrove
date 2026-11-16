@@ -82,6 +82,13 @@ struct ExpeditionRecord:Codable,Equatable,Identifiable {
     var rewards:[String:Int]
     var discoveries:[String]
 }
+struct TavernRoster:Codable,Equatable {
+    static let interval:Double = 30*60
+    static let refreshPrice = 12
+    static let capacity = 2
+    var refreshedAtFocus:Double
+    var visitors:[String]
+}
 struct ExpeditionState:Codable,Equatable {
     var hired:Set<String>=[]
     var team:[String]=[]
@@ -95,6 +102,28 @@ struct ExpeditionState:Codable,Equatable {
     var random=FocusRandom()
     var preferredMinutes=30
     var preferredLocation="forest"
+    var locationTeams:[String:[String]]? = nil
+    var tavern:TavernRoster? = nil
+
+    func team(at locationID:String) -> [String] {
+        if let locationTeams { return locationTeams[locationID] ?? [] }
+        return locationID == preferredLocation ? team:[]
+    }
+
+    mutating func migrateTeam() {
+        guard locationTeams == nil else { return }
+        locationTeams = team.isEmpty ? [:]:[preferredLocation:team]
+        team = []
+    }
+
+    func isTraveling(_ companionID:String) -> Bool {
+        trip?.companions.contains(companionID) == true
+    }
+
+    func gearBonuses(for companionID:String) -> (gathering:Int,scouting:Int,guarding:Int) {
+        let equipped = (equipment[companionID] ?? [:]).values.compactMap(resolveGear)
+        return (equipped.reduce(0){$0+$1.gathering},equipped.reduce(0){$0+$1.scouting},equipped.reduce(0){$0+$1.guarding})
+    }
 }
 
 struct ExpeditionLocation: Identifiable {
@@ -127,6 +156,8 @@ extension ExpeditionState {
         }
         func validTeam(_ ids: [String]) -> Bool { ids.count <= 4 && Set(ids).count == ids.count && Set(ids).isSubset(of: hired) }
         guard hired.isSubset(of: companionIDs), validTeam(team),
+              (locationTeams == nil || team.isEmpty),
+              (locationTeams ?? [:]).allSatisfy({locations.contains($0.key) && validTeam($0.value)}),
               (1...1440).contains(preferredMinutes), locations.contains(preferredLocation),
               validRewards(inventory), discoveries.isSubset(of: discoveryIDs),
               history.count <= 256, Set(history.map(\.id)).count == history.count,
@@ -140,6 +171,12 @@ extension ExpeditionState {
               }),
               gear.allSatisfy({ id,count in resolveGear(id) != nil && (0...1_000_000_000).contains(count) }),
               Set(equipment.keys).isSubset(of: hired) else { return false }
+        if let tavern {
+            guard tavern.refreshedAtFocus.isFinite, tavern.refreshedAtFocus >= 0, tavern.refreshedAtFocus <= focus,
+                  tavern.visitors.count <= TavernRoster.capacity,
+                  Set(tavern.visitors).count == tavern.visitors.count,
+                  Set(tavern.visitors).isSubset(of: companionIDs) else { return false }
+        }
         var worn: [String:Int] = [:]
         for slots in equipment.values {
             for (slot,id) in slots {
@@ -175,48 +212,108 @@ extension AppData {
     var expeditionState: ExpeditionState { garden.economy.expedition ?? ExpeditionState() }
 
     var expeditionStats: (gathering:Int,scouting:Int,guarding:Int) {
+        expeditionStats(at:expeditionState.preferredLocation)
+    }
+
+    func expeditionStats(at locationID:String) -> (gathering:Int,scouting:Int,guarding:Int) {
         let state = expeditionState
         var gathering = 1 + garden.rank(.wand)*2, scouting = 1, guarding = 1
-        for id in state.team {
+        for id in state.team(at:locationID) {
             if let companion = Companion.all.first(where: { $0.id == id }) {
-                gathering += companion.gathering; scouting += companion.scouting; guarding += companion.guarding
-            }
-            for id in (state.equipment[id] ?? [:]).values {
-                if let item = state.resolveGear(id) {
-                    gathering += item.gathering; scouting += item.scouting; guarding += item.guarding
-                }
+                let gear = state.gearBonuses(for:id)
+                gathering += companion.gathering + gear.gathering
+                scouting += companion.scouting + gear.scouting
+                guarding += companion.guarding + gear.guarding
             }
         }
         return (gathering,scouting,guarding)
     }
 
+    var tavernVisitors:[Companion] {
+        guard let roster = garden.economy.expedition?.tavern else { return [] }
+        return tavernCandidates.filter { roster.visitors.contains($0.id) }
+    }
+
+    var canRefreshTavern:Bool {
+        guard let visitors = garden.economy.expedition?.tavern?.visitors else { return false }
+        return tavernCandidates.contains { !visitors.contains($0.id) }
+    }
+
+    private var tavernCandidates:[Companion] {
+        let hired = garden.economy.expedition?.hired ?? []
+        let level = levelProgress.level
+        return Companion.all.filter { $0.level <= level && !hired.contains($0.id) }
+    }
+
+    private func nextTavernVisitors(after last:String?, intervals:Double = 1) -> [String] {
+        let eligible = Set(tavernCandidates.map(\.id))
+        let catalog = Companion.all.map(\.id)
+        let candidates = catalog.indices.filter { eligible.contains(catalog[$0]) }
+        guard !candidates.isEmpty else { return [] }
+        let first = last.flatMap { catalog.firstIndex(of:$0) }
+            .flatMap { previous in candidates.firstIndex { $0 > previous } } ?? 0
+        let offset = Int((intervals-1).truncatingRemainder(dividingBy:Double(candidates.count))) * TavernRoster.capacity
+        return (0..<min(TavernRoster.capacity,candidates.count)).map { catalog[candidates[(first+offset+$0)%candidates.count]] }
+    }
+
+    mutating func openTavern(at date:Date = Date()) -> Bool {
+        var state = expeditionState
+        guard state.tavern == nil else { return false }
+        state.tavern = TavernRoster(refreshedAtFocus:gameFocus(at:date),visitors:nextTavernVisitors(after:nil))
+        garden.economy.expedition = state
+        return true
+    }
+
+    @discardableResult
+    mutating func advanceTavern(to focus:Double) -> Bool {
+        guard var state = garden.economy.expedition, let roster = state.tavern, focus.isFinite, focus >= roster.refreshedAtFocus else { return false }
+        let intervals = ((focus-roster.refreshedAtFocus)/TavernRoster.interval).rounded(.down)
+        let firstArrival = roster.visitors.isEmpty && !tavernCandidates.isEmpty
+        guard intervals >= 1 || firstArrival else { return false }
+        let refreshedAt = firstArrival ? focus:roster.refreshedAtFocus+intervals*TavernRoster.interval
+        state.tavern = TavernRoster(refreshedAtFocus:refreshedAt,visitors:nextTavernVisitors(after:roster.visitors.last,intervals:max(1,intervals)))
+        garden.economy.expedition = state
+        return true
+    }
+
+    mutating func refreshTavern(at date:Date = Date()) -> Bool {
+        var state = expeditionState
+        guard let roster = state.tavern, garden.coins >= TavernRoster.refreshPrice, canRefreshTavern else { return false }
+        state.tavern = TavernRoster(refreshedAtFocus:gameFocus(at:date),visitors:nextTavernVisitors(after:roster.visitors.last))
+        garden.coins -= TavernRoster.refreshPrice
+        garden.economy.expedition = state
+        return true
+    }
+
     mutating func hireCompanion(_ id: String) -> Bool {
         var state = expeditionState
-        guard let companion = Companion.all.first(where: { $0.id == id }), !state.hired.contains(id),
-              levelProgress.level >= companion.level, garden.coins >= companion.price else { return false }
+        guard let companion = tavernVisitors.first(where: { $0.id == id }), garden.coins >= companion.price else { return false }
         garden.coins -= companion.price
         state.hired.insert(id)
         garden.economy.expedition = state
         return true
     }
 
-    mutating func toggleExpeditionCompanion(_ id: String) -> Bool {
+    mutating func toggleExpeditionCompanion(_ id: String, at locationID:String) -> Bool {
         var state = expeditionState
-        guard state.hired.contains(id) else { return false }
-        if let index = state.team.firstIndex(of: id) { state.team.remove(at:index) }
-        else { guard state.team.count < 4 else { return false }; state.team.append(id) }
+        guard state.hired.contains(id), state.trip?.locationID != locationID,
+              let location = ExpeditionLocation.all.first(where:{$0.id == locationID}), levelProgress.level >= location.level else { return false }
+        state.migrateTeam()
+        var team = state.team(at:locationID)
+        if let index = team.firstIndex(of:id) { team.remove(at:index) }
+        else { guard team.count < 4 else { return false }; team.append(id) }
+        state.locationTeams?[locationID] = team.isEmpty ? nil:team
         garden.economy.expedition = state
         return true
     }
 
     mutating func equipExpeditionGear(_ id: String?, companion: String, slot: GearSlot) -> Bool {
         var state = expeditionState
-        guard state.hired.contains(companion) else { return false }
+        guard state.hired.contains(companion), !state.isTraveling(companion) else { return false }
         if let id {
             guard let item = state.resolveGear(id), item.slot == slot,
                   state.equipment[companion]?[slot.rawValue] != id else { return false }
-            let used = state.equipment.values.filter { $0[slot.rawValue] == id }.count
-            guard used < state.gear[id,default:0] else { return false }
+            guard state.wornCount(id) < state.gear[id,default:0] else { return false }
         } else if state.equipment[companion]?[slot.rawValue] == nil { return false }
         state.equipment[companion,default:[:]][slot.rawValue] = id
         if state.equipment[companion]?.isEmpty == true { state.equipment.removeValue(forKey:companion) }
@@ -228,9 +325,10 @@ extension AppData {
         var state = expeditionState
         guard state.trip == nil, garden.economy.trip(.adventure) == nil, (1...1440).contains(minutes),
               let place = ExpeditionLocation.all.first(where: { $0.id == locationID }), levelProgress.level >= place.level else { return false }
-        let stats = expeditionStats
+        state.migrateTeam()
+        let stats = expeditionStats(at:locationID)
         state.trip = ExpeditionTrip(locationID:locationID,startedFocus:gameFocus(at:date),duration:Double(minutes*60),level:levelProgress.level,
-                                    companions:state.team,gathering:stats.gathering,scouting:stats.scouting,guarding:stats.guarding)
+                                    companions:state.team(at:locationID),gathering:stats.gathering,scouting:stats.scouting,guarding:stats.guarding)
         state.preferredMinutes = minutes; state.preferredLocation = locationID
         garden.economy.expedition = state
         return true

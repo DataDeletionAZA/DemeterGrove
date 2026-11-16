@@ -33,26 +33,26 @@ enum SceneNavigation {
     struct Context: Equatable {
         private var path: [String] = []
         init() {}
-        mutating func enter(_ route: String, from source: String? = nil) {
+        mutating func enter(_ route: String, from source: String? = nil, sideways: Bool = false) {
             let route = SceneNavigation.canonical(route)
             guard let source = source.map(SceneNavigation.canonical), source != "菜单" else {
                 path = [route]
                 return
             }
             if path.last != source { path = [source] }
-            if route != source { path.append(route) }
+            if sideways { path[path.count - 1] = route }
+            else if route != source { path.append(route) }
         }
         func parent(of route: String) -> String? {
             let route = SceneNavigation.canonical(route)
-            return path.last == route && path.count > 1 ? path[path.count - 2] : nil
+            if path.last == route, path.count > 1 { return path[path.count - 2] }
+            return SceneNavigation.parent(of: route)
         }
         mutating func goBack(from route: String) -> String? {
-            guard path.last == SceneNavigation.canonical(route), path.count > 1 else {
-                path.removeAll()
-                return nil
-            }
-            path.removeLast()
-            return path.last
+            let parent = parent(of: route)
+            if path.last == SceneNavigation.canonical(route), path.count > 1 { path.removeLast() }
+            else { path = parent.map { [$0] } ?? [] }
+            return parent
         }
     }
     static let indoorRooms=["书房","厨房","商店","炼金室","酒馆","锻造室"]
@@ -60,16 +60,32 @@ enum SceneNavigation {
     static let rooms=indoorRooms+outdoorRooms
     static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue,"矿洞"]
     static func isWild(_ route:String)->Bool {wilds.contains(route) || ["钓鱼","探险","矿洞"].contains(route.components(separatedBy:"/")[0])}
-    static func isScene(_ route:String)->Bool {rooms.contains(route) || isWild(route) || ["首页","地图","小屋","后院","户外地图","成长","衣柜"].contains(route)}
-    static func canonical(_ route:String)->String {
-        ["地图":"首页","小院":"首页","小屋":"首页","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务"][route] ?? route
+    static func isScene(_ route:String)->Bool {
+        let route=canonical(route)
+        return rooms.contains(route) || isWild(route) || ["首页","后院","世界地图","成长","衣柜"].contains(route)
     }
-    static func parent(of route:String)->String? {let route=canonical(route);return isWild(route) ? "户外地图":route == "户外地图" ? "首页":nil}
+    static func canonical(_ route:String)->String {
+        ["地图":"首页","小院":"首页","小屋":"首页","户外地图":"世界地图","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务"][route] ?? route
+    }
+    static func parent(of route:String)->String? {
+        let route=canonical(route)
+        if isWild(route) { return "世界地图" }
+        if outdoorRooms.contains(route) { return "后院" }
+        if indoorRooms.contains(route) || ["后院","世界地图"].contains(route) { return "首页" }
+        return nil
+    }
     static func neighbors(of scene:String)->(String,String)? {
         var scene=canonical(scene)
         if ["湖畔钓鱼","钓鱼"].contains(scene) {scene="钓鱼/lake"}
         if ["林间冒险","探险"].contains(scene) {scene="探险/forest"}
-        let group=indoorRooms.contains(scene) ? indoorRooms : outdoorRooms.contains(scene) ? outdoorRooms : scene.hasPrefix("钓鱼/") ? FishingLocation.all.map{"钓鱼/"+$0.id} : scene.hasPrefix("探险/") ? ExpeditionLocation.all.map{"探险/"+$0.id} : []
+        if scene == "矿洞" {scene="矿洞/旧矿场"}
+        let group:[String]
+        switch scene.components(separatedBy:"/")[0] {
+        case "钓鱼": group=FishingLocation.all.map{"钓鱼/"+$0.id}
+        case "探险": group=ExpeditionLocation.all.map{"探险/"+$0.id}
+        case "矿洞": group=MineLayer.areas.map{"矿洞/"+$0}
+        default: group=indoorRooms.contains(scene) ? indoorRooms:outdoorRooms
+        }
         guard let index=group.firstIndex(of:scene) else{return nil}
         return (group[(index+group.count-1)%group.count],group[(index+1)%group.count])
     }
@@ -77,6 +93,7 @@ enum SceneNavigation {
         let route=canonical(route)
         if route.hasPrefix("钓鱼/"),let place=FishingLocation.all.first(where:{$0.id == String(route.dropFirst(3))}) {return place.name}
         if route.hasPrefix("探险/"),let place=ExpeditionLocation.all.first(where:{$0.id == String(route.dropFirst(3))}) {return place.name}
+        if route.hasPrefix("矿洞/"),let area=MineLayer.areas.first(where:{$0 == String(route.dropFirst(3))}) {return area}
         return route == "首页" ? "小屋":route.components(separatedBy:"/")[0]
     }
 }
@@ -93,7 +110,7 @@ struct HomeEntrance:Identifiable {
         .init(id:"酒馆",rect:CGRect(x:0.55,y:0.55,width:0.16,height:0.28)),
         .init(id:"锻造室",rect:CGRect(x:0.73,y:0.54,width:0.19,height:0.29)),
         .init(id:"后院",rect:CGRect(x:0.015,y:0.75,width:0.085,height:0.14)),
-        .init(id:"户外地图",rect:CGRect(x:0.93,y:0.66,width:0.065,height:0.17))
+        .init(id:"世界地图",rect:CGRect(x:0.93,y:0.66,width:0.065,height:0.17))
     ]
     static let backyard:[HomeEntrance]=[
         .init(id:"牧场",rect:CGRect(x:0.07,y:0.03,width:0.31,height:0.31)),

@@ -28,6 +28,14 @@ struct AutoShopState: Codable, Equatable {
     var receipts: [ShopReceipt] = []
     var equipmentOrders:[EquipmentShopOrder]? = nil
 
+    @discardableResult
+    mutating func removeRecipe(_ canonicalID: String, from menu: [Dish]) -> Bool {
+        let previousCount = dishIDs.count
+        let variants = Set(menu.lazy.filter { $0.canonicalID == canonicalID }.map(\.id))
+        dishIDs.removeAll { $0 == canonicalID || variants.contains($0) }
+        return dishIDs.count != previousCount
+    }
+
     func isValid(in garden: Garden, focus: Double) -> Bool {
         let prepared = Set(garden.menu.filter { $0.outputIngredient == nil && $0.isValid }.map(\.id))
         let equipment=equipmentOrders ?? []
@@ -165,17 +173,18 @@ extension AppData {
 
     @discardableResult
     mutating func toggleAutoShopDish(_ id: String, at date: Date = Date()) -> Bool {
-        advanceAutoShop(to: gameFocus(at: date))
+        let menu = garden.menu
+        guard let dish = menu.first(where: { $0.id == id && $0.isValid && $0.outputIngredient == nil }) else { return false }
+        let focus = gameFocus(at: date)
         var state = garden.autoShopState
-        guard let dish=garden.menu.first(where:{$0.id == id && $0.isValid && $0.outputIngredient == nil}) else{return false}
-        let canonical=dish.canonicalID
-        if let index = state.dishIDs.firstIndex(of: canonical) { state.dishIDs.remove(at: index) }
-        else {
-            guard garden.menu.contains(where:{$0.canonicalID == canonical && garden.dishes[$0.id,default:0]>0}) else{return false}
-            state.dishIDs.append(canonical)
+        if !state.removeRecipe(dish.canonicalID, from: menu) {
+            advanceAutoShop(to: focus)
+            state = garden.autoShopState
+            guard menu.contains(where: { $0.canonicalID == dish.canonicalID && garden.dishes[$0.id, default: 0] > 0 }) else { return false }
+            state.dishIDs.append(dish.canonicalID)
         }
         garden.economy.autoShop = state
-        advanceAutoShop(to: gameFocus(at: date))
+        advanceAutoShop(to: focus)
         return true
     }
 
@@ -229,11 +238,11 @@ extension AppData {
 
     @discardableResult
     mutating func stopRestockingAndUnstock(_ id: UUID, at date: Date = Date()) -> Bool {
-        advanceAutoShop(to: gameFocus(at: date))
         guard let order = garden.orders.first(where: { $0.id == id }), unstock(id, at: date) else { return false }
         var state = garden.autoShopState
-        state.dishIDs.removeAll { $0 == order.dish.canonicalID }
+        state.removeRecipe(order.dish.canonicalID, from: garden.menu)
         garden.economy.autoShop = state
+        advanceAutoShop(to: gameFocus(at: date))
         return true
     }
 }

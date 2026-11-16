@@ -9,7 +9,7 @@ final class ToastController {
     private var cleared: (() -> Void)?
     init() {
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
-        panel.level = .floating; panel.hidesOnDeactivate = false; panel.isMovable = false
+        panel.level = .normal; panel.hidesOnDeactivate = false; panel.isMovable = false
         panel.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary]
         panel.title = "提示"; panel.isReleasedWhenClosed = false
     }
@@ -22,7 +22,7 @@ final class ToastController {
         let textHeight = (message as NSString).boundingRect(with:NSSize(width:width-28,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:NSFont.systemFont(ofSize:13)]).height
         panel.setContentSize(NSSize(width:width,height:min(140,max(42,ceil(textHeight)+26))))
         panel.contentView = NSHostingView(rootView:ToastContent(message:message))
-        position(); panel.alphaValue = 1; panel.orderFrontRegardless()
+        position(); panel.alphaValue = 1; panel.orderFront(nil)
         var previous = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval:0.04,repeats:true) { [weak self] _ in
             guard let self else { return }

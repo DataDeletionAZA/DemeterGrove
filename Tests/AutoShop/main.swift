@@ -87,6 +87,20 @@ assert(priority.garden.dishes[soup.id] == 1)
 priority.advanceAutoShop(to: 300)
 assert(priority.garden.orders.count == 2)
 
+var cancelling = fixture(3)
+assert(cancelling.stock(soup, at: now))
+cancelling.garden.economy.autoShop = AutoShopState(enabled: true, dishIDs: [soup.id], lastAdvancedFocus: 0)
+focus(300, in: &cancelling)
+assert(cancelling.toggleAutoShopDish(soup.id, at: now))
+assert(cancelling.garden.dishes[soup.id] == 2 && cancelling.garden.orders.isEmpty)
+assert(cancelling.garden.autoShopState.dishIDs.isEmpty && cancelling.garden.sales == 1 && quantity(cancelling) == 3)
+
+var withdrawing = fixture(3, slots: 3)
+assert(withdrawing.stock(soup, at: now))
+withdrawing.garden.economy.autoShop = AutoShopState(enabled: true, dishIDs: [soup.id], lastAdvancedFocus: 0)
+assert(withdrawing.stopRestockingAndUnstock(withdrawing.garden.orders[0].id, at: now))
+assert(withdrawing.garden.dishes[soup.id] == 3 && withdrawing.garden.orders.isEmpty && quantity(withdrawing) == 3)
+
 // Compare a long jump with frequent updates, including staggered shelf deadlines and mixed frozen prices.
 var jump = fixture(200_000, slots: 5)
 jump.garden.dishes[cake.id] = 123

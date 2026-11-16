@@ -40,6 +40,9 @@ extension AppData {
             let natural=NatureItemInfo.find(name)
             return InventoryEntry(id:"find:"+name,name:potion?.name ?? natural?.name ?? name,category:potion == nil ? .material:.item,count:count,artwork:natural.map{.nature($0.spriteKey)} ?? (potion == nil ? .material:.item))
         }
+        result += alchemyState.batches.map {batch in
+            InventoryEntry(id:"alchemy:"+batch.id.uuidString,name:batch.name,category:.item,count:batch.count,artwork:.item)
+        }
         for (prefix,items) in [("fishing",garden.economy.fishing?.inventory ?? [:]),("forage",garden.economy.expedition?.inventory ?? [:]),("mining",garden.economy.mining?.inventory ?? [:])] {
             result += items.keys.sorted().compactMap {id in
                 let info:NatureItemInfo?

@@ -69,12 +69,12 @@ _ = try lucky.validated(at:now)
 var special=fixture()
 assert(special.forgeGear(moldID:"sword",materialIDs:good,natural:12))
 let specialResult=special.forgeState.lastResult!
-assert(specialResult.name.contains("牧途守望剑"))
+assert(specialResult.name.contains("铁制单手剑"))
 assert(special.forgeGear(moldID:"sword",materialIDs:good,natural:13))
 assert(special.forgeState.lastResult!.gearID == specialResult.gearID)
 assert(special.expeditionState.gear[specialResult.gearID!] == 2)
 assert(special.forgeGear(moldID:"coat",materialIDs:["cloud_fleece","alpaca_fibre","moonstone"],natural:20))
-assert(special.forgeState.lastResult!.name.contains("月云护行衣"))
+assert(special.forgeState.lastResult!.name.contains("月长石扣云绒外套"))
 let coat=special.expeditionState.resolveGear(special.forgeState.lastResult!.gearID!)!
 let coatInputs=ForgeMaterial.all.filter{["cloud_fleece","alpaca_fibre","moonstone"].contains($0.id)}.reduce(0){$0+$1.value}
 assert(coat.salePrice == (coatInputs*180+50)/100+12)
@@ -177,10 +177,10 @@ assert(expanded.expeditionState.inventory["driftwood"] == 99)
 
 var newRecipes = fixture()
 for (moldID, name, materials) in [
-    ("pendant", "潮灯坠", ["fluorite", "tin"]),
-    ("coat", "潮绸远行衣", ["reef_silk", "alpaca_fibre", "platinum"]),
-    ("staff", "曦石寻路杖", ["echo_vine", "sunstone", "platinum"]),
-    ("longsword", "陨纹长剑", ["meteor_iron", "zinc", "reef_silk"])
+    ("pendant", "锡边萤石吊坠", ["fluorite", "tin"]),
+    ("coat", "铂扣礁丝外套", ["reef_silk", "alpaca_fibre", "platinum"]),
+    ("staff", "日光石法杖", ["echo_vine", "sunstone", "platinum"]),
+    ("longsword", "锌柄陨铁长剑", ["meteor_iron", "zinc", "reef_silk"])
 ] {
     let mold = ForgeMold.all.first { $0.id == moldID }!
     assert(mold.specialName(materialIDs: materials) == name)
@@ -194,6 +194,14 @@ for (moldID, name, materials) in [
     _ = try newRecipes.validated(at: now)
 }
 assert(newRecipes.miningState.inventory["platinum"] == 98 && newRecipes.miningState.inventory["meteor_iron"] == 99)
+let oldRecipeData = String(decoding: try encoded(newRecipes), as: UTF8.self)
+    .replacingOccurrences(of: "锌柄陨铁长剑 · 杰作", with: "陨纹长剑 · 杰作")
+var oldRecipe = try JSONDecoder().decode(AppData.self, from: Data(oldRecipeData.utf8)).validated(at: now)
+let oldRecipeID = oldRecipe.forgeState.lastResult!.gearID!
+assert(oldRecipe.expeditionState.resolveGear(oldRecipeID)?.description == ItemLore.text(for: "gear:锌柄陨铁长剑"))
+assert(oldRecipe.forgeGear(moldID: "longsword", materialIDs: ["meteor_iron", "zinc", "reef_silk"], natural: 20))
+assert(oldRecipe.forgeState.lastResult?.gearID == oldRecipeID && oldRecipe.forgeState.lastResult?.name == "陨纹长剑 · 杰作")
+assert(oldRecipe.expeditionState.gear[oldRecipeID] == 2)
 assert(newRecipes.expeditionState.inventory["reef_silk"] == 98 && newRecipes.expeditionState.inventory["echo_vine"] == 99)
 assert(newRecipes.garden.economy.finds["alpaca_fibre"] == 99 && newRecipes.garden.economy.finds["reef_silk"] == nil)
 assert(newRecipes.forgeGear(moldID: "longsword", materialIDs: ["meteor_iron", "meteor_iron", "meteor_iron"], natural: 20))

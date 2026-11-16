@@ -3,14 +3,13 @@ import SwiftUI
 struct MiningScene: View {
     @ObservedObject var store: GardenStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var area: String
+    private let area: String
     @State private var tab = "矿层"
     @State private var highlighted: String?
-    private let areas = MineLayer.areas
     init(store: GardenStore, initialArea: String? = nil) {
         self.store = store
         let startingArea = initialArea.flatMap { MineLayer.areas.contains($0) ? $0 : nil } ?? "旧矿场"
-        _area = State(initialValue: startingArea)
+        area = startingArea
         _highlighted = State(initialValue: MineLayer.visible(in: startingArea, highlighted: nil, selected: store.data.miningState.selectedLayer).id)
     }
     private var mining: MiningState { store.data.miningState }
@@ -22,7 +21,6 @@ struct MiningScene: View {
         VStack(alignment: .leading, spacing: SceneSizing.sectionGap) {
             SceneHeader {
                 HStack(spacing: 12) {
-                    PixelSelect(selection: $area, items: areas.map { ($0, $0) }).frame(width: 142)
                     Text("已开拓 \(mining.layers.count)/\(MineLayer.all.count)").font(.system(size: 12)).foregroundStyle(Palette.goldLight)
                     Spacer(minLength: 0)
                     WalletView(coins: store.data.garden.coins)
@@ -30,7 +28,7 @@ struct MiningScene: View {
                 SceneToolbar(items: [
                     SceneToolbarItem("锻造室") { SceneNavigation.open("锻造室",store:store,from:store.currentRoute) },
                     SceneToolbarItem("酒馆") { SceneNavigation.open("酒馆",store:store,from:store.currentRoute) },
-                    SceneToolbarItem("户外地图") { SceneNavigation.open("户外地图",store:store,from:store.currentRoute) },
+                    SceneToolbarItem("世界地图") { SceneNavigation.open("世界地图",store:store,from:store.currentRoute) },
                     SceneToolbarItem("专注") { SceneNavigation.open("计时器",store:store,from:store.currentRoute) }
                 ])
             }
@@ -67,6 +65,7 @@ struct MiningScene: View {
                 Spacer(minLength: 0)
                 layerArrow(up: false, layer: layer)
             }.padding(9)
+            SceneArrows(store:store,scene:"矿洞/"+area)
         }.frame(width: w, height: h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65), lineWidth: 1))
     }
 
