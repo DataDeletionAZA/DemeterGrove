@@ -10,7 +10,7 @@ final class PetDialogueBubbleController {
     init(store: GardenStore, anchor: @escaping () -> NSRect?) {
         self.store = store; self.anchor = anchor
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
-        panel.level = .normal; panel.hidesOnDeactivate = false; panel.isMovable = false
+        panel.level = .floating; panel.hidesOnDeactivate = false; panel.isMovable = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.title = "桌宠说话"; panel.isReleasedWhenClosed = false
     }
@@ -26,7 +26,7 @@ final class PetDialogueBubbleController {
         let hosting = NSHostingView(rootView: PetDialogueBubbleContent(text: speech.line.text) { [weak self] in self?.dismiss(id: speech.id) })
         hosting.sizingOptions = []; hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting; panel.setContentSize(size)
-        panel.alphaValue = 1; position(); panel.orderFront(nil)
+        panel.alphaValue = 1; position(); panel.orderFrontRegardless()
         let timer = Timer(timeInterval: 0.04, repeats: true) { [weak self] _ in
             guard let self, let store = self.store, store.petSpeech?.id == self.speechID else { self?.hide(); return }
             guard self.anchor() != nil else { self.dismiss(); return }

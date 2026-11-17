@@ -12,12 +12,9 @@ struct RootView: View {
         return route == "首页" ? "小屋" : SceneNavigation.isWild(route) ? "世界地图":route
     }
     private var sceneMetadata:String {
-        let route=SceneNavigation.canonical(store.selectedPage)
-        guard SceneNavigation.rooms.contains(route) || ["首页","后院","世界地图"].contains(route) else{return ""}
-        let level="等级 \(store.data.levelProgress.level)"
-        return route == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
+        SceneNavigation.isLocation(store.selectedPage) ? "等级 \(store.data.levelProgress.level)" : ""
     }
-    private var backLabel:String {store.sceneNavigation.parent(of:store.selectedPage).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
+    private var backLabel:String {store.sceneNavigation.parent(of:store.selectedPage,level:store.data.levelProgress.level).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单"}
     var body: some View {
         HStack(spacing: 0) {
             if sidebarShown {
@@ -62,6 +59,9 @@ struct RootView: View {
                         SceneNavigation.back(store:store)
                     } label: {Image(systemName:"chevron.left").frame(width:40,height:40).contentShape(Rectangle())}
                         .buttonStyle(.plain).help(backLabel).accessibilityLabel(backLabel)
+                    if SceneNavigation.isLocation(store.selectedPage) {
+                        PixelIcon(name:SceneNavigation.icon(store.selectedPage),size:24)
+                    }
                     VStack(alignment: .leading, spacing: 7) {
                         Text(SceneNavigation.title(store.selectedPage)).font(.system(size: 23, weight: .semibold, design: .default))
                     }

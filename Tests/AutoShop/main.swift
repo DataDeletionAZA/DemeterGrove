@@ -3,10 +3,10 @@ import Foundation
 let now = Date()
 let soup = Dish.soup
 let cake = Dish.allCases.first { $0.outputIngredient == nil && $0.id != soup.id }!
-func fixture(_ count: Int = 20, slots: Int = 1) -> AppData {
+func fixture(_ count: Int = 20, storefrontRank: Int = 0) -> AppData {
     var data = AppData()
     data.garden.dishes = [soup.id: count]
-    data.garden.economy.upgrades[Upgrade.storefront.rawValue] = (slots - 1) / 2
+    data.garden.economy.upgrades[Upgrade.storefront.rawValue] = storefrontRank
     return data
 }
 func focus(_ value: Double, in data: inout AppData) {
@@ -69,17 +69,17 @@ assert(!legacy.advanceAutoShop(to: 900))
 assert(legacy.collectShopProceeds(at: now) == 1234)
 assert(legacy.collectShopProceeds(at: now) == 0)
 
-var priority = fixture(2, slots: 3)
-priority.garden.dishes[cake.id] = 4
+var priority = fixture(2, storefrontRank: 1)
+priority.garden.dishes[cake.id] = 6
 assert(priority.toggleAutoShopDish(cake.id, at: now))
 assert(priority.toggleAutoShopDish(soup.id, at: now))
 assert(!priority.toggleAutoShopDish("不存在的料理", at: now))
 assert(priority.setAutoShop(enabled: true, at: now))
-assert(priority.garden.orders.allSatisfy { $0.dish.id == cake.id })
+assert(priority.garden.orders.count == 5 && priority.garden.orders.allSatisfy { $0.dish.id == cake.id })
 focus(300, in: &priority)
 priority.advanceAutoShop(to: 300)
 assert(priority.garden.orders.map(\.dish.id) == [cake.id, soup.id, soup.id])
-assert(priority.garden.dishes.values.reduce(0,+) == 0 && quantity(priority) == 6)
+assert(priority.garden.dishes.values.reduce(0,+) == 0 && quantity(priority) == 8)
 let selectedOrder = priority.garden.orders.first { $0.dish.id == soup.id }!
 assert(priority.stopRestockingAndUnstock(selectedOrder.id, at: now))
 assert(!priority.garden.autoShopState.dishIDs.contains(soup.id))
@@ -95,14 +95,14 @@ assert(cancelling.toggleAutoShopDish(soup.id, at: now))
 assert(cancelling.garden.dishes[soup.id] == 2 && cancelling.garden.orders.isEmpty)
 assert(cancelling.garden.autoShopState.dishIDs.isEmpty && cancelling.garden.sales == 1 && quantity(cancelling) == 3)
 
-var withdrawing = fixture(3, slots: 3)
+var withdrawing = fixture(3, storefrontRank: 1)
 assert(withdrawing.stock(soup, at: now))
 withdrawing.garden.economy.autoShop = AutoShopState(enabled: true, dishIDs: [soup.id], lastAdvancedFocus: 0)
 assert(withdrawing.stopRestockingAndUnstock(withdrawing.garden.orders[0].id, at: now))
 assert(withdrawing.garden.dishes[soup.id] == 3 && withdrawing.garden.orders.isEmpty && quantity(withdrawing) == 3)
 
 // Compare a long jump with frequent updates, including staggered shelf deadlines and mixed frozen prices.
-var jump = fixture(200_000, slots: 5)
+var jump = fixture(200_000, storefrontRank: 2)
 jump.garden.dishes[cake.id] = 123
 jump.garden.economy.autoShop = AutoShopState(enabled: true, dishIDs: [cake.id, soup.id], lastAdvancedFocus: 0)
 jump.garden.dishes[soup.id, default: 0] -= 3
@@ -122,12 +122,12 @@ assert(jump.garden.autoShopState.receipts.reduce(0,{$0+$1.amount}) == jump.garde
 assert(jump.garden.autoShopState.receipts.reduce(0,{$0+$1.count}) == jump.garden.autoShopState.soldCount)
 assert(quantity(jump) == count && quantity(stepped) == count)
 
-var huge = fixture(1_000_000_000, slots: 5)
+var huge = fixture(1_000_000_000, storefrontRank: 2)
 assert(huge.toggleAutoShopDish(soup.id, at: now))
 assert(huge.setAutoShop(enabled: true, at: now))
 huge.advanceAutoShop(to: 300_000_000)
-assert(huge.garden.sales == 5_000_000 && quantity(huge) == 1_000_000_000)
-assert(huge.garden.autoShopState.receivables == 5_000_000 * huge.salePrice(soup))
+assert(huge.garden.sales == 10_000_000 && quantity(huge) == 1_000_000_000)
+assert(huge.garden.autoShopState.receivables == 10_000_000 * huge.salePrice(soup))
 
 var frozen = fixture(1)
 assert(frozen.stock(soup, at: now))
@@ -223,12 +223,17 @@ assert(oldBatchSetting.garden.autoShopState.dishIDs == [soup.id])
 assert(oldBatchSetting.garden.orders.first?.dish.id == highBatch.id)
 _ = try oldBatchSetting.validated(at:now)
 
-var mixed=fixture(50,slots:3)
-mixed.garden.economy.expedition=ExpeditionState(gear:["copper_sickle":1])
+var mixed=fixture(50,storefrontRank:2)
+mixed.garden.economy.expedition=ExpeditionState(gear:["copper_sickle":2])
 assert(mixed.stockEquipment("copper_sickle",at:now))
 assert(mixed.toggleAutoShopDish(soup.id,at:now))
 assert(mixed.setAutoShop(enabled:true,at:now))
-assert(mixed.garden.shopOrderCount == 3)
+assert(mixed.garden.shopOrderCount == 10 && mixed.garden.orders.count == 9)
+assert(!mixed.stock(soup,at:now) && !mixed.stockEquipment("copper_sickle",at:now))
+assert(mixed.garden.dishes[soup.id] == 41 && mixed.expeditionState.gear["copper_sickle"] == 1)
+let savedMixed = try JSONDecoder().decode(AppData.self, from: JSONEncoder().encode(mixed)).validated(at: now)
+assert(savedMixed.garden.orders.map(\.price) == mixed.garden.orders.map(\.price))
+assert(savedMixed.garden.autoShopState.equipmentOrders == mixed.garden.autoShopState.equipmentOrders)
 var mixedSteps=mixed
 mixed.advanceAutoShop(to:3000)
 for time in stride(from:1,through:3000,by:59) {mixedSteps.advanceAutoShop(to:Double(time))}

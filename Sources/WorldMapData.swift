@@ -12,15 +12,7 @@ struct WorldMapActivity: Identifiable {
 
     var level: Int? {
         if route == "首页" { return 1 }
-        let parts = route.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
-        guard parts.count == 2 else { return nil }
-        let id = parts[1]
-        switch parts[0] {
-        case "钓鱼": return FishingLocation.all.first { $0.id == id }?.level
-        case "探险": return ExpeditionLocation.all.first { $0.id == id }?.level
-        case "矿洞": return MineLayer.layers(in: String(id)).first?.level
-        default: return nil
-        }
+        return SceneNavigation.requiredLevel(for:route)
     }
 
     func canEnter(level playerLevel: Int) -> Bool {

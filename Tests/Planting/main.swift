@@ -123,7 +123,35 @@ import Foundation
         check(persisted.garden.plots.indices.filter { persisted.garden.plots[$0].crop != nil } == [0, 6, 7, 8, 9, 10, 11])
         check(persisted.garden.cropSeeds.values.allSatisfy{$0 >= 0} && persisted.garden.water == 13)
 
+        var harvest = fixture(fields: 3, seeds: ["胡萝卜": 1, "星露胡萝卜": 1, "薄荷": 1, "番茄": 1])
+        harvest.garden.economy.upgrades[Upgrade.soil.rawValue] = 2
+        for (index, crop) in [(0, Crop.carrot), (6, .mint), (12, .starlightCarrot), (17, .tomato)] {
+            check(harvest.plant(crop, in: harvest.garden.plots[index].id, at: now))
+            if index != 17 { harvest.garden.plots[index].bonus = crop.seconds }
+        }
+        let yield = harvest.harvestYield
+        let amount = yield * 3
+        harvest.garden.ingredients["胡萝卜"] = 1_000_000_000 - amount + 1
+        let fullStock = try encoded(harvest)
+        check(harvest.harvestAll(at: now).isEmpty)
+        check(try encoded(harvest) == fullStock)
+        harvest.garden.ingredients["胡萝卜"] = 1_000_000_000 - amount
+        store.now = now
+        store.data = harvest
+        var produce: [String: Int] = [:]
+        check(store.commitGameChange { produce = $0.harvestAll(at: store.now); return !produce.isEmpty })
+        check(produce == ["胡萝卜": amount, "薄荷": yield])
+        let afterHarvest = try SaveFile.read(store.file)
+        check(afterHarvest.garden.ingredients["胡萝卜"] == 1_000_000_000)
+        check(afterHarvest.garden.ingredients["薄荷", default: 0] == harvest.garden.ingredients["薄荷", default: 0] + yield)
+        check(afterHarvest.garden.plots.enumerated().filter { $0.element.crop != nil }.map(\.offset) == [17])
+        check(try encoded(afterHarvest.garden.plots[17]) == encoded(harvest.garden.plots[17]))
+        check(afterHarvest.garden.cropSeeds == harvest.garden.cropSeeds && afterHarvest.garden.water == harvest.garden.water)
+        check(!store.commitGameChange { !$0.harvestAll(at: store.now).isEmpty })
+
         store.data=fixture(seeds:[Crop.carrot.rawValue:4],water:10)
+        check(store.data.plant(.carrot,in:store.data.garden.plots[1].id,at:now))
+        store.data.garden.plots[1].bonus = Crop.carrot.seconds
         check(store.save())
         let previous=try encoded(store.data)
         let disk=try Data(contentsOf:store.file)
@@ -134,6 +162,9 @@ import Foundation
         check(!store.commitGameChange{$0.plant(.carrot,in:$0.garden.plots[0].id,at:now)})
         check(try encoded(store.data) == previous)
         check(!store.commitGameChange{$0.plantRandomly(at:now) > 0})
+        check(try encoded(store.data) == previous)
+        check(!store.commitGameChange { produce = $0.harvestAll(at: store.now); return !produce.isEmpty })
+        check(produce == ["胡萝卜": store.data.harvestYield])
         check(try encoded(store.data) == previous)
         check(try Data(contentsOf:backup) == disk)
         check(store.saveStatus == "保存失败")
@@ -151,6 +182,6 @@ import Foundation
         shop.sessions=[FocusSession(id:UUID(),title:"阅读",kind:.stopwatch,date:now,seconds:300)]
         check(shop.collectSale(order.id,at:now) && shop.garden.coins == 4321+order.price)
         check(!shop.collectSale(order.id,at:now))
-        print("PASS: repeated planting, exhausted/occupied guards, current field and page order, seed and water limits, expanded fields, new-crop reminders, saved inventory, failed-save rollback, frozen sale proceeds")
+        print("PASS: repeated planting, exhausted/occupied guards, current field and page order, seed and water limits, expanded fields, new-crop reminders, mature harvest and inventory capacity, saved inventory, failed-save rollback, frozen sale proceeds")
     }
 }

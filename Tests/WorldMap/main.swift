@@ -21,6 +21,10 @@ for place in places {
         let level = catalogLevels[activity.route]!
         assert(activity.level == level && activity.requirement == "等级 \(level)")
         assert(!activity.canEnter(level: level - 1) && activity.canEnter(level: level))
+        if SceneNavigation.isWild(activity.route) {
+            assert(!SceneNavigation.canEnter(activity.route,level:level-1))
+            assert(SceneNavigation.canEnter(activity.route,level:level))
+        }
     }
     for size in [CGSize(width: 180, height: 120), CGSize(width: 450, height: 300), CGSize(width: 850, height: 580)] {
         let frame = place.popupFrame(in: size)
@@ -43,4 +47,18 @@ for (id, point, levels, routes) in [
 }
 let unavailable = WorldMapActivity("地点", "钓鱼/invalid")
 assert(unavailable.level == nil && !unavailable.canEnter(level: Int.max))
+for group in [FishingLocation.all.map{"钓鱼/"+$0.id},ExpeditionLocation.all.map{"探险/"+$0.id},MineLayer.areas.map{"矿洞/"+$0}] {
+    for level in 1...45 {
+        let open = group.filter { catalogLevels[$0]! <= level }
+        for route in group {
+            let neighbors = SceneNavigation.neighbors(of:route,level:level)
+            if let index = open.firstIndex(of:route), open.count > 1 {
+                assert(neighbors?.0 == open[(index + open.count - 1) % open.count])
+                assert(neighbors?.1 == open[(index + 1) % open.count])
+            } else {
+                assert(neighbors == nil)
+            }
+        }
+    }
+}
 print("PASS: 16 map places, exact catalog routes and level gates, independent activity unlocks, and bounded activity menus")

@@ -3,36 +3,62 @@ import SwiftUI
 struct TavernScene: View {
     @ObservedObject var store: GardenStore
     @State private var showRecruits = false
+    @State private var showInventory = false
+    @State private var equipmentCompanion: Companion?
+    private var state:ExpeditionState { store.data.expeditionState }
 
     var body: some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {
-                    Button {showRecruits=true} label: {
-                        Label {Text("查看招募")} icon: {PixelIcon(name:"酒馆",size:20)}
-                    }.buttonStyle(PixelButtonStyle())
-                    Spacer()
-                    WalletView(coins:store.data.garden.coins)
+            SceneHeader(store:store,toolbar:[
+                SceneToolbarItem("成长") { SceneNavigation.open("成长",store:store,from:store.currentRoute) },
+                SceneToolbarItem("库存") {
+                    if let pet=store.pet {pet.openInventory()} else {showInventory=true}
                 }
-            }
-            SceneCanvas { size in
+            ])
+            SceneCanvas(hasSidebar:true) { size in
                 ZStack {
                     RoomBackdrop(name:"Tavern").frame(width:size.width,height:size.height)
                     SceneImageHotspot(background:"Tavern",rect:CGRect(x:0.339,y:0.264,width:0.451,height:0.14),
                                       size:size,label:"酒馆吧台 · 查看招募",action:{showRecruits=true})
-                    ForEach(Array(store.data.tavernVisitors.enumerated()),id:\.element.id) { index,person in
-                        ObjectButton(label:"查看\(person.name)的招募信息",action:{showRecruits=true},caption:person.name) {
-                            GameNatureSprite(key:person.spriteKey,size:min(size.width*0.15,size.height*0.28))
-                        }.position(x:size.width*(0.44+Double(index)*0.15),y:size.height*0.60)
-                    }
                     SceneArrows(store:store,scene:"酒馆")
                 }.frame(width:size.width,height:size.height).clipShape(PixelFrame())
                     .overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
-            }
+            } sidebar: { companions }
         }.onAppear {
             if store.data.expeditionState.tavern == nil { store.commitGameChange { $0.openTavern(at:store.now) } }
         }
+        .sheet(isPresented:$showInventory) { InventoryView(store:store) }
         .sheet(isPresented:$showRecruits) { TavernRecruitmentSheet(store:store) }
+        .sheet(item:$equipmentCompanion) { CompanionEquipmentSheet(store:store,person:$0) }
+    }
+
+    private var companions:some View {
+        VStack(alignment:.leading,spacing:9) {
+            Text("已有伙伴").font(.headline).foregroundStyle(Palette.goldLight)
+            PixelScrollView {
+                LazyVStack(alignment:.leading,spacing:8) {
+                    if state.hired.isEmpty {
+                        Text("还没有伙伴").font(.caption).foregroundStyle(Palette.muted)
+                    }
+                    ForEach(Companion.all.filter {state.hired.contains($0.id)}) { person in
+                        Button {equipmentCompanion=person} label: {
+                            HStack(spacing:6) {
+                                GameNatureSprite(key:person.spriteKey,size:35)
+                                VStack(alignment:.leading,spacing:3) {
+                                    Text(person.name).foregroundStyle(Palette.goldLight)
+                                    Text(state.isTraveling(person.id) ? "正在探险":person.role)
+                                        .font(.caption).foregroundStyle(Palette.muted)
+                                }
+                                Spacer(minLength:0)
+                                Image(systemName:"chevron.right").font(.system(size:9)).foregroundStyle(Palette.muted)
+                            }.frame(maxWidth:.infinity,alignment:.leading).padding(6)
+                                .magicSurface(Palette.card).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel("查看\(person.name)的装备")
+                    }
+                }.padding(.trailing,2)
+            }.frame(maxHeight:.infinity)
+        }.padding(10).magicSurface(Palette.paper)
     }
 }
 

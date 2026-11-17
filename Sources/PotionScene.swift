@@ -7,6 +7,7 @@ struct PotionScene:View {
     @State private var cabinetTab="材料柜"
     @State private var showingBrew=false
     @State private var showingRecipes=false
+    @State private var showingInventory=false
     @State private var heat:AlchemyHeat = .gentle
     @State private var minuteText="15"
     private var legacy:Journey? {store.data.garden.economy.trip(.potions)}
@@ -19,12 +20,18 @@ struct PotionScene:View {
     private var minutes:Int? {Int(minuteText.trimmingCharacters(in:.whitespacesAndNewlines)).flatMap{(1...1440).contains($0) ? $0:nil}}
     private var label:String {ready ? "领取魔药":brewing ? "查看熬制":"熬制魔药"}
     var body:some View {
-        VStack(alignment:.leading,spacing:8) {
-            HStack {Button("配方册",systemImage:"book.closed"){showingRecipes=true};Spacer()}
+        VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
+            SceneHeader(store:store,toolbar:[
+                .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
+                .init("库存",action:{if let pet=store.pet {pet.openInventory()} else {showingInventory=true}})
+            ])
             SceneCanvas(hasSidebar:true) {size in
                 let w=size.width,h=size.height
                 ZStack {
                     RoomBackdrop(name:"Laboratory").frame(width:w,height:h)
+                    ObjectButton(label:"打开魔药配方册",action:{showingRecipes=true},caption:"配方册") {
+                        GameSceneBook(kind:.alchemy,size:w*0.22)
+                    }.position(x:w*0.18,y:h*0.69)
                     ObjectButton(label:label,action:openPot,caption:label) {GameSprite(index:7,size:w*0.19)}
                         .disabled(!unlocked).position(x:w*0.735,y:h*0.59)
                     if brewing {
@@ -36,8 +43,9 @@ struct PotionScene:View {
                         }
                     } else {
                         ForEach(selection.portions) {portion in
-                            PotionTableItem(portion:portion,size:w*0.095) {selection.remove(portion.id)}
-                                .position(x:w*(0.18+CGFloat(portion.slot)*0.105),y:h*0.66)
+                            let places:[CGPoint]=[.init(x:0.36,y:0.62),.init(x:0.46,y:0.62),.init(x:0.56,y:0.62),.init(x:0.40,y:0.735),.init(x:0.52,y:0.735)]
+                            PotionTableItem(portion:portion,size:w*0.08) {selection.remove(portion.id)}
+                                .position(x:w*places[portion.slot].x,y:h*places[portion.slot].y)
                         }
                     }
                     if !unlocked {
@@ -49,6 +57,7 @@ struct PotionScene:View {
             } sidebar: {cabinet}
         }.sheet(isPresented:$showingBrew){brewWindow}
             .sheet(isPresented:$showingRecipes){recipeWindow}
+            .sheet(isPresented:$showingInventory){InventoryView(store:store)}
     }
     private var cabinet:some View {
         VStack(alignment:.leading,spacing:9) {
@@ -107,12 +116,15 @@ struct PotionScene:View {
                         HStack {GameSprite(sheet:"Equipment",index:11,size:34);Text(batch.name+" ×\(batch.count)").font(.callout)}
                         Text("品质 \(batch.outcome.quality)").font(.caption).foregroundStyle(Palette.goldLight)
                         ForEach(batch.outcome.effects,id:\.self) {effect in Text(effect.text(quality:batch.outcome.quality)).font(.caption).foregroundStyle(Palette.muted)}
-                        HStack {
-                            Button("使用") {
+                        LazyVGrid(columns:[GridItem(.adaptive(minimum:88),spacing:6)],spacing:6) {
+                            Button {
                                 if store.commitGameChange({$0.useAlchemy(batch.id)}) {store.message="已使用"+batch.name}
                                 else if batch.outcome.effects.contains(.growth) && !store.data.garden.plots.contains(where:{$0.crop != nil}) {store.message="当前没有已种作物"}
+                            } label:{Text("使用").frame(maxWidth:.infinity,minHeight:16,maxHeight:16)}
+                            Button {if store.commitGameChange({$0.sellAlchemy(batch.id)}) {store.message="已出售"+batch.name}} label:{
+                                Text("出售 · \(Money.text(batch.price))").lineLimit(1).minimumScaleFactor(0.75)
+                                    .frame(maxWidth:.infinity,minHeight:16,maxHeight:16)
                             }
-                            Button("出售 · \(Money.text(batch.price))") {if store.commitGameChange({$0.sellAlchemy(batch.id)}) {store.message="已出售"+batch.name}}
                         }
                     }.padding(9).magicSurface(Palette.card)
                 }
@@ -120,9 +132,14 @@ struct PotionScene:View {
                     VStack(alignment:.leading,spacing:7) {
                         Text(potion.name+" ×\(store.data.garden.economy.finds[potion.id,default:0])").font(.callout)
                         Text(potion.benefit).font(.caption).foregroundStyle(Palette.muted)
-                        HStack {
-                            Button("使用") {if store.commitGameChange({$0.usePotion(potion.id)}) {store.message=potion.benefit}else{store.message="当前没有已种作物"}}
-                            Button("出售 · \(Money.text(potion.price))") {_=store.commitGameChange{$0.sellFind(potion.id)}}
+                        LazyVGrid(columns:[GridItem(.adaptive(minimum:88),spacing:6)],spacing:6) {
+                            Button {if store.commitGameChange({$0.usePotion(potion.id)}) {store.message=potion.benefit}else{store.message="当前没有已种作物"}} label:{
+                                Text("使用").frame(maxWidth:.infinity,minHeight:16,maxHeight:16)
+                            }
+                            Button {_=store.commitGameChange{$0.sellFind(potion.id)}} label:{
+                                Text("出售 · \(Money.text(potion.price))").lineLimit(1).minimumScaleFactor(0.75)
+                                    .frame(maxWidth:.infinity,minHeight:16,maxHeight:16)
+                            }
                         }
                     }.padding(9).magicSurface(Palette.card)
                 }

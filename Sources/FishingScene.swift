@@ -39,15 +39,19 @@ struct FishingScene:View {
 
     var body:some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {
-                    if initialLocation == nil {Text(location.name).font(.headline)}
-                    if locked {Label("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
-                    Spacer(minLength:0)
-                    WalletView(coins:store.data.garden.coins)
-                }
-                SceneToolbar(items:[.init("渔具",disabled:locked,action:openConfiguration),.init("鱼类图鉴",action:{codex=true}),
-                    .init("库存",action:{inventory=true}),.init("世界地图",action:{SceneNavigation.open("世界地图",store:store,from:store.currentRoute)})])
+            SceneHeader(store:store,toolbar:[
+                .init("渔具",disabled:locked,action:openConfiguration),.init("鱼类图鉴",action:{codex=true}),
+                .init("库存",action:{inventory=true}),.init("世界地图",action:{SceneNavigation.open("世界地图",store:store,from:store.currentRoute)})
+            ]) {
+                HStack(spacing:4) {
+                    if let bait=location.baits.first(where:{$0.id == state.baitID}) {
+                        GameNatureSprite(key:bait.spriteKey,size:24)
+                        Text("\(bait.name) \(state.baitStock[bait.id,default:0]) 份")
+                    } else {
+                        PixelIcon(name:"渔具",size:24)
+                        Text("无饵")
+                    }
+                }.font(.caption).foregroundStyle(Palette.goldLight)
             }
             SceneCanvas(hasSidebar:true) {size in stage(size)} sidebar:{catchCabinet}
         }.sheet(isPresented:$configuration){fishingConfiguration}
@@ -97,27 +101,11 @@ struct FishingScene:View {
         VStack(alignment:.leading,spacing:9) {
             Text("收获袋").font(.headline).foregroundStyle(Palette.goldLight)
             Text("\(bag.count) 种 · \(state.inventory.values.reduce(0,+)) 份").font(.caption).foregroundStyle(Palette.muted)
-            if let selected,let item=NatureItemInfo.fishingCatch(selected),state.inventory[selected,default:0]>0 {
-                Text(item.name).font(.callout)
-                if let description=ItemLore.text(for:"fishing:"+selected) {
-                    Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
-                }
-                HStack(spacing:5) {
-                    Button("出售 · \(Money.text(item.price))") {if store.commitGameChange({$0.sellFishingCatch(selected,count:1)}){store.message="获得 \(Money.text(item.price))"}}
-                        .accessibilityLabel("出售\(item.name)，获得\(Money.text(item.price))")
-                    if let ingredient=NatureCatalog.fish.first(where:{$0.id == selected})?.cookingIngredient {
-                        Button("处理成\(ingredient.rawValue)") {
-                            if store.commitGameChange({$0.prepareFish(selected,count:1)}){store.message="\(ingredient.rawValue)已放入食材柜"}
-                        }
-                    }
-                }.font(.system(size:11))
-                if selected == "waterweed" {
-                    Button("堆肥 ×5") {if store.commitGameChange({$0.compostWaterweed()}){store.message="作物生长增加 1 分钟"}}
-                        .disabled(state.inventory["waterweed",default:0]<5 || !store.data.garden.plots.contains{$0.crop != nil})
-                }
-            }
             GeometryReader {geo in
                 PixelScrollView {
+                    if let selected,let item=NatureItemInfo.fishingCatch(selected),state.inventory[selected,default:0]>0 {
+                        catchDetails(selected,item:item,width:max(1,geo.size.width-SceneSizing.scrollGutter))
+                    }
                     LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:SceneSizing.stockColumns(width:max(1,geo.size.width-16))),spacing:8) {
                         ForEach(bag,id:\.self) {id in
                             if let item=NatureItemInfo.fishingCatch(id) {
@@ -139,6 +127,37 @@ struct FishingScene:View {
                 }
             }
         }.padding(10).magicSurface(Palette.paper)
+    }
+
+    private func catchDetails(_ id:String,item:NatureItemInfo,width:CGFloat)->some View {
+        let ingredient=NatureCatalog.fish.first{$0.id == id}?.cookingIngredient
+        let columns=width >= 181 && (ingredient != nil || id == "waterweed") ? 2:1
+        return VStack(alignment:.leading,spacing:7) {
+            Text(item.name).font(.callout)
+            if let description=ItemLore.text(for:"fishing:"+id) {
+                Text(description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+            }
+            LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:5),count:columns),spacing:5) {
+                Button {
+                    if store.commitGameChange({$0.sellFishingCatch(id,count:1)}){store.message="获得 \(Money.text(item.price))"}
+                } label: {catchActionLabel("出售 · \(Money.text(item.price))")}
+                    .accessibilityLabel("出售\(item.name)，获得\(Money.text(item.price))")
+                if let ingredient {
+                    Button {
+                        if store.commitGameChange({$0.prepareFish(id,count:1)}){store.message="\(ingredient.rawValue)已放入食材柜"}
+                    } label: {catchActionLabel("处理成\(ingredient.rawValue)")}
+                } else if id == "waterweed" {
+                    Button {
+                        if store.commitGameChange({$0.compostWaterweed()}){store.message="作物生长增加 1 分钟"}
+                    } label: {catchActionLabel("堆肥 ×5")}
+                        .disabled(state.inventory["waterweed",default:0]<5 || !store.data.garden.plots.contains{$0.crop != nil})
+                }
+            }
+        }
+    }
+
+    private func catchActionLabel(_ title:String)->some View {
+        Text(title).lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity,minHeight:16,maxHeight:16)
     }
 
     private func openConfiguration() {

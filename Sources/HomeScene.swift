@@ -7,22 +7,16 @@ struct HomeScene: View {
     private var background:String {backyard ? "Backyard":"House"}
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {
-                    Spacer()
-                    WalletView(coins: store.data.garden.coins)
-                }
-                SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
-                    .init("库存",action:{showingInventory=true})
-                ])
-            }
+            SceneHeader(store:store,toolbar:[
+                .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
+                .init("库存",action:{showingInventory=true})
+            ])
             SceneCanvas { size in
                 let w = size.width, h = size.height
                 ZStack {
                     RoomBackdrop(name:background).frame(width:w,height:h).clipped()
                     ForEach(backyard ? HomeEntrance.backyard:HomeEntrance.house) {entry in
-                        SceneImageHotspot(background:background,rect:entry.rect,size:size,label:SceneNavigation.title(entry.id)) {
+                        SceneImageHotspot(background:background,rect:entry.rect,size:size,label:SceneNavigation.title(entry.id),locked:entry.id == "池塘" && store.data.pondState == nil) {
                             SceneNavigation.open(entry.id,store:store,from:store.currentRoute)
                         }
                     }
@@ -63,16 +57,10 @@ struct StudyScene: View {
     @State private var showingInventory=false
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {
-                    Spacer()
-                    WalletView(coins:store.data.garden.coins)
-                }
-                SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
-                    .init("库存",action:{showingInventory=true})
-                ])
-            }
+            SceneHeader(store:store,toolbar:[
+                .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
+                .init("库存",action:{showingInventory=true})
+            ])
             SceneCanvas(hasSidebar:true) { size in
                 let w = size.width, h = size.height
                 ZStack {

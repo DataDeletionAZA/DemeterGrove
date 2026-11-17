@@ -8,16 +8,10 @@ struct WorldMapScene: View {
 
     var body: some View {
         VStack(spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {
-                    Spacer()
-                    WalletView(coins:store.data.garden.coins)
-                }
-                SceneToolbar(items:[
-                    .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
-                    .init("库存",action:{showingInventory=true})
-                ])
-            }
+            SceneHeader(store:store,toolbar:[
+                .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
+                .init("库存",action:{showingInventory=true})
+            ])
             SceneCanvas {size in
                 ZStack {
                     RoomBackdrop(name:"WorldMap")

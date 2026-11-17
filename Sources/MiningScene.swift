@@ -19,18 +19,16 @@ struct MiningScene: View {
     private var inspected: MineLayer { MineLayer.visible(in: area, highlighted: highlighted, selected: mining.selectedLayer) }
     var body: some View {
         VStack(alignment: .leading, spacing: SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack(spacing: 12) {
-                    Text("已开拓 \(mining.layers.count)/\(MineLayer.all.count)").font(.system(size: 12)).foregroundStyle(Palette.goldLight)
-                    Spacer(minLength: 0)
-                    WalletView(coins: store.data.garden.coins)
-                }
-                SceneToolbar(items: [
-                    SceneToolbarItem("锻造室") { SceneNavigation.open("锻造室",store:store,from:store.currentRoute) },
-                    SceneToolbarItem("酒馆") { SceneNavigation.open("酒馆",store:store,from:store.currentRoute) },
-                    SceneToolbarItem("世界地图") { SceneNavigation.open("世界地图",store:store,from:store.currentRoute) },
-                    SceneToolbarItem("专注") { SceneNavigation.open("计时器",store:store,from:store.currentRoute) }
-                ])
+            SceneHeader(store:store,toolbar:[
+                .init("锻造室") { SceneNavigation.open("锻造室",store:store,from:store.currentRoute) },
+                .init("酒馆") { SceneNavigation.open("酒馆",store:store,from:store.currentRoute) },
+                .init("世界地图") { SceneNavigation.open("世界地图",store:store,from:store.currentRoute) },
+                .init("专注") { SceneNavigation.open("计时器",store:store,from:store.currentRoute) }
+            ]) {
+                HStack(spacing:4) {
+                    GameNatureSprite(key:mining.tool.id,size:24)
+                    Text("已开拓 \(mining.layers.count)/\(MineLayer.all.count)")
+                }.font(.caption).foregroundStyle(Palette.goldLight)
             }
             SceneCanvas(hasSidebar: true) { size in
                 cave(size)
@@ -109,9 +107,9 @@ struct MiningScene: View {
                 PixelProgress(value: progress(layer))
                 Text("常规产出 · \(layer.cycleMinutes) 分钟 / 份").font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
                 Text(active ? "驻留加成 ×\(mining.residentRate(layer))" : "可驻留 · 产出 ×\(mining.residentRate(layer))").font(.system(size: 11)).foregroundStyle(Palette.goldLight)
-                Button(active ? "结束驻留" : "在此驻留") {
+                Button {
                     if store.commitGameChange({ $0.selectMine(active ? nil : layer.id, at: store.now) }) { store.message = active ? "结束驻留" : "驻留 · " + layer.name }
-                }.frame(maxWidth: .infinity)
+                } label: { Text(active ? "结束驻留" : "在此驻留").frame(maxWidth: .infinity) }
             } else if opening {
                 PixelProgress(value: progress(layer))
                 Text("开拓中 · 还需 \(Int(ceil(Double(layer.unlockMinutes) * (1 - progress(layer))))) 分钟专注").font(.caption).foregroundStyle(Palette.goldLight).fixedSize(horizontal: false, vertical: true)
@@ -120,9 +118,10 @@ struct MiningScene: View {
                 if let required, mining.layers[required.id] == nil {
                     Text("前置矿层：" + required.name).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
                 }
-                Button("开拓此层") {
+                Button {
                     if store.commitGameChange({ $0.openMine(layer.id, at: store.now) }) { store.message = "开始开拓 · " + layer.name }
-                }.disabled(store.data.levelProgress.level < layer.level || mining.opening != nil || (required.map { mining.layers[$0.id] == nil } ?? false))
+                } label: { Text("开拓此层").frame(maxWidth: .infinity) }
+                    .disabled(store.data.levelProgress.level < layer.level || mining.opening != nil || (required.map { mining.layers[$0.id] == nil } ?? false))
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(8).magicSurface(Palette.card)
     }
@@ -151,8 +150,10 @@ struct MiningScene: View {
                 toolDetails(next)
                 Text("等级 \(next.level) · \(Money.text(next.price))").font(.caption).foregroundStyle(Palette.goldLight)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("升级为\(next.name)") {
+                Button {
                     if store.commitGameChange({ $0.upgradeMiningTool(at: store.now) }) { store.message = "已换上\(next.name)" }
+                } label: {
+                    Text("升级为\(next.name)").lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth: .infinity)
                 }.buttonStyle(PixelButtonStyle(primary: true))
                     .disabled(store.data.levelProgress.level < next.level || store.data.garden.coins < next.price)
             }

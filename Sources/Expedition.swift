@@ -81,6 +81,7 @@ struct ExpeditionRecord:Codable,Equatable,Identifiable {
     var companions:[String]
     var rewards:[String:Int]
     var discoveries:[String]
+    var claimableQuantity:Int? = nil
 }
 struct TavernRoster:Codable,Equatable {
     static let interval:Double = 30*60
@@ -90,6 +91,7 @@ struct TavernRoster:Codable,Equatable {
     var visitors:[String]
 }
 struct ExpeditionState:Codable,Equatable {
+    static let rewardLimit = 1_000_000_000
     var hired:Set<String>=[]
     var team:[String]=[]
     var equipment:[String:[String:String]]=[:]
@@ -104,6 +106,16 @@ struct ExpeditionState:Codable,Equatable {
     var preferredLocation="forest"
     var locationTeams:[String:[String]]? = nil
     var tavern:TavernRoster? = nil
+    var pendingRewards:[String:[String:Int]]? = nil
+
+    func unclaimedRewards(at locationID:String) -> [String:Int] {
+        pendingRewards?[locationID] ?? [:]
+    }
+
+    func rewardSpace(for itemID:String) -> Int {
+        Self.rewardLimit - inventory[itemID,default:0]
+            - (pendingRewards ?? [:]).values.reduce(0) { $0+$1[itemID,default:0] }
+    }
 
     func team(at locationID:String) -> [String] {
         if let locationTeams { return locationTeams[locationID] ?? [] }
@@ -152,7 +164,7 @@ extension ExpeditionState {
         let discoveryIDs = Set(NatureCatalog.forage.map { "forage:" + $0.id } + NatureCatalog.wildlife.map { "wildlife:" + $0.id })
         let locations = Set(ExpeditionLocation.all.map(\.id))
         func validRewards(_ rewards: [String:Int]) -> Bool {
-            Set(rewards.keys).isSubset(of: forageIDs) && rewards.values.allSatisfy { (0...1_000_000_000).contains($0) }
+            Set(rewards.keys).isSubset(of: forageIDs) && rewards.values.allSatisfy { (0...Self.rewardLimit).contains($0) }
         }
         func validTeam(_ ids: [String]) -> Bool { ids.count <= 4 && Set(ids).count == ids.count && Set(ids).isSubset(of: hired) }
         guard hired.isSubset(of: companionIDs), validTeam(team),
@@ -177,6 +189,11 @@ extension ExpeditionState {
                   Set(tavern.visitors).count == tavern.visitors.count,
                   Set(tavern.visitors).isSubset(of: companionIDs) else { return false }
         }
+        if let pendingRewards {
+            guard Set(pendingRewards.keys).isSubset(of:locations),
+                  pendingRewards.values.allSatisfy({!$0.isEmpty && validRewards($0) && $0.values.allSatisfy{$0 > 0}}),
+                  Set(pendingRewards.values.flatMap(\.keys)).allSatisfy({rewardSpace(for:$0) >= 0}) else { return false }
+        }
         var worn: [String:Int] = [:]
         for slots in equipment.values {
             for (slot,id) in slots {
@@ -194,16 +211,17 @@ extension ExpeditionState {
                   trip.events >= 0, trip.events <= Int(min(trip.duration,focus-trip.startedFocus)/300),
                   validRewards(trip.rewards), validRewards(trip.packedRewards ?? [:]),
                   (trip.packedRewards ?? [:]).allSatisfy({$0.value > 0 && $0.value <= trip.rewards[$0.key,default:0]}),
-                  trip.rewards.keys.allSatisfy({trip.unpackedCount($0) <= 1_000_000_000-inventory[$0,default:0]}),
+                  trip.rewards.keys.allSatisfy({trip.unpackedCount($0) <= rewardSpace(for:$0)}),
                   Set(trip.discoveries).count == trip.discoveries.count,
                   Set(trip.discoveries).isSubset(of:discoveryIDs), !history.contains(where: { $0.id == trip.id }) else { return false }
         }
-        return history.allSatisfy {
-            locations.contains($0.locationID) && validTeam($0.companions)
-                && $0.duration.isFinite && $0.duration >= 0 && $0.duration <= $0.plannedDuration
-                && $0.plannedDuration.isFinite && (60...86400).contains($0.plannedDuration) && $0.plannedDuration.truncatingRemainder(dividingBy:60) == 0
-                && (!$0.completed || $0.duration == $0.plannedDuration)
-                && validRewards($0.rewards) && Set($0.discoveries).count == $0.discoveries.count && Set($0.discoveries).isSubset(of: discoveryIDs)
+        return history.allSatisfy { record in
+            locations.contains(record.locationID) && validTeam(record.companions)
+                && record.duration.isFinite && record.duration >= 0 && record.duration <= record.plannedDuration
+                && record.plannedDuration.isFinite && (60...86400).contains(record.plannedDuration) && record.plannedDuration.truncatingRemainder(dividingBy:60) == 0
+                && (!record.completed || record.duration == record.plannedDuration)
+                && validRewards(record.rewards) && Set(record.discoveries).count == record.discoveries.count && Set(record.discoveries).isSubset(of: discoveryIDs)
+                && (record.claimableQuantity.map { record.completed && (0...record.rewards.values.reduce(0,+)).contains($0) } ?? true)
         }
     }
 }
@@ -351,26 +369,24 @@ extension AppData {
 
     @discardableResult
     mutating func returnExpedition(at date: Date = Date()) -> Bool {
-        guard expeditionState.trip != nil else { return false }
+        guard garden.economy.expedition?.trip != nil else { return false }
         let focus = gameFocus(at:date)
         advanceExpedition(to:focus)
-        var state = expeditionState
-        if var trip = state.trip {
-            finishExpedition(trip:&trip,elapsed:max(0,min(trip.duration,focus-trip.startedFocus)),completed:false,state:&state)
-            garden.economy.expedition = state
-        }
+        guard var state = garden.economy.expedition, var trip = state.trip else { return true }
+        let elapsed = max(0,min(trip.duration,focus-trip.startedFocus))
+        trip.rewards = trip.packedRewards ?? [:]
+        trip.discoveries = trip.rewards.keys.sorted().map { "forage:"+$0 }
+        finishExpedition(trip:&trip,elapsed:elapsed,completed:false,state:&state)
+        garden.economy.expedition = state
         return true
     }
 
-    mutating func collectExpeditionForage(_ itemID: String, at locationID: String) -> Bool {
-        guard var state = garden.economy.expedition, var trip = state.trip, trip.locationID == locationID else { return false }
-        let count = trip.unpackedCount(itemID)
-        guard count > 0, state.inventory[itemID,default:0] <= 1_000_000_000-count else { return false }
-        state.inventory[itemID,default:0] += count
-        var packed = trip.packedRewards ?? [:]
-        packed[itemID,default:0] += count
-        trip.packedRewards = packed
-        state.trip = trip
+    mutating func claimExpeditionRewards(at locationID:String) -> Bool {
+        guard var state = garden.economy.expedition,
+              let rewards = state.pendingRewards?.removeValue(forKey:locationID), !rewards.isEmpty,
+              rewards.allSatisfy({$0.value > 0 && $0.value <= ExpeditionState.rewardLimit-state.inventory[$0.key,default:0]}) else { return false }
+        for (id,count) in rewards { state.inventory[id,default:0] += count }
+        if state.pendingRewards?.isEmpty == true { state.pendingRewards = nil }
         garden.economy.expedition = state
         return true
     }
@@ -391,8 +407,8 @@ extension AppData {
                     let gatheredExtra = state.random.next(100) < gatheringChance
                     let guardedExtra = state.random.next(100) < guardingChance
                     let count = 1 + (gatheredExtra ? 1:0) + (guardedExtra ? 1:0)
-                    let available = min(1_000_000_000 - trip.rewards[item.id,default:0],
-                                        1_000_000_000 - state.inventory[item.id,default:0] - trip.unpackedCount(item.id))
+                    let available = min(ExpeditionState.rewardLimit - trip.rewards[item.id,default:0],
+                                        state.rewardSpace(for:item.id) - trip.unpackedCount(item.id))
                     if available > 0 { trip.rewards[item.id,default:0] += min(count,available) }
                     let key = "forage:" + item.id
                     if !trip.discoveries.contains(key) { trip.discoveries.append(key) }
@@ -409,12 +425,23 @@ extension AppData {
     }
 
     private func finishExpedition(trip: inout ExpeditionTrip, elapsed: Double, completed: Bool, state: inout ExpeditionState) {
-        let remainingSeconds = Int(elapsed.truncatingRemainder(dividingBy:300))
-        if remainingSeconds > 0, state.random.next(300) < remainingSeconds { expeditionEvent(trip:&trip,state:&state) }
-        for id in trip.rewards.keys { state.inventory[id,default:0] += trip.unpackedCount(id) }
+        var claimable = 0
+        if completed {
+            let remainingSeconds = Int(elapsed.truncatingRemainder(dividingBy:300))
+            if remainingSeconds > 0, state.random.next(300) < remainingSeconds { expeditionEvent(trip:&trip,state:&state) }
+            var pending = state.pendingRewards ?? [:]
+            for id in trip.rewards.keys {
+                let count = trip.unpackedCount(id)
+                guard count > 0 else { continue }
+                pending[trip.locationID,default:[:]][id,default:0] += count
+                claimable += count
+            }
+            state.pendingRewards = pending.isEmpty ? nil:pending
+        }
         state.discoveries.formUnion(trip.discoveries)
         state.history.append(ExpeditionRecord(id:trip.id,locationID:trip.locationID,duration:elapsed,plannedDuration:trip.duration,
-                                              completed:completed,companions:trip.companions,rewards:trip.rewards,discoveries:trip.discoveries))
+                                              completed:completed,companions:trip.companions,rewards:trip.rewards,discoveries:trip.discoveries,
+                                              claimableQuantity:completed ? claimable:nil))
         if state.history.count > 256 { state.history.removeFirst(state.history.count-256) }
         state.trip = nil
     }

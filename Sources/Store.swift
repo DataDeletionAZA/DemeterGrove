@@ -1046,7 +1046,7 @@ extension SceneNavigation {
     static func back(store:GardenStore) {
         if let pet=store.pet {pet.back()}
         else {
-            let route=store.sceneNavigation.goBack(from:store.selectedPage) ?? "菜单"
+            let route=store.sceneNavigation.goBack(from:store.selectedPage,level:store.data.levelProgress.level) ?? "菜单"
             store.selectedPage=route == "计时器" ? "专注":route
         }
     }
@@ -1054,6 +1054,7 @@ extension SceneNavigation {
         let route=canonical(route)
         if let pet=store.pet {pet.openTool(route,from:source,sideways:sideways)}
         else {
+            guard canEnter(route,level:store.data.levelProgress.level) else {return}
             store.sceneNavigation.enter(route,from:source,sideways:sideways)
             store.selectedPage=route == "计时器" ? "专注":route
         }

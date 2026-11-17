@@ -22,7 +22,7 @@ import Foundation
             cast:FishingCast(startedFocus:seconds,duration:120,locationID:"lake",baitID:"earthworm",rodID:"willow"),
             random:FocusRandom(state:456),lastFocus:seconds)
         data.garden.economy.mining=MiningState(layers:["quarry_coal":MineProgress(lastFocus:seconds)],selectedLayer:"quarry_coal",inventory:["copper":20,"coal":20])
-        data.garden.economy.expedition=ExpeditionState(inventory:["moon_herb":2],random:FocusRandom(state:789))
+        data.garden.economy.expedition=ExpeditionState(inventory:["moon_herb":2],random:FocusRandom(state:789),pendingRewards:["forest":["moon_herb":1]])
         check(data.embarkExpedition(locationID:"forest",minutes:1440,at:now))
         data.timer=TimerRun(kind:.stopwatch,target:1800,taskTitle:"阅读",startedAt:now.addingTimeInterval(-600),resumedAt:now.addingTimeInterval(-600))
         return data
@@ -62,10 +62,7 @@ import Foundation
             ("fishing purchase",{$0.buyFishingBait("earthworm")} ),
             ("mining selection",{$0.selectMine("quarry_coal",at:now)}),
             ("equipment crafting",{$0.forgeGear(moldID:"sickle",materialIDs:["copper","copper"],natural:12)} ),
-            ("expedition forage",{data in
-                guard let trip=data.expeditionState.trip,let id=trip.rewards.keys.sorted().first else{return false}
-                return data.collectExpeditionForage(id,at:trip.locationID)
-            }),
+            ("expedition claim",{$0.claimExpeditionRewards(at:"forest")}),
             ("expedition return",{$0.returnExpedition(at:now)}),
             ("cooking",{$0.cook(.soup,natural:16)}),
             ("potion brewing",{$0.embark(.potions,recipe:"dew",at:now)})
@@ -231,16 +228,21 @@ import Foundation
         check(try encoded(reopened.data) == beforeDeadline)
         check(reopened.message == "截止前" && reopened.data.fishingState.catches.isEmpty && reopened.data.expeditionState.history.isEmpty)
         check(reopened.data.fishingState.inventory.isEmpty && reopened.data.expeditionState.inventory.isEmpty)
+        check(reopened.data.expeditionState.unclaimedRewards(at:"forest").isEmpty)
         try FileManager.default.removeItem(at:reopened.file)
         try FileManager.default.moveItem(at:deadlineBackup,to:reopened.file)
         check(reopened.finishTimer(at:now.addingTimeInterval(60)))
         check(reopened.data.timer == nil && reopened.data.fishingState.catches.count == 1 && reopened.data.expeditionState.history.count == 1)
-        check(reopened.message.contains("钓鱼完成") && reopened.message.contains("已放入库存") && reopened.message.contains("已放进行囊"))
-        let finalFish=reopened.data.fishingState.inventory,finalLoot=reopened.data.expeditionState.inventory
+        check(reopened.message.contains("钓鱼完成") && reopened.message.contains("已放入库存") && reopened.message.contains("可领取收获"))
+        let finalFish=reopened.data.fishingState.inventory,finalLoot=reopened.data.expeditionState.unclaimedRewards(at:"forest")
+        check(!finalLoot.isEmpty && reopened.data.expeditionState.inventory.isEmpty)
         let finalMessage=reopened.message
         reopened.tick(now.addingTimeInterval(120))
-        check(reopened.data.fishingState.inventory == finalFish && reopened.data.expeditionState.inventory == finalLoot)
+        check(reopened.data.fishingState.inventory == finalFish && reopened.data.expeditionState.unclaimedRewards(at:"forest") == finalLoot)
         check(reopened.deliverGameReminders(at:now.addingTimeInterval(120)).isEmpty && reopened.message == finalMessage)
+        check(reopened.commitGameChange{$0.claimExpeditionRewards(at:"forest")})
+        check(!reopened.commitGameChange{$0.claimExpeditionRewards(at:"forest")})
+        check(try SaveFile.read(reopened.file).expeditionState.inventory == finalLoot)
         print("PASS: final-second fish and expedition notices follow one successful save; failed finish emits no notice, markers or rewards")
 
         reopened.data=completionFixture(at:now)

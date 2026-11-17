@@ -18,20 +18,12 @@ struct RanchScene: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack(spacing: 14) {
-                    Text("伙伴 \(ranch.animals.count)/\(ranch.capacity)").font(.system(size: 13))
-                    Text("饲料总量 \(ranch.feedPortions) 份").font(.system(size: 13)).foregroundStyle(Palette.goldLight)
-                    Spacer(minLength: 0)
-                    WalletView(coins: store.data.garden.coins)
-                }
-                SceneToolbar(items: [
-                    SceneToolbarItem("动物商店") { market = true },
-                    SceneToolbarItem("库存") { inventory = true },
-                    SceneToolbarItem("农场") { SceneNavigation.open("农场", store: store, from: "牧场") },
-                    SceneToolbarItem("专注") { SceneNavigation.open("计时器", store: store, from: "牧场") }
-                ])
-            }
+            SceneHeader(store: store, toolbar: [
+                SceneToolbarItem("动物商店") { market = true },
+                SceneToolbarItem("库存") { inventory = true },
+                SceneToolbarItem("农场") { SceneNavigation.open("农场", store: store, from: "牧场") },
+                SceneToolbarItem("专注") { SceneNavigation.open("计时器", store: store, from: "牧场") }
+            ])
             SceneCanvas(hasSidebar: true) { size in
                 pasture(size)
             } sidebar: {
@@ -97,7 +89,11 @@ struct RanchScene: View {
 
     private var cabinet: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("牧场小柜").font(.headline).foregroundStyle(Palette.goldLight)
+            HStack(spacing: 4) {
+                Text("牧场小柜").font(.headline).foregroundStyle(Palette.goldLight)
+                Spacer(minLength: 0)
+                Text("伙伴 \(ranch.animals.count)/\(ranch.capacity)").font(.caption).monospacedDigit()
+            }.lineLimit(1).minimumScaleFactor(0.75)
             PixelTabs(selection: $tab, items: [("饲料", "饲料"), ("出产", "出产"), ("伙伴", "伙伴")])
             ScrollViewReader { reader in
                 PixelScrollView {
@@ -117,8 +113,6 @@ struct RanchScene: View {
                 }
             }
             if tab == "出产" {
-                Button("收取全部 · \(ranch.readyCount)") { collect(nil) }.frame(maxWidth: .infinity)
-                    .buttonStyle(PixelButtonStyle(primary: true)).disabled(ranch.readyCount == 0)
                 let fertilizer = store.data.garden.economy.finds["mooncalf_dung", default: 0]
                 if fertilizer > 0 {
                     Button {
@@ -129,6 +123,10 @@ struct RanchScene: View {
                         .accessibilityLabel("施用银色粪肥").help("银色粪肥 ×1 · 作物生长 +3 分钟")
                 }
             }
+            Button { collect(nil) } label: { Text("一键收获").frame(maxWidth: .infinity) }
+                .buttonStyle(PixelButtonStyle(primary: true)).disabled(ranch.readyCount == 0)
+                .accessibilityValue("可收取 \(ranch.readyCount) 件")
+                .help("收取所有伙伴已准备好的出产")
         }.padding(10).magicSurface(Palette.paper)
     }
 
@@ -155,6 +153,7 @@ struct RanchScene: View {
                 .accessibilityLabel("饲料槽容量")
             Text(ranch.troughSpace == 0 ? "饲料槽已满 · 备用 \(ranch.feedBags) 袋" : "还可装 \(ranch.troughSpace) 份 · 备用 \(ranch.feedBags) 袋")
                 .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            Text("饲料总量 \(ranch.feedPortions) 份").font(.caption).foregroundStyle(Palette.muted)
         }.padding(7).magicSurface(Palette.card)
     }
 

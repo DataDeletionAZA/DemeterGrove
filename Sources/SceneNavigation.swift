@@ -1,11 +1,39 @@
 import SwiftUI
 
-struct SceneHeader<Content:View>:View {
-    @ViewBuilder var content:Content
+struct SceneHeader<Resources:View>:View {
+    @ObservedObject var store:GardenStore
+    @Environment(\.sceneViewport) private var viewport
+    let toolbar:[SceneToolbarItem]
+    @ViewBuilder var resources:()->Resources
+
     var body:some View {
-        VStack(spacing:10) {content}
+        VStack(alignment:.leading,spacing:6) {
+            HStack(spacing:10) {
+                WalletView(coins:store.data.garden.coins)
+                if ["农场","牧场","商店"].contains(store.currentRoute) {
+                    resource(8,"种子",store.data.garden.seeds)
+                    resource(9,"露水",store.data.garden.water)
+                }
+                Spacer(minLength:0)
+                resources()
+            }.lineLimit(1).minimumScaleFactor(0.75).frame(height:30)
+            SceneToolbar(items:toolbar)
+        }.environment(\.compactSceneControls,true)
             .frame(maxWidth:.infinity,alignment:.topLeading)
-            .frame(minHeight:SceneSizing.headerHeight,alignment:.topLeading)
+            .frame(height:SceneSizing.headerHeight(width:SceneSizing.canvasWidth(viewportWidth:viewport.width)),alignment:.topLeading)
+    }
+
+    private func resource(_ index:Int,_ name:String,_ count:Int)->some View {
+        HStack(spacing:3) {
+            GameSprite(index:index,size:24)
+            Text("\(count)").monospacedDigit().font(.system(size:12))
+        }.accessibilityElement(children:.ignore).accessibilityLabel("\(name) \(count)").help("\(name) \(count)")
+    }
+}
+
+extension SceneHeader where Resources == EmptyView {
+    init(store:GardenStore,toolbar:[SceneToolbarItem]) {
+        self.init(store:store,toolbar:toolbar) { EmptyView() }
     }
 }
 
@@ -54,7 +82,7 @@ struct SceneArrows:View {
     @ObservedObject var store:GardenStore
     var scene:String
     var body:some View {
-        if let routes=SceneNavigation.neighbors(of:scene) {
+        if let routes=SceneNavigation.neighbors(of:scene,level:store.data.levelProgress.level) {
             HStack {
                 arrow("◀",route:routes.0)
                 Spacer(minLength:0)
@@ -103,9 +131,9 @@ struct SceneToolbar:View {
     private var fullWidth:CGFloat {max(84,CGFloat(items.map{ $0.name.count }.max() ?? 1)*13+54)}
     var body:some View {
         ViewThatFits(in:.horizontal) {
-            HStack(spacing:6) {ForEach(items.indices,id:\.self) {index in button(items[index],labels:true)}}.fixedSize(horizontal:true,vertical:false)
-            HStack(spacing:6) {ForEach(items.indices,id:\.self) {index in button(items[index],labels:false)}}.fixedSize(horizontal:true,vertical:false)
-            LazyVGrid(columns:[GridItem(.adaptive(minimum:44,maximum:44))],alignment:.leading,spacing:6) {
+            HStack(spacing:SceneSizing.toolbarGap) {ForEach(items.indices,id:\.self) {index in button(items[index],labels:true)}}.fixedSize(horizontal:true,vertical:false)
+            HStack(spacing:SceneSizing.toolbarGap) {ForEach(items.indices,id:\.self) {index in button(items[index],labels:false)}}.fixedSize(horizontal:true,vertical:false)
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:SceneSizing.compactToolbarItemWidth,maximum:SceneSizing.compactToolbarItemWidth),spacing:SceneSizing.toolbarGap)],alignment:.leading,spacing:SceneSizing.toolbarGap) {
                 ForEach(items.indices,id:\.self) {index in button(items[index],labels:false)}
             }
         }.frame(maxWidth:.infinity,alignment:.leading)

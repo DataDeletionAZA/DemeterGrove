@@ -9,12 +9,14 @@ for viewportWidth:CGFloat in [240,380,800,1500,2600] {
         let side=SceneSizing.sidebar(width:width)
         let area=CGSize(width:width-side-SceneSizing.gap,height:height)
         let fit=SceneSizing.fitted(in:area)
-        assert(height<=max(120,viewportHeight-SceneSizing.verticalReserve) && height.isFinite)
+        assert(height<=max(120,viewportHeight-SceneSizing.verticalReserve(width:width)) && height.isFinite)
         assert(fit.width<=area.width+0.001 && fit.height<=area.height+0.001)
         assert(abs(fit.width/fit.height-1.5)<0.0001)
         assert(abs(fit.height-height)<0.0001)
     }
 }
+assert(SceneSizing.headerHeight(width:250) >= SceneSizing.headerHeight(width:400))
+assert(SceneSizing.headerHeight(width:400) == SceneSizing.headerHeight(width:1200))
 assert(SceneSizing.sidebar(width:1500)>SceneSizing.sidebar(width:500))
 assert(Set(SceneNavigation.rooms) == Set(["书房","农场","牧场","池塘","厨房","商店","炼金室","酒馆","锻造室"]))
 assert(SceneNavigation.neighbors(of:"后院") == nil)
@@ -248,6 +250,16 @@ assert(SceneNavigation.neighbors(of:"林间冒险")?.1.hasPrefix("探险/") == t
 for location in FishingLocation.all {assert(SceneNavigation.title("钓鱼/"+location.id) == location.name)}
 for location in ExpeditionLocation.all {assert(SceneNavigation.title("探险/"+location.id) == location.name)}
 for area in MineLayer.areas {assert(SceneNavigation.title("矿洞/"+area) == area)}
+assert(!SceneNavigation.canEnter("矿洞",level:2) && SceneNavigation.canEnter("矿洞",level:3))
+assert(!SceneNavigation.canEnter("湖畔钓鱼",level:2) && SceneNavigation.canEnter("湖畔钓鱼",level:3))
+assert(!SceneNavigation.canEnter("林间冒险",level:4) && SceneNavigation.canEnter("林间冒险",level:5))
+assert(!SceneNavigation.canEnter("矿洞/无效",level:.max))
+assert(SceneNavigation.canEnter("池塘",level:1))
+navigation.enter("世界地图")
+navigation.enter("钓鱼/lake",from:"世界地图")
+navigation.enter("酒馆",from:"钓鱼/lake")
+assert(navigation.parent(of:"酒馆",level:2) == "世界地图")
+assert(navigation.goBack(from:"酒馆",level:2) == "世界地图")
 print("PASS: parent routes after sideways travel and explicit links, direct-entry reset, map aliases and location labels")
 
 for viewportWidth:CGFloat in [240,460,1000,1800,2600] {

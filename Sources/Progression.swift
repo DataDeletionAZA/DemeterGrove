@@ -46,7 +46,7 @@ enum Upgrade: String, Codable, CaseIterable, Identifiable {
         case .wand:return "每级增加 2 点采集能力，提高额外收获概率"
         case .shop:return "每级让新上架料理的售价增加 1 铜纳特"
         case .farmland:return "每次新增一片有 6 块地的农场"
-        case .storefront:return "每次增加 2 个可同时售卖的陈列位"
+        case .storefront:return "第一次扩至 5 个陈列位，第二次扩至 10 个"
         }
     }
 }
@@ -186,7 +186,13 @@ struct Economy: Codable {
 extension Garden {
     func rank(_ upgrade:Upgrade) -> Int { economy.upgrades[upgrade.rawValue,default:0] }
     var orders: [ShopOrder] { (order.map { [$0] } ?? []) + economy.extraOrders }
-    var capacity: Int { 1 + rank(.storefront)*2 }
+    var capacity: Int {
+        switch rank(.storefront) {
+        case 1: return 5
+        case 2: return 10
+        default: return 1
+        }
+    }
 }
 
 extension AppData {

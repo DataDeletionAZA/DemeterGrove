@@ -54,10 +54,13 @@ extension AppData {
             GameReadyEvent(id:"catch/\(item.id)",kind:.fishing,
                            name:item.itemID.flatMap{NatureItemInfo.fishingCatch($0)?.name} ?? "空钩",stored:true,quantity:item.itemID == nil ? 0:1)
         }
-        events += (garden.economy.expedition?.history ?? []).suffix(32).filter(\.completed).map { trip in
-            GameReadyEvent(id:"expedition/\(trip.id)",kind:.adventure,
-                           name:(ExpeditionLocation.all.first{$0.id == trip.locationID}?.name ?? "远行")+"探险",
-                           stored:true,quantity:trip.rewards.values.reduce(0,+))
+        if let expedition = garden.economy.expedition {
+            events += expedition.history.suffix(32).filter(\.completed).map { trip in
+                let awaitingClaim = (trip.claimableQuantity ?? 0) > 0 && !expedition.unclaimedRewards(at:trip.locationID).isEmpty
+                return GameReadyEvent(id:"expedition/\(trip.id)",kind:.adventure,
+                                      name:(ExpeditionLocation.all.first{$0.id == trip.locationID}?.name ?? "远行")+"探险",
+                                      stored:!awaitingClaim,quantity:trip.rewards.values.reduce(0,+))
+            }
         }
         return events
     }
@@ -85,8 +88,10 @@ extension AppData {
                     if kind == .fishing {
                         if count>0 {parts.append("钓鱼完成，\(count) 份收获已放入库存："+Set(stored.filter{$0.quantity>0}.map(\.name)).sorted().joined(separator:"、"))}
                         else {parts.append("钓鱼完成，本次空钩。")}
-                    } else {
+                    } else if count > 0 {
                         parts.append(stored.map(\.name).joined(separator:"、")+"已完成，\(count) 份收获已放进行囊。")
+                    } else {
+                        parts.append(stored.map(\.name).joined(separator:"、")+"已完成，本次没有收获。")
                     }
                 }
                 text=parts.joined(separator:"\n")

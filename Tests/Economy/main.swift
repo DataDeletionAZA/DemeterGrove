@@ -145,7 +145,7 @@ for dish in Dish.allCases where dish.outputIngredient == nil {
     fullShop.garden.crafts[dish.canonicalID] = 10
     let mature = saleProceeds(dish,in:fullShop)
     let matureHourlyMargin = Double(mature.reduce(0,+) - 20 * cost) / 19 * Double(fullShop.garden.capacity * 12)
-    check((500...800).contains(matureHourlyMargin),"\(dish.name) earns a bounded margin with a full shop and maxed upgrades")
+    check((1000...1600).contains(matureHourlyMargin),"\(dish.name) earns a bounded margin with a full shop and maxed upgrades")
 }
 for recipe in Dish.allCases {
     guard let ingredient = recipe.outputIngredient else { continue }
@@ -223,6 +223,16 @@ let restored = try JSONDecoder().decode(AppData.self,from:JSONEncoder().encode(a
 check(restored.garden.coins == 123456 && restored.garden.cropSeeds == assets.garden.cropSeeds && restored.garden.ingredients == assets.garden.ingredients && restored.garden.dishes == assets.garden.dishes,"balances and inventory preserved")
 check(restored.garden.economy.owned == assets.garden.economy.owned && restored.garden.economy.outfit == "travel" && restored.garden.economy.upgrades == assets.garden.economy.upgrades,"ownership and upgrades preserved")
 check(restored.garden.orders.map(\.price) == [987,406],"old orders round-trip with preserved proceeds")
+check(restored.garden.capacity == 5,"existing first storefront upgrade enables five slots")
+check(Upgrade.storefront.price(0) == 720 && Upgrade.storefront.level(0) == 5 &&
+      Upgrade.storefront.price(1) == 2_000 && Upgrade.storefront.level(1) == 15,"storefront prices and required levels")
+var secondExpansion = restored
+let minutesToLevel15 = (1..<15).reduce(0) { $0 + LevelProgress.requirement($1) }
+secondExpansion.sessions = [FocusSession(id:UUID(),title:"专注",kind:.stopwatch,date:epoch,seconds:Double(minutesToLevel15 * 60))]
+check(secondExpansion.upgrade(.storefront) && secondExpansion.garden.capacity == 10 &&
+      secondExpansion.garden.coins == restored.garden.coins - 2_000,"second expansion enables ten slots for its listed price")
+check(secondExpansion.garden.orders.map(\.id) == restored.garden.orders.map(\.id) &&
+      secondExpansion.garden.orders.map(\.price) == [987,406],"expanding the storefront preserves existing orders and their quotes")
 for ingredient in [Ingredient.silverFish,.moonFish,.goldFish] {
     check(AppData().findPrice(ingredient.rawValue) < ingredient.purchasePrice,"find cash resale below ingredient purchase price")
 }

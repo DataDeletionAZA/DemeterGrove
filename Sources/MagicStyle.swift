@@ -399,6 +399,7 @@ struct PixelIcon: View {
 struct MagicHeader: View {
     var title: String
     var metadata = ""
+    var icon: String? = nil
     var draggable = true
     var backTitle = "返回上一级"
     var back: (() -> Void)? = nil
@@ -410,7 +411,7 @@ struct MagicHeader: View {
                     .buttonStyle(.plain).foregroundStyle(Palette.goldLight).help(backTitle).accessibilityLabel(backTitle)
             }
             HStack(spacing: 10) {
-                PixelIcon(name: title, size: 24)
+                PixelIcon(name: icon ?? title, size: 24)
                 Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.goldLight)
                 if !metadata.isEmpty {Text(metadata).font(.caption).foregroundStyle(Palette.muted).lineLimit(1).minimumScaleFactor(0.7)}
                 Spacer(minLength:0)

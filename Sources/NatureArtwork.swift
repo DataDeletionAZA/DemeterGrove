@@ -26,6 +26,7 @@ struct SceneImageHotspot:View {
     var rect:CGRect
     var size:CGSize
     var label:String
+    var locked=false
     var action:()->Void
     var body:some View {
         let target=CGRect(x:rect.minX*size.width,y:rect.minY*size.height,width:rect.width*size.width,height:rect.height*size.height)
@@ -33,6 +34,14 @@ struct SceneImageHotspot:View {
             RoomBackdrop(name:background).frame(width:size.width,height:size.height)
                 .offset(x:size.width/2-target.midX,y:size.height/2-target.midY)
                 .frame(width:target.width,height:target.height).clipped()
+                .saturation(locked ? 0 : 1)
+                .overlay {
+                    if locked {
+                        Color.gray.opacity(0.36)
+                        Image(systemName:"lock.fill").foregroundStyle(Palette.goldLight)
+                            .padding(7).background(Palette.paper,in:PixelFrame())
+                    }
+                }.accessibilityHidden(true)
         }.position(x:target.midX,y:target.midY)
     }
 }

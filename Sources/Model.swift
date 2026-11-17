@@ -353,11 +353,28 @@ struct AppData: Codable {
     }
 
     mutating func harvest(_ id: UUID, at date: Date = Date()) -> Bool {
-        guard let i = garden.plots.firstIndex(where: { $0.id == id }),
-              let crop = garden.plots[i].crop, garden.plots[i].progress(gameFocus(at: date)) >= 1 else { return false }
-        garden.ingredients[crop.harvestName, default: 0] += harvestYield * (crop == .starlightCarrot ? 2 : 1)
-        garden.plots[i].crop = nil
-        return true
+        !harvestCrops(matching: id, at: date).isEmpty
+    }
+
+    mutating func harvestAll(at date: Date = Date()) -> [String: Int] {
+        harvestCrops(matching: nil, at: date)
+    }
+
+    private mutating func harvestCrops(matching id: UUID?, at date: Date) -> [String: Int] {
+        let focus = gameFocus(at: date)
+        var indices: [Int] = []
+        var produce: [String: Int] = [:]
+        for (index, plot) in garden.plots.enumerated() where id == nil || id == plot.id {
+            guard let crop = plot.crop, plot.progress(focus) >= 1 else { continue }
+            indices.append(index)
+            produce[crop.harvestName, default: 0] += harvestYield * (crop == .starlightCarrot ? 2 : 1)
+        }
+        guard produce.allSatisfy({ item in
+            (0...(1_000_000_000 - item.value)).contains(garden.ingredients[item.key, default: 0])
+        }) else { return [:] }
+        for (name, amount) in produce { garden.ingredients[name, default: 0] += amount }
+        for index in indices { garden.plots[index].crop = nil }
+        return produce
     }
 
     func ingredientCount(_ ingredient:Ingredient) -> Int {

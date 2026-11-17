@@ -12,22 +12,15 @@ struct PondScene: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack(spacing: 14) {
-                    if let pond {
-                        Text("鱼 \(pond.fish.count)/\(pond.capacity)").font(.system(size: 13))
-                        Text("鱼粮 \(pond.feed) 份").font(.system(size: 13)).foregroundStyle(Palette.goldLight)
-                    } else {
-                        Text("池塘").font(.headline)
-                    }
-                    Spacer(minLength: 0)
-                    WalletView(coins: store.data.garden.coins)
+            SceneHeader(store:store,toolbar:[
+                .init("后院") { SceneNavigation.open("后院",store:store,from:"池塘") },
+                .init("库存") { inventory = true },
+                .init("专注") { SceneNavigation.open("计时器",store:store,from:"池塘") }
+            ]) {
+                if let pond {
+                    Text("鱼 \(pond.fish.count)/\(pond.capacity)").font(.caption)
+                    Text("鱼粮 \(pond.feed) 份").font(.caption).foregroundStyle(Palette.goldLight)
                 }
-                SceneToolbar(items: [
-                    SceneToolbarItem("后院") { SceneNavigation.open("后院", store: store, from: "池塘") },
-                    SceneToolbarItem("库存") { inventory = true },
-                    SceneToolbarItem("专注") { SceneNavigation.open("计时器", store: store, from: "池塘") }
-                ])
             }
             SceneCanvas(hasSidebar: true) { size in
                 stage(size)
@@ -42,6 +35,7 @@ struct PondScene: View {
     private func stage(_ size: CGSize) -> some View {
         ZStack {
             RoomBackdrop(name: "Pond").frame(width: size.width, height: size.height)
+                .saturation(pond == nil ? 0 : 1).opacity(pond == nil ? 0.48 : 1)
             if let pond {
                 TimelineView(.animation(minimumInterval: 0.12, paused: reduceMotion)) { timeline in
                     let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
@@ -61,9 +55,14 @@ struct PondScene: View {
                         }
                     }.frame(width: size.width, height: size.height)
                 }
+                SceneImageHotspot(background:"Pond",rect:CGRect(x:0.035,y:0.465,width:0.09,height:0.10),size:size,label:"鱼粮") {tab="鱼粮"}
+            } else {
+                Label("池塘尚未开辟",systemImage:"lock.fill")
+                    .font(.headline).padding(12).magicSurface(Palette.paper)
+                    .allowsHitTesting(false)
             }
-            SceneImageHotspot(background:"Pond",rect:CGRect(x:0.035,y:0.465,width:0.09,height:0.10),size:size,label:"鱼粮") {tab="鱼粮"}
             SceneImageHotspot(background:"Pond",rect:CGRect(x:0.17,y:0.12,width:0.085,height:0.20),size:size,label:"回到后院") {SceneNavigation.open("后院",store:store,from:"池塘")}
+                .saturation(pond == nil ? 0 : 1).opacity(pond == nil ? 0.55 : 1)
             SceneArrows(store: store, scene: "池塘")
         }
         .frame(width: size.width, height: size.height)
@@ -97,11 +96,13 @@ struct PondScene: View {
                 }
                 if tab == "鱼群" {
                     if pond.readyCount > 0 {
-                        Button("收鱼 · \(pond.readyCount) 条") { collect(nil) }
-                            .buttonStyle(PixelButtonStyle(primary: true))
+                        Button { collect(nil) } label: {
+                            Text("收鱼 · \(pond.readyCount) 条").frame(maxWidth: .infinity)
+                        }.buttonStyle(PixelButtonStyle(primary: true))
                     }
-                    Button("鱼苗商店") { market = true }
-                        .buttonStyle(PixelButtonStyle(primary: pond.fish.isEmpty))
+                    Button { market = true } label: {
+                        Text("鱼苗商店").frame(maxWidth: .infinity)
+                    }.buttonStyle(PixelButtonStyle(primary: pond.fish.isEmpty))
                 }
             } else {
                 Text("开辟池塘").font(.headline).foregroundStyle(Palette.goldLight)

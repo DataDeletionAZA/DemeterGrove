@@ -65,15 +65,18 @@ struct GameSprite: View {
 struct DisplayGlass: View {
     var body: some View {
         Canvas { context,size in
-            let glass = CGRect(x:size.width*0.102,y:size.height*0.492,width:size.width*0.410,height:size.height*0.055)
-            context.clip(to:Path(glass))
+            let glass = CGRect(x:size.width*0.102,y:size.height*0.439,width:size.width*0.410,height:size.height*0.108)
+            var panes = Path()
+            panes.addRect(CGRect(x:glass.minX,y:glass.minY,width:glass.width,height:size.height*0.048))
+            panes.addRect(CGRect(x:glass.minX,y:size.height*0.492,width:glass.width,height:size.height*0.055))
+            context.clip(to:panes)
             context.fill(Path(glass),with:.color(Color(red:0.75,green:0.84,blue:0.88).opacity(0.12)))
-            for x in [0.19,0.39] {
+            for x in [0.17,0.37] {
                 var reflection=Path()
                 reflection.move(to:CGPoint(x:size.width*x,y:glass.maxY))
                 reflection.addLine(to:CGPoint(x:size.width*(x+0.035),y:glass.maxY))
-                reflection.addLine(to:CGPoint(x:size.width*(x+0.08),y:glass.minY))
-                reflection.addLine(to:CGPoint(x:size.width*(x+0.045),y:glass.minY))
+                reflection.addLine(to:CGPoint(x:size.width*(x+0.10),y:glass.minY))
+                reflection.addLine(to:CGPoint(x:size.width*(x+0.065),y:glass.minY))
                 reflection.closeSubpath()
                 context.fill(reflection,with:.color(.white.opacity(0.12)))
             }
@@ -111,7 +114,15 @@ struct IngredientArt: View {
     }
 }
 
+struct GameSceneBook: View {
+    enum Kind {case alchemy,forge}
+    var kind:Kind
+    var size:CGFloat
+    var body:some View {GameSprite(sheet:kind == .alchemy ? "AlchemyBook":"ForgeBook",index:0,size:size)}
+}
+
 struct PlantArt: View {
+    static let harvestCrops:[Crop] = [.carrot,.wheat,.tomato,.potato,.cucumber,.cabbage,.mushroom,.corn,.pumpkin,.strawberry,.mint,.lemon,.onion,.spinach,.pea,.eggplant,.beet,.apple,.pear,.tea,.shrivelfig,.dirigiblePlum,.moonbean,.sunroot]
     var crop: Crop
     var stage: Int
     var size: CGFloat
@@ -121,8 +132,8 @@ struct PlantArt: View {
     }
     var body: some View {
         Group {
-        if let key=FoodContent.cropSpriteKeys[crop] {GameNatureSprite(key:"crop_"+key+"_"+String(stage),size:size)}
-        else if stage == 4 { GameSprite(sheet:slot.0,index:slot.1+4,size:size) }
+        if stage == 4,let index=Self.harvestCrops.firstIndex(of:crop.artCrop) {GameSprite(sheet:"Crops",index:index,size:size)}
+        else if let key=FoodContent.cropSpriteKeys[crop] {GameNatureSprite(key:"crop_"+key+"_"+String(stage),size:size)}
         else if let images = GameImages.sprites[slot.0], images.indices.contains(slot.1+stage) {
             let mature = images[slot.1+3].size
             let scale = size / max(mature.width,mature.height)

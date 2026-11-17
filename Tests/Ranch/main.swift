@@ -208,10 +208,31 @@ import Foundation
         }
         check(try encoded(store.data) == nowFull)
 
+        var harvest = fixture(focus: 100_000)
+        let producing = RanchAnimal(speciesID: "chicken", progress: 60, fed: true)
+        harvest.garden.economy.ranch = RanchState(animals: [
+            RanchAnimal(speciesID: "chicken", ready: 1),
+            RanchAnimal(speciesID: "cow", ready: 3),
+            RanchAnimal(speciesID: "cashmere_goat", ready: 1),
+            producing
+        ], trough: 10, lastFocus: harvest.totalFocus)
+        store.data = harvest
+        var collected: [String: Int] = [:]
+        check(store.commitGameChange { collected = $0.collectRanchProduce(at: store.now); return !collected.isEmpty })
+        check(collected == ["鸡蛋": 1, "牛奶": 3, "羊绒": 1])
+        let collectedSave = try SaveFile.read(store.file)
+        check(collectedSave.garden.ingredients["鸡蛋", default: 0] == harvest.garden.ingredients["鸡蛋", default: 0] + 1)
+        check(collectedSave.garden.ingredients["牛奶", default: 0] == harvest.garden.ingredients["牛奶", default: 0] + 3)
+        check(collectedSave.garden.economy.finds["cashmere"] == 1)
+        check(collectedSave.ranchState.animals[3] == producing && collectedSave.ranchState.trough == 10)
+        check(collectedSave.ranchState.readyCount == 0)
+        check(!store.commitGameChange { !$0.collectRanchProduce(at: store.now).isEmpty })
+
         store.data = fixture()
         check(store.commitGameChange { $0.buyRanchAnimal("chicken", at: now) })
         check(store.commitGameChange { $0.buyRanchFeed(at: now) })
         store.data.timer = TimerRun(kind: .stopwatch, target: 1800, taskTitle: "阅读", startedAt: now, resumedAt: now)
+        store.data.garden.economy.ranch?.animals[0].ready = 1
         store.now = now
         check(store.save() && store.data.ranchState.feedBags == 1)
         let persisted = try SaveFile.read(store.file)
@@ -224,6 +245,9 @@ import Foundation
         try Data([1]).write(to: store.file.appendingPathComponent("blocked"))
         store.now = now.addingTimeInterval(1)
         check(!store.commitGameChange { $0.buyRanchFeed(at: now) })
+        check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
+        check(!store.commitGameChange { collected = $0.collectRanchProduce(at: store.now); return !collected.isEmpty })
+        check(collected == ["鸡蛋": 1])
         check(try encoded(store.data) == prior && Data(contentsOf: backup) == disk)
         try manager.removeItem(at: store.file); try manager.moveItem(at: backup, to: store.file)
         print("PASS: ranch production, automatic reserve feeding, paused/rest clocks, feed exhaustion, old save and partial meal, bounded long focus, no retroactive feed, expansion, collection conservation, invalid saves, persistence and failed-save rollback")

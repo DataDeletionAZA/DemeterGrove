@@ -156,7 +156,8 @@ let initialPlots = expanded.garden.plots.map(\.id)
 for expected in [12,18] { assert(expanded.upgrade(.farmland) && expanded.garden.plots.count == expected) }
 assert(!expanded.upgrade(.farmland) && expanded.garden.plots.prefix(6).map(\.id) == initialPlots)
 assert(Set(expanded.garden.plots.map(\.id)).count == 18)
-for expected in [3,5] { assert(expanded.upgrade(.storefront) && expanded.garden.capacity == expected) }
+assert(expanded.garden.capacity == 1)
+for expected in [5,10] { assert(expanded.upgrade(.storefront) && expanded.garden.capacity == expected) }
 assert(!expanded.upgrade(.storefront))
 _ = try expanded.validated()
 var tools = expanded

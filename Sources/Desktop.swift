@@ -285,7 +285,7 @@ final class PetController {
     }
     func back() {
         let route=managerIsOpen ? store.selectedPage:store.activeTool
-        if let parent=store.sceneNavigation.goBack(from:route) {displayTool(parent)}
+        if let parent=store.sceneNavigation.goBack(from:route,level:store.data.levelProgress.level) {displayTool(parent)}
         else {manager?.orderOut(nil);closeInventory();closeTool();showMenu()}
     }
     func toggleMenu() {
@@ -299,6 +299,7 @@ final class PetController {
     }
     func openTool(_ name: String, from source: String? = nil, sideways: Bool = false) {
         let name=SceneNavigation.canonical(name)
+        guard SceneNavigation.canEnter(name,level:store.data.levelProgress.level) else {return}
         store.sceneNavigation.enter(name,from:source,sideways:sideways)
         displayTool(name)
     }
@@ -581,13 +582,11 @@ struct ToolPanelView: View {
     @ObservedObject var store: GardenStore
     var tool: String
     private var sceneMetadata:String {
-        guard SceneNavigation.rooms.contains(tool) || SceneNavigation.wilds.contains(tool) || ["首页","后院","世界地图"].contains(tool) else{return ""}
-        let level="等级 \(store.data.levelProgress.level)"
-        return tool == "商店" ? level+" · 栏位 \(store.data.garden.shopOrderCount)/\(store.data.garden.capacity)":level
+        SceneNavigation.isLocation(tool) ? "等级 \(store.data.levelProgress.level)" : ""
     }
     var body: some View {
         VStack(spacing: 0) {
-        MagicHeader(title: SceneNavigation.title(tool), metadata: sceneMetadata, draggable: false, backTitle: store.sceneNavigation.parent(of:tool).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单", back: { store.pet?.back() }) { store.pet?.closeTool() }
+        MagicHeader(title: SceneNavigation.title(tool), metadata: sceneMetadata, icon: SceneNavigation.icon(tool), draggable: false, backTitle: store.sceneNavigation.parent(of:tool,level:store.data.levelProgress.level).map{"返回"+SceneNavigation.title($0)} ?? "返回菜单", back: { store.pet?.back() }) { store.pet?.closeTool() }
         GeometryReader { viewport in
         PixelScrollView {
             VStack(alignment: .leading, spacing: 14) {

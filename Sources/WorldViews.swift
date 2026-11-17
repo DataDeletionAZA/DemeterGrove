@@ -241,16 +241,13 @@ struct MapPage: View {
         return journey == .fishing ? "抛竿":"出发"
     }
     var body:some View {
-        VStack(alignment:.leading,spacing:12) {
-            SceneHeader {
-                HStack {Spacer();WalletView(coins:store.data.garden.coins)}
-                SceneToolbar(items:[
+        VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
+            if journey == .potions {PotionScene(store:store)}
+            else {
+                SceneHeader(store:store,toolbar:[
                     .init("成长",action:{SceneNavigation.open("成长",store:store,from:store.currentRoute)}),
                     .init("库存",action:{showingInventory=true})
                 ])
-            }
-            if journey == .potions {PotionScene(store:store)}
-            else {
                 SceneCanvas(hasSidebar:true) {size in
                     let w=size.width,h=size.height
                     ZStack {

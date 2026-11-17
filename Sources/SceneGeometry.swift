@@ -2,18 +2,23 @@ import Foundation
 import CoreGraphics
 
 struct SceneSizing {
-    static let headerHeight:CGFloat=80
     static let sectionGap:CGFloat=12
-    static let verticalReserve:CGFloat=120
     static let gap:CGFloat=12
     static let scrollGutter:CGFloat=16
+    static let compactToolbarItemWidth:CGFloat=44
+    static let toolbarGap:CGFloat=6
+    static func headerHeight(width:CGFloat)->CGFloat {
+        let sixItems=6*compactToolbarItemWidth+5*toolbarGap
+        return width < sixItems ? 118 : 80
+    }
+    static func verticalReserve(width:CGFloat)->CGFloat {headerHeight(width:width)+sectionGap+16}
     static func canvasWidth(viewportWidth:CGFloat,availableWidth:CGFloat?=nil)->CGFloat {
         max(1,min(viewportWidth-scrollGutter,availableWidth ?? viewportWidth))
     }
     static func sidebar(width:CGFloat)->CGFloat {min(460,max(144,width*0.26))}
     static func height(width:CGFloat,viewportHeight:CGFloat,hasSidebar:Bool=true)->CGFloat {
         let stageWidth=max(1,width-(hasSidebar ? sidebar(width:width)+gap:0))
-        return max(1,min(stageWidth/1.5,max(1,viewportHeight-verticalReserve)))
+        return max(1,min(stageWidth/1.5,max(1,viewportHeight-verticalReserve(width:width))))
     }
     static func initialWindow(available:CGSize)->CGSize {
         let scale=max(0.001,min(1,available.width/1000,available.height/680))
@@ -43,29 +48,56 @@ enum SceneNavigation {
             if sideways { path[path.count - 1] = route }
             else if route != source { path.append(route) }
         }
-        func parent(of route: String) -> String? {
+        func parent(of route: String, level: Int = .max) -> String? {
             let route = SceneNavigation.canonical(route)
-            if path.last == route, path.count > 1 { return path[path.count - 2] }
+            if let previous = previousIndex(from: route, level: level) { return path[previous] }
             return SceneNavigation.parent(of: route)
         }
-        mutating func goBack(from route: String) -> String? {
-            let parent = parent(of: route)
-            if path.last == SceneNavigation.canonical(route), path.count > 1 { path.removeLast() }
-            else { path = parent.map { [$0] } ?? [] }
+        mutating func goBack(from route: String, level: Int = .max) -> String? {
+            let route = SceneNavigation.canonical(route)
+            if let previous = previousIndex(from: route, level: level) {
+                path.removeSubrange((previous + 1)..<path.count)
+                return path.last
+            }
+            let parent = SceneNavigation.parent(of: route)
+            path = parent.map { [$0] } ?? []
             return parent
+        }
+        private func previousIndex(from route: String, level: Int) -> Int? {
+            guard path.last == route else { return nil }
+            return path.indices.dropLast().last { SceneNavigation.canEnter(path[$0],level:level) }
         }
     }
     static let indoorRooms=["书房","厨房","商店","炼金室","酒馆","锻造室"]
     static let outdoorRooms=["农场","牧场","池塘"]
     static let rooms=indoorRooms+outdoorRooms
     static let wilds=[JourneyKind.fishing.rawValue,JourneyKind.adventure.rawValue,"矿洞"]
-    static func isWild(_ route:String)->Bool {wilds.contains(route) || ["钓鱼","探险","矿洞"].contains(route.components(separatedBy:"/")[0])}
-    static func isScene(_ route:String)->Bool {
-        let route=canonical(route)
-        return rooms.contains(route) || isWild(route) || ["首页","后院","世界地图","成长","衣柜"].contains(route)
+    static func isWild(_ route:String)->Bool {
+        wilds.contains(route) || ["钓鱼","探险","矿洞"].contains(route.components(separatedBy:"/")[0])
     }
+    static func isLocation(_ route:String)->Bool {
+        let route=canonical(route)
+        return rooms.contains(route) || isWild(route) || ["首页","后院","世界地图"].contains(route)
+    }
+    static func isScene(_ route:String)->Bool {isLocation(route) || ["成长","衣柜"].contains(route)}
     static func canonical(_ route:String)->String {
-        ["地图":"首页","小院":"首页","小屋":"首页","户外地图":"世界地图","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务"][route] ?? route
+        ["地图":"首页","小院":"首页","小屋":"首页","户外地图":"世界地图","熬制魔药":"炼金室","专注":"计时器","待办":"任务","四象限":"任务",
+         "湖畔钓鱼":"钓鱼/lake","钓鱼":"钓鱼/lake","林间冒险":"探险/forest","探险":"探险/forest","矿洞":"矿洞/旧矿场"][route] ?? route
+    }
+    static func requiredLevel(for route:String)->Int? {
+        let parts=canonical(route).split(separator:"/",maxSplits:1,omittingEmptySubsequences:false)
+        guard parts.count == 2 else {return nil}
+        let id=parts[1]
+        switch parts[0] {
+        case "钓鱼": return FishingLocation.all.first{$0.id == id}?.level
+        case "探险": return ExpeditionLocation.all.first{$0.id == id}?.level
+        case "矿洞": return MineLayer.layers(in:String(id)).first?.level
+        default: return nil
+        }
+    }
+    static func canEnter(_ route:String,level:Int)->Bool {
+        guard isWild(route) else {return true}
+        return requiredLevel(for:route).map{level >= $0} ?? false
     }
     static func parent(of route:String)->String? {
         let route=canonical(route)
@@ -74,19 +106,17 @@ enum SceneNavigation {
         if indoorRooms.contains(route) || ["后院","世界地图"].contains(route) { return "首页" }
         return nil
     }
-    static func neighbors(of scene:String)->(String,String)? {
-        var scene=canonical(scene)
-        if ["湖畔钓鱼","钓鱼"].contains(scene) {scene="钓鱼/lake"}
-        if ["林间冒险","探险"].contains(scene) {scene="探险/forest"}
-        if scene == "矿洞" {scene="矿洞/旧矿场"}
-        let group:[String]
+    static func neighbors(of scene:String,level:Int = .max)->(String,String)? {
+        let scene=canonical(scene)
+        var group:[String]
         switch scene.components(separatedBy:"/")[0] {
         case "钓鱼": group=FishingLocation.all.map{"钓鱼/"+$0.id}
         case "探险": group=ExpeditionLocation.all.map{"探险/"+$0.id}
         case "矿洞": group=MineLayer.areas.map{"矿洞/"+$0}
         default: group=indoorRooms.contains(scene) ? indoorRooms:outdoorRooms
         }
-        guard let index=group.firstIndex(of:scene) else{return nil}
+        group=group.filter{canEnter($0,level:level)}
+        guard group.count > 1,let index=group.firstIndex(of:scene) else{return nil}
         return (group[(index+group.count-1)%group.count],group[(index+1)%group.count])
     }
     static func title(_ route:String)->String {
@@ -95,6 +125,14 @@ enum SceneNavigation {
         if route.hasPrefix("探险/"),let place=ExpeditionLocation.all.first(where:{$0.id == String(route.dropFirst(3))}) {return place.name}
         if route.hasPrefix("矿洞/"),let area=MineLayer.areas.first(where:{$0 == String(route.dropFirst(3))}) {return area}
         return route == "首页" ? "小屋":route.components(separatedBy:"/")[0]
+    }
+    static func icon(_ route:String)->String {
+        switch canonical(route).components(separatedBy:"/")[0] {
+        case "钓鱼": return "渔具"
+        case "探险": return "林间冒险"
+        case "矿洞": return "矿洞"
+        default: return title(route)
+        }
     }
 }
 

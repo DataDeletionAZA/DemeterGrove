@@ -5,10 +5,10 @@ struct ExpeditionScene: View {
     var initialLocation: String? = nil
     @State private var minutes: String?
     @State private var tab = "行程"
-    @State private var forageNote: String?
     @State private var showInventory = false
     @State private var showParty = false
     @State private var equipmentCompanion: Companion?
+    @State private var showEarlyReturn = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var state: ExpeditionState { store.data.expeditionState }
     private var location: ExpeditionLocation {
@@ -19,31 +19,43 @@ struct ExpeditionScene: View {
     private var locked: Bool { store.data.levelProgress.level < location.level }
     private var localTrip: ExpeditionTrip? { state.trip.flatMap{$0.locationID == location.id ? $0:nil} }
     private var legacyTrip: Bool { store.data.garden.economy.trip(.adventure) != nil }
+    private var pending: [String:Int] { state.unclaimedRewards(at:location.id) }
+    private var localInventory: Int {
+        let inventory=state.inventory
+        return NatureCatalog.forage.filter{$0.locations.contains(location.id)}
+            .reduce(0){$0+inventory[$1.id,default:0]}
+    }
     private var minuteInput: String { minutes ?? String(state.preferredMinutes) }
     private var duration: Int? { Int(minuteInput.trimmingCharacters(in:.whitespacesAndNewlines)).flatMap{(1...1440).contains($0) ? $0:nil} }
 
     var body: some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                if initialLocation == nil || locked {
-                    HStack {
-                        if initialLocation == nil {Text(location.name).font(.headline)}
-                        Spacer(minLength:0)
-                        if locked {Label("等级 \(location.level) 解锁",systemImage:"lock.fill").font(.caption).foregroundStyle(Palette.goldLight)}
-                    }
-                }
-                SceneToolbar(items:[
+            SceneHeader(store:store,toolbar:[
                     SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:store.currentRoute)},
-                    SceneToolbarItem("世界地图"){SceneNavigation.open("世界地图",store:store,from:store.currentRoute)},
-                    SceneToolbarItem("记录专注"){SceneNavigation.open("计时器",store:store,from:store.currentRoute)}
-                ])
+                    SceneToolbarItem("世界地图"){SceneNavigation.open("世界地图",store:store,from:store.currentRoute)}
+            ]) {
+                Text("本地物资 \(localInventory) 份").font(.caption).foregroundStyle(Palette.muted)
             }
             SceneCanvas(hasSidebar:true) {size in landscape(size)} sidebar: {cabinet}
-        }.onChange(of:location.id) { _,_ in forageNote=nil }
-            .onChange(of:state.history.last?.id) { _,_ in tab="记录";forageNote=nil }
+        }.onChange(of:location.id) { _,_ in tab="行程" }
+            .onChange(of:state.history.last?.id) { _,_ in
+                if state.history.last?.locationID == location.id { tab=pending.isEmpty ? "记录":"行程" }
+            }
             .sheet(isPresented:$showInventory) { InventoryView(store:store) }
             .sheet(isPresented:$showParty) { ExpeditionPartySheet(store:store,location:location) }
             .sheet(item:$equipmentCompanion) { person in CompanionEquipmentSheet(store:store,person:person) }
+            .alert("提前结束探险？",isPresented:$showEarlyReturn) {
+                Button("取消",role:.cancel) {}
+                Button("提前结束",role:.destructive) {
+                    guard localTrip != nil else { return }
+                    if store.commitGameChange({$0.returnExpedition(at:store.now)}) {tab="记录"}
+                }
+            } message: {
+                if let trip=localTrip {
+                    let forfeited=trip.rewards.keys.reduce(0){$0+trip.unpackedCount($1)}
+                    if forfeited>0 { Text("本次尚未结算的 \(forfeited) 份收获将失去。") }
+                }
+            }
     }
 
     private func elapsed(_ trip: ExpeditionTrip) -> Double { max(0,min(trip.duration,store.gameFocus-trip.startedFocus)) }
@@ -60,9 +72,6 @@ struct ExpeditionScene: View {
         let trip=localTrip
         let party=trip?.companions ?? (locked ? []:state.team(at:location.id).filter{!state.isTraveling($0)})
         let distance=trip.map{0.05+progress($0)*0.07} ?? 0
-        let eligible=NatureCatalog.forage.filter{!locked && $0.locations.contains(location.id) && $0.level <= (trip?.level ?? store.data.levelProgress.level)}
-        let ready=eligible.filter{(trip?.unpackedCount($0.id) ?? 0)>0}
-        let forage=ready + eligible.filter{(trip?.unpackedCount($0.id) ?? 0)==0}
         return ZStack {
             RoomBackdrop(name:location.backdrop).frame(width:w,height:h)
             ForEach(Array(party.enumerated()),id:\.element) {index,id in
@@ -73,49 +82,14 @@ struct ExpeditionScene: View {
                         .animation(reduceMotion ? nil:.easeOut(duration:0.3),value:trip?.id)
                 }
             }
-            if let key=(trip?.discoveries ?? state.history.last(where:{$0.locationID == location.id})?.discoveries ?? []).last(where:{$0.hasPrefix("wildlife:")}),
-               let animal=NatureCatalog.wildlife.first(where:{"wildlife:"+$0.id == key && $0.locations.contains(location.id)}) {
-                ObjectButton(label:"观察\(animal.name)",action:{store.message=animal.name+" · "+animal.description},caption:animal.name) {
-                    GameNatureSprite(key:animal.spriteKey,size:w*0.12)
-                }.position(x:w*0.84,y:h*0.65)
-            }
-            ForEach(Array(forage.prefix(4).enumerated()),id:\.element.id) {index,item in
-                let count=trip?.unpackedCount(item.id) ?? 0
-                ObjectButton(label:count>0 ? "采集\(item.name) ×\(count)":item.name,action:{pickForage(item,count:count)},caption:item.name) {
-                    VStack(spacing:1) {
-                        GameNatureSprite(key:item.spriteKey,size:w*0.085)
-                        if count>0 {
-                            Text("采集 ×\(count)").font(.system(size:10,weight:.medium)).lineLimit(1)
-                                .foregroundStyle(Palette.goldLight).padding(.horizontal,4).padding(.vertical,3)
-                                .background(Palette.paper,in:PixelFrame())
-                        }
-                    }.frame(minWidth:44,minHeight:34)
-                }.position(x:w*(0.17+Double(index)*0.22),y:h*0.84)
-            }
-            if trip != nil || forageNote != nil {
-                VStack(alignment:.leading,spacing:5) {
-                    if let trip {
-                        Text(tripStatus(trip)).font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.goldLight)
-                        PixelProgress(value:progress(trip)).frame(width:min(166,w*0.54))
-                    }
-                    if let forageNote {Text(forageNote).font(.caption).fixedSize(horizontal:false,vertical:true)}
-                }.padding(8).background(Palette.paper,in:PixelFrame())
-                    .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).padding(9).allowsHitTesting(false)
-            }
             SceneArrows(store:store,scene:route)
         }.frame(width:w,height:h).clipShape(PixelFrame()).overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))
     }
 
-    private func pickForage(_ item: NatureForage, count: Int) {
-        guard count>0 else {
-            let trip=state.trip
-            let alreadyPacked=trip?.locationID == location.id && (trip?.packedRewards?[item.id] ?? 0)>0
-            forageNote=alreadyPacked ? "\(item.name)已放入行囊":"尚未发现\(item.name)"
-            store.message=item.description
-            return
-        }
-        let collected=store.commitGameChange{$0.collectExpeditionForage(item.id,at:location.id)}
-        forageNote=collected ? "\(item.name)已放入行囊":"暂时无法采集\(item.name)"
+    private func railButton(_ title:String, primary:Bool=false, action:@escaping()->Void) -> some View {
+        Button(action:action) {
+            Text(title).lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity)
+        }.buttonStyle(PixelButtonStyle(primary:primary))
     }
 
     private var cabinet: some View {
@@ -129,34 +103,47 @@ struct ExpeditionScene: View {
                     else {records}
                 }.frame(maxWidth:.infinity,alignment:.leading).padding(.trailing,2)
             }
-            if tab == "行程" { itineraryAction }
         }.padding(10).magicSurface(Palette.paper)
     }
 
     private var itinerary: some View {
         VStack(alignment:.leading,spacing:9) {
+            if !pending.isEmpty {
+                railButton("领取收获",primary:true) {
+                    if store.commitGameChange({$0.claimExpeditionRewards(at:location.id)}) {
+                        store.message="收获已放入行囊。"
+                    }
+                }
+                VStack(alignment:.leading,spacing:6) {
+                    ForEach(NatureCatalog.forage.filter{pending[$0.id,default:0]>0}) { item in
+                        HStack(spacing:6) {
+                            GameNatureSprite(key:item.spriteKey,size:24)
+                            Text(item.name).font(.caption)
+                            Spacer(minLength:0)
+                            Text("×\(pending[item.id,default:0])").font(.caption).foregroundStyle(Palette.goldLight)
+                        }
+                    }
+                }.padding(6).magicSurface(Palette.card)
+            }
             if let trip=localTrip {
+                Text(tripStatus(trip)).font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.goldLight)
                 Text("\(Int(elapsed(trip)/60)) / \(Int(trip.duration/60)) 分钟专注").font(.system(size:11)).monospacedDigit()
                 PixelProgress(value:progress(trip))
-                Text("收获 \(trip.rewards.values.reduce(0,+)) 份 · 发现 \(trip.discoveries.count) 种").font(.system(size:11)).foregroundStyle(Palette.muted)
                 Text("采集 \(trip.gathering) · 寻踪 \(trip.scouting) · 护行 \(trip.guarding)").font(.system(size:10)).foregroundStyle(Palette.goldLight)
-                Text("待收入行囊 \(trip.rewards.keys.reduce(0){$0+trip.unpackedCount($1)}) 份")
-                    .font(.system(size:11)).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
+                railButton("记录专注"){SceneNavigation.open("计时器",store:store,from:store.currentRoute)}
+                railButton("提前结束"){showEarlyReturn=true}
             } else if let trip=state.trip, let destination=ExpeditionLocation.all.first(where:{$0.id == trip.locationID}) {
-                Button("查看\(destination.name)的行程") { SceneNavigation.open("探险/"+destination.id,store:store,from:store.currentRoute) }
-                    .fixedSize(horizontal:false,vertical:true)
+                railButton("查看\(destination.name)的行程") { SceneNavigation.open("探险/"+destination.id,store:store,from:store.currentRoute) }
+                if !locked { partyButton }
             } else if legacyTrip {
                 Text("行程进行中").font(.caption).fixedSize(horizontal:false,vertical:true)
             } else if locked {
                 Text("尚未解锁").font(.caption).fixedSize(horizontal:false,vertical:true)
             } else {
-                if !state.history.isEmpty {
-                    Button("上次结算"){tab="记录"}.font(.system(size:11))
-                }
                 Text("行程时长").font(.system(size:12)).foregroundStyle(Palette.goldLight)
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:4) {
                     ForEach([15,30,60,120],id:\.self) {value in
-                        Button("\(value)"){minutes=String(value)}.lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity).buttonStyle(PixelButtonStyle(primary:duration == value))
+                        railButton("\(value)",primary:duration == value){minutes=String(value)}
                     }
                 }
                 HStack(spacing:5) {
@@ -165,32 +152,17 @@ struct ExpeditionScene: View {
                     Text("分钟").font(.system(size:11))
                 }
                 if duration == nil {Text("请输入 1～1440 的整数分钟。").font(.system(size:10)).foregroundStyle(Palette.goldLight)}
+                partyButton
+                railButton("出发探险",primary:true) {
+                    guard let duration else{return}
+                    store.commitGameChange { $0.embarkExpedition(locationID:location.id,minutes:duration,at:store.now) }
+                }.disabled(duration == nil)
             }
         }
     }
 
-    @ViewBuilder private var itineraryAction: some View {
-        if localTrip != nil {
-            Button("提前返回") {
-                if store.commitGameChange({$0.returnExpedition(at:store.now)}) {tab="记录"}
-            }.frame(maxWidth:.infinity)
-        } else {
-            VStack(spacing:6) {
-                if !locked {
-                    Button("队伍 · \(state.team(at:location.id).count)/4") {showParty=true}
-                        .frame(maxWidth:.infinity)
-                }
-                if state.trip == nil {
-                    Button("出发探险") {
-                        guard let duration else{return}
-                        if store.commitGameChange({$0.embarkExpedition(locationID:location.id,minutes:duration,at:store.now)}) {
-                            forageNote=nil
-                        }
-                    }.frame(maxWidth:.infinity).buttonStyle(PixelButtonStyle(primary:true))
-                        .disabled(locked || legacyTrip || duration == nil)
-                }
-            }
-        }
+    private var partyButton:some View {
+        railButton("队伍 · \(state.team(at:location.id).count)/4"){showParty=true}
     }
 
     private var satchel: some View {
@@ -206,22 +178,22 @@ struct ExpeditionScene: View {
                     }
                     Text(item.description).font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal:false,vertical:true)
                     NatureSourceLinks(ids:item.sourceIDs)
-                    HStack(spacing:5) {
+                    LazyVGrid(columns:[GridItem(.adaptive(minimum:74),spacing:5)],spacing:5) {
                         if item.isCookable,let ingredient=item.ingredient {
-                            Button("加工 ×1") {
+                            railButton("加工 ×1") {
                                 if store.commitGameChange({$0.prepareForage(item.id,count:1)}) {store.message="\(item.name)已加工为\(ingredient)。"}
                             }.accessibilityLabel("将一份\(item.name)加工为\(ingredient)")
                         }
                         if Potion.all.contains(where:{$0.forageID == item.id}) {
-                            Button("炼金"){SceneNavigation.open("炼金室",store:store,from:store.currentRoute)}.accessibilityLabel("用\(item.name)熬制魔药")
+                            railButton("炼金"){SceneNavigation.open("炼金室",store:store,from:store.currentRoute)}.accessibilityLabel("用\(item.name)熬制魔药")
                         }
-                        Button("售出 ×1") {
+                        railButton("售出 ×1") {
                             if store.commitGameChange({$0.sellForage(item.id,count:1)}) {store.message="售出\(item.name)，收到\(Money.text(item.salePrice))。"}
                         }.accessibilityLabel("售出一份\(item.name)，获得\(Money.text(item.salePrice))")
                     }.font(.system(size:10))
                 }.padding(6).magicSurface(Palette.card)
             }
-            Button("打开全部库存"){showInventory=true}.frame(maxWidth:.infinity)
+            railButton("打开全部库存"){showInventory=true}
         }
     }
 

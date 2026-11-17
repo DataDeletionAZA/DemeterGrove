@@ -22,25 +22,25 @@ struct ForgeScene:View {
 
     var body:some View {
         VStack(alignment:.leading,spacing:SceneSizing.sectionGap) {
-            SceneHeader {
-                HStack {Text("锻造室").font(.system(size:13));Spacer();WalletView(coins:store.data.garden.coins)}
-                SceneToolbar(items:[
-                    SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:"锻造室")},
-                    SceneToolbarItem("矿洞"){SceneNavigation.open("矿洞",store:store,from:"锻造室")},
-                    SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store,from:"锻造室")},
-                    SceneToolbarItem("配方册",action:openRecipeBook),
-                    SceneToolbarItem("上次结果",disabled:result == nil){openResult()},
-                    SceneToolbarItem("小屋"){SceneNavigation.open("首页",store:store,from:"锻造室")}
-                ])
-            }
+            SceneHeader(store: store, toolbar: [
+                SceneToolbarItem("酒馆"){SceneNavigation.open("酒馆",store:store,from:"锻造室")},
+                SceneToolbarItem("矿洞", disabled: !SceneNavigation.canEnter("矿洞", level: store.data.levelProgress.level)) {
+                    SceneNavigation.open("矿洞", store: store, from: "锻造室")
+                },
+                SceneToolbarItem("商店"){SceneNavigation.open("商店",store:store,from:"锻造室")},
+                SceneToolbarItem("上次结果",disabled:result == nil){openResult()},
+                SceneToolbarItem("小屋"){SceneNavigation.open("首页",store:store,from:"锻造室")}
+            ])
             SceneCanvas(hasSidebar:true) {size in
                 ZStack {
                     RoomBackdrop(name:"Forge").frame(width:size.width,height:size.height)
                     SceneImageHotspot(background:"Forge",rect:CGRect(x:0.72,y:0.08,width:0.23,height:0.44),size:size,label:"熔炉"){openStation(.furnace)}
                     SceneImageHotspot(background:"Forge",rect:CGRect(x:0.07,y:0.34,width:0.33,height:0.28),size:size,label:"缝纫台"){openStation(.sewing)}
-                    ObjectButton(label: "打开配方册", action: openRecipeBook, caption: "配方册") {
-                        PixelIcon(name: "配方册", size: max(28, size.width * 0.09))
-                    }.position(x: size.width * 0.42, y: size.height * 0.69)
+                    let bookWidth = size.width * 0.156
+                    ObjectButton(label: "打开配方册", action: openRecipeBook, embeddedInBackdrop: true, caption: "配方册") {
+                        GameSceneBook(kind: .forge, size: bookWidth)
+                            .frame(width: bookWidth, height: bookWidth * 0.59)
+                    }.position(x: size.width * 0.26, y: size.height * 0.694)
                     SceneArrows(store:store,scene:"锻造室")
                 }.frame(width:size.width,height:size.height).clipShape(PixelFrame())
                     .overlay(PixelFrame().strokeBorder(Palette.gold.opacity(0.65),lineWidth:1))

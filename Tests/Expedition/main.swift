@@ -127,11 +127,14 @@ assert(!team.advanceExpedition(to:started+299))
 assert(team.advanceExpedition(to:started+300))
 let earned=team.expeditionState.trip!.rewards
 assert(earned.values.reduce(0,+)>0 && team.expeditionState.inventory.isEmpty)
+assert(!team.claimExpeditionRewards(at:"forest"))
 assert(!team.advanceExpedition(to:started+300))
 assert(!team.advanceExpedition(to:started-1))
 team.timer=TimerRun(kind:.stopwatch,target:1800,taskTitle:"阅读",startedAt:now,resumedAt:nil,accumulated:300)
 assert(team.returnExpedition(at:now.addingTimeInterval(10000)))
-assert(team.expeditionState.trip == nil && team.expeditionState.inventory == earned)
+assert(team.expeditionState.trip == nil && team.expeditionState.inventory.isEmpty)
+assert(team.expeditionState.unclaimedRewards(at:"forest").isEmpty && !team.claimExpeditionRewards(at:"forest"))
+assert(team.expeditionState.history.last!.rewards.isEmpty)
 assert(team.expeditionState.history.last!.duration == 300 && !team.expeditionState.history.last!.completed)
 let returned=try encode(team.expeditionState)
 assert(!team.returnExpedition(at:now) && !team.advanceExpedition(to:started+10000))
@@ -148,13 +151,15 @@ for (seed,minutes,earnsReward) in [(UInt64(1),1,false),(UInt64(2),1,true),(UInt6
     assert(solo.expeditionState.trip!.companions.isEmpty)
     assert(!solo.advanceExpedition(to:soloStart+Double(minutes*60-1)))
     assert(solo.advanceExpedition(to:soloStart+Double(minutes*60)))
-    assert(solo.expeditionState.trip == nil && solo.expeditionState.inventory.isEmpty == !earnsReward)
+    assert(solo.expeditionState.trip == nil && solo.expeditionState.inventory.isEmpty)
+    assert(solo.expeditionState.unclaimedRewards(at:"forest").isEmpty == !earnsReward)
+    assert(solo.claimExpeditionRewards(at:"forest") == earnsReward)
+    assert(!solo.claimExpeditionRewards(at:"forest"))
     assert(solo.expeditionState.history.last!.completed && solo.expeditionState.history.last!.duration == Double(minutes*60))
     early.timer=TimerRun(kind:.stopwatch,target:600,taskTitle:"阅读",startedAt:now,resumedAt:now)
     assert(early.returnExpedition(at:now.addingTimeInterval(Double(minutes*60))))
     assert(early.expeditionState.trip == nil && !early.expeditionState.history.last!.completed)
-    assert(early.expeditionState.inventory == solo.expeditionState.inventory)
-    assert(early.expeditionState.random == solo.expeditionState.random)
+    assert(early.expeditionState.inventory.isEmpty && early.expeditionState.unclaimedRewards(at:"forest").isEmpty)
 }
 
 var equipped=fixture(level:25)
@@ -163,14 +168,15 @@ equipped.garden.economy.expedition?.trip?.gathering=240
 equipped.garden.economy.expedition?.trip?.scouting=240
 equipped.garden.economy.expedition?.trip?.guarding=240
 assert(equipped.advanceExpedition(to:equipped.totalFocus+3600))
+assert(equipped.claimExpeditionRewards(at:"beach"))
 assert((24...36).contains(equipped.expeditionState.inventory.values.reduce(0,+)))
 
 var gathering=fixture(level:5)
 gathering.garden.economy.expedition?.random=FocusRandom(state:5)
 let berry="wild_strawberry"
-assert(!gathering.collectExpeditionForage(berry,at:"forest"))
+assert(!gathering.claimExpeditionRewards(at:"forest"))
 assert(gathering.embarkExpedition(locationID:"forest",minutes:10,at:now))
-assert(!gathering.collectExpeditionForage(berry,at:"forest"))
+assert(!gathering.claimExpeditionRewards(at:"forest"))
 gathering.timer=TimerRun(kind:.stopwatch,target:600,taskTitle:"阅读",startedAt:now,resumedAt:nil,accumulated:300)
 assert(gathering.advanceExpedition(to:gathering.gameFocus(at:now)))
 let ready=gathering.expeditionState.trip!.unpackedCount(berry)
@@ -178,25 +184,70 @@ assert(ready>0)
 let gatheringSave=try encode(gathering)
 gathering=try JSONDecoder().decode(AppData.self,from:gatheringSave)
 assert(gathering.expeditionState.trip?.packedRewards == nil)
-var automatic=gathering
-assert(!gathering.collectExpeditionForage(berry,at:"river"))
-assert(gathering.collectExpeditionForage(berry,at:"forest"))
-assert(!gathering.collectExpeditionForage(berry,at:"forest"))
-assert(gathering.expeditionState.inventory[berry] == ready)
-assert(gathering.expeditionState.trip?.unpackedCount(berry) == 0)
-let packedSave=try encode(gathering)
-gathering=try JSONDecoder().decode(AppData.self,from:packedSave)
-_ = try gathering.validated(at:now)
-assert(!gathering.collectExpeditionForage(berry,at:"forest"))
-let beforeBerries=gathering.garden.ingredients[Ingredient.strawberry.rawValue,default:0]
-assert(gathering.prepareForage(berry,count:ready))
+assert(!gathering.claimExpeditionRewards(at:"river") && !gathering.claimExpeditionRewards(at:"forest"))
+assert(!gathering.prepareForage(berry,count:ready))
+var alreadyPacked=gathering
+alreadyPacked.garden.economy.expedition?.inventory[berry]=ready
+alreadyPacked.garden.economy.expedition?.trip?.packedRewards=[berry:ready]
+let packedSave=try encode(alreadyPacked)
+alreadyPacked=try JSONDecoder().decode(AppData.self,from:packedSave)
+_ = try alreadyPacked.validated(at:now)
+var cancelsPacked=alreadyPacked
+assert(cancelsPacked.returnExpedition(at:now))
+assert(cancelsPacked.expeditionState.inventory == [berry:ready])
+assert(cancelsPacked.expeditionState.history.last?.rewards == [berry:ready])
+assert(!cancelsPacked.claimExpeditionRewards(at:"forest"))
+let beforeBerries=alreadyPacked.garden.ingredients[Ingredient.strawberry.rawValue,default:0]
+assert(alreadyPacked.prepareForage(berry,count:ready))
 gathering.timer?.accumulated=600
-automatic.timer?.accumulated=600
+alreadyPacked.timer?.accumulated=600
 assert(gathering.advanceExpedition(to:gathering.gameFocus(at:now)))
-assert(automatic.advanceExpedition(to:automatic.gameFocus(at:now)))
-assert(gathering.expeditionState.history == automatic.expeditionState.history)
-assert(gathering.expeditionState.inventory[berry,default:0] == automatic.expeditionState.inventory[berry,default:0]-ready)
-assert(gathering.garden.ingredients[Ingredient.strawberry.rawValue] == beforeBerries+ready)
+assert(alreadyPacked.advanceExpedition(to:alreadyPacked.gameFocus(at:now)))
+assert(gathering.expeditionState.history.last?.rewards == alreadyPacked.expeditionState.history.last?.rewards)
+assert(gathering.expeditionState.inventory.isEmpty)
+let claimPackage=gathering.expeditionState.unclaimedRewards(at:"forest")
+let claimSave=try encode(gathering)
+gathering=try JSONDecoder().decode(AppData.self,from:claimSave)
+_ = try gathering.validated(at:now)
+assert(gathering.expeditionState.unclaimedRewards(at:"forest") == claimPackage)
+assert(!gathering.claimExpeditionRewards(at:"river") && gathering.claimExpeditionRewards(at:"forest"))
+assert(gathering.expeditionState.inventory == claimPackage && !gathering.claimExpeditionRewards(at:"forest"))
+let remaining=alreadyPacked.expeditionState.unclaimedRewards(at:"forest")
+assert(remaining[berry,default:0] == claimPackage[berry,default:0]-ready)
+assert(alreadyPacked.claimExpeditionRewards(at:"forest"))
+assert(alreadyPacked.expeditionState.inventory[berry,default:0] == claimPackage[berry,default:0]-ready)
+assert(alreadyPacked.garden.ingredients[Ingredient.strawberry.rawValue] == beforeBerries+ready)
+
+var buffered=fixture()
+assert(buffered.embarkExpedition(locationID:"forest",minutes:5,at:now))
+assert(buffered.advanceExpedition(to:buffered.totalFocus+300))
+let forestRewards=buffered.expeditionState.unclaimedRewards(at:"forest")
+assert(!forestRewards.isEmpty)
+let firstRecord=buffered.expeditionState.history[0]
+for _ in 1..<256 {
+    var record=firstRecord;record.id=UUID()
+    buffered.garden.economy.expedition?.history.append(record)
+}
+assert(buffered.embarkExpedition(locationID:"river",minutes:5,at:now))
+assert(buffered.advanceExpedition(to:buffered.totalFocus+300))
+assert(!buffered.expeditionState.history.contains(where:{$0.id == firstRecord.id}))
+assert(buffered.expeditionState.unclaimedRewards(at:"forest") == forestRewards)
+let riverRewards=buffered.expeditionState.unclaimedRewards(at:"river")
+assert(!riverRewards.isEmpty)
+assert(buffered.claimExpeditionRewards(at:"river"))
+assert(buffered.expeditionState.inventory == riverRewards && buffered.expeditionState.unclaimedRewards(at:"forest") == forestRewards)
+assert(buffered.claimExpeditionRewards(at:"forest") && !buffered.claimExpeditionRewards(at:"forest"))
+
+var deductible=fixture(level:5)
+deductible.garden.economy.expedition?.pendingRewards=["forest":[berry:1]]
+deductible.garden.economy.expedition?.inventory[berry]=ExpeditionState.rewardLimit
+assert(!deductible.expeditionState.isValid(focus:deductible.totalFocus))
+assert(!deductible.claimExpeditionRewards(at:"forest"))
+assert(deductible.expeditionState.unclaimedRewards(at:"forest") == [berry:1])
+deductible.garden.economy.expedition?.inventory[berry]=ExpeditionState.rewardLimit-1
+assert(deductible.expeditionState.isValid(focus:deductible.totalFocus))
+assert(deductible.claimExpeditionRewards(at:"forest"))
+assert(deductible.expeditionState.inventory[berry] == ExpeditionState.rewardLimit)
 
 var paused=fixture(level:5)
 paused.timer=TimerRun(kind:.stopwatch,target:1800,taskTitle:"阅读",startedAt:now,resumedAt:now)
@@ -218,6 +269,7 @@ stepped.advanceExpedition(to:longStart+86400)
 assert(long.expeditionState == stepped.expeditionState)
 assert(long.expeditionState.history.count == 1 && long.expeditionState.trip == nil)
 let polarIDs=Set(NatureCatalog.forage.filter{$0.locations.contains("polar") && $0.level<=25}.map(\.id))
+assert(long.claimExpeditionRewards(at:"polar"))
 assert(Set(long.expeditionState.inventory.keys).isSubset(of:polarIDs))
 assert(!long.expeditionState.inventory.isEmpty)
 
@@ -226,6 +278,7 @@ for place in ExpeditionLocation.all {
     assert(region.embarkExpedition(locationID:place.id,minutes:30,at:now))
     let start=region.expeditionState.trip!.startedFocus
     region.advanceExpedition(to:start+1800)
+    assert(region.claimExpeditionRewards(at:place.id))
     let ids=Set(NatureCatalog.forage.filter{$0.locations.contains(place.id) && $0.level<=place.level}.map(\.id))
     assert(!region.expeditionState.inventory.isEmpty && Set(region.expeditionState.inventory.keys).isSubset(of:ids))
     assert(region.expeditionState.isValid(focus:start+1800))
@@ -242,6 +295,7 @@ for (location,level,materials,wildlife) in [
     assert(unlocked.embarkExpedition(locationID:location,minutes:60,at:now))
     if location == "marsh" {
         assert(unlocked.advanceExpedition(to:unlocked.totalFocus+3600))
+        assert(unlocked.claimExpeditionRewards(at:location))
         assert(unlocked.expeditionState.inventory["bog_glass"] == nil)
         unlocked=fixture(level:10)
     } else {
@@ -256,6 +310,7 @@ for (location,level,materials,wildlife) in [
     unlocked.garden.economy.expedition?.trip?.scouting=240
     unlocked.garden.economy.expedition?.trip?.guarding=240
     assert(unlocked.advanceExpedition(to:start+86400))
+    assert(unlocked.claimExpeditionRewards(at:location))
     assert(Set(unlocked.expeditionState.inventory.keys) == Set(materials))
     assert(unlocked.expeditionState.discoveries.contains("wildlife:"+wildlife))
     assert(unlocked.expeditionState.inventory.values.reduce(0,+) <= 288*3)
@@ -336,4 +391,4 @@ oldGarden["economy"]=oldEconomy;oldObject["garden"]=oldGarden
 let oldData=try JSONDecoder().decode(AppData.self,from:JSONSerialization.data(withJSONObject:oldObject))
 assert(oldData.garden.economy.expedition == nil && oldData.garden.coins == decoded.garden.coins)
 assert(oldData.miningState == decoded.miningState && oldData.garden.economy.finds == decoded.garden.economy.finds)
-print("PASS: tavern roster, local expedition teams, equipment, effective-focus timing, manual forage, return, completion, all regions and save validation")
+print("PASS: tavern roster, expedition teams, equipment, effective-focus timing, rewards available once after completion, legacy partial claims, early return and save validation")
