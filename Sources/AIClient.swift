@@ -275,7 +275,7 @@ struct AIClient {
     }
     static func output(from data:Data,format:AIFormat) throws -> String {
         guard let json=try? JSONSerialization.jsonObject(with:data) as? [String:Any],
-              (json["error"] == nil || json["error"] is NSNull), !["failed","incomplete","cancelled"].contains(json["status"] as? String ?? "") else{throw AIError.response}
+              (json["error"] == nil || json["error"] is NSNull), json["status"] == nil || json["status"] as? String == "completed" else{throw AIError.response}
         let parts:[String]
         if format == .responses {
             guard let output=json["output"] as? [[String:Any]] else{throw AIError.response}
@@ -283,7 +283,7 @@ struct AIClient {
                 (item["content"] as? [[String:Any]] ?? []).filter{$0["type"] as? String == "output_text"}.compactMap{$0["text"] as? String}
             }
         } else {
-            guard let choices=json["choices"] as? [[String:Any]] else{throw AIError.response}
+            guard let choices=json["choices"] as? [[String:Any]], choices.allSatisfy({ $0["finish_reason"] == nil || $0["finish_reason"] as? String == "stop" }) else {throw AIError.response}
             parts=choices.compactMap {($0["message"] as? [String:Any])?["content"] as? String}
         }
         let value=parts.joined(separator:"\n").trimmingCharacters(in:.whitespacesAndNewlines)
@@ -309,18 +309,33 @@ struct AIClient {
 struct AITextStream {
     var format:AIFormat
     private var buffer=Data()
+    private var skipLineFeed = false
+    private var firstLine = true
     private var lines:[String]=[]
     private var stopped=false
     private(set) var text=""
     private(set) var completed:Data?
     mutating func append(_ bytes:Data) throws {
         guard completed == nil else{return}
-        buffer.append(bytes)
-        while let newline=buffer.firstIndex(of:10) {
-            var raw=buffer[..<newline]
-            if raw.last == 13 {raw=raw.dropLast()}
-            guard let line=String(data:raw,encoding:.utf8) else{throw AIError.response}
-            buffer.removeSubrange(...newline)
+        var chunk = bytes[...]
+        while !chunk.isEmpty {
+            if skipLineFeed {
+                skipLineFeed = false
+                if chunk.first == 10 { chunk = chunk.dropFirst(); continue }
+            }
+            let end = chunk.firstIndex { $0 == 10 || $0 == 13 } ?? chunk.endIndex
+            let part = chunk[..<end]
+            guard part.count <= 1_048_576 - buffer.count else { throw AIError.tooLarge }
+            buffer.append(contentsOf: part)
+            guard end != chunk.endIndex else { return }
+            skipLineFeed = chunk[end] == 13
+            chunk = chunk[chunk.index(after: end)...]
+            guard var line = String(data: buffer, encoding: .utf8) else { throw AIError.response }
+            buffer.removeAll(keepingCapacity: true)
+            if firstLine {
+                if line.first == "\u{FEFF}" { line.removeFirst() }
+                firstLine = false
+            }
             if line.isEmpty {try event();lines.removeAll(keepingCapacity:true)}
             else if line.hasPrefix("data:") {
                 var value=String(line.dropFirst(5));if value.first == " " {value.removeFirst()}
@@ -329,7 +344,6 @@ struct AITextStream {
             guard text.utf8.count<=1_048_576 else{throw AIError.tooLarge}
             if completed != nil {return}
         }
-        guard buffer.count<=1_048_576,text.utf8.count<=1_048_576 else{throw AIError.tooLarge}
     }
     private mutating func event() throws {
         guard !lines.isEmpty else{return}

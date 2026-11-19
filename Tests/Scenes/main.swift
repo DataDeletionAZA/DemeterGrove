@@ -1,5 +1,15 @@
 import Foundation
 
+let firstBurst = Date(timeIntervalSinceReferenceDate: 850_000_000.1234)
+for steps in [1, 14, 28] {
+    for start in [firstBurst, firstBurst.addingTimeInterval(0.2)] {
+        let frames = SceneBurst.frames(from: start, steps: steps)
+        assert(frames.count == steps + 1 && frames.first == start)
+        assert(frames.last == start.addingTimeInterval(SceneBurst.duration))
+        assert(zip(frames, frames.dropFirst()).allSatisfy { $0 < $1 })
+    }
+}
+
 for viewportWidth:CGFloat in [240,380,800,1500,2600] {
     let width=SceneSizing.canvasWidth(viewportWidth:viewportWidth)
     assert(width>0 && width<viewportWidth)

@@ -222,7 +222,7 @@ struct Garden: Codable {
     }
     var menu: [Dish] {
         let builtIn = Dish.allCases.filter { recipes[$0.id] == nil }
-        return (builtIn + Array(recipes.values)).sorted { $0.name < $1.name }
+        return (builtIn + recipes.values).sorted { ($0.name, $0.quality, $0.id) < ($1.name, $1.quality, $1.id) }
     }
     var recipeMenu: [Dish] { menu.filter { $0.recipeID == nil } }
     init() { }
@@ -310,19 +310,20 @@ struct AppData: Codable {
         totalFocus + (timer.flatMap { $0.kind == .rest ? nil : $0.elapsed(at: date) } ?? 0)
     }
 
-    mutating func finishTimer(at now: Date) -> (seconds: Double, water: Int, rest: Bool)? {
+    mutating func finishTimer(at now: Date) -> (seconds: Double, water: Int, coins: Int, rest: Bool)? {
         guard let run = timer else { return nil }
         timer = nil
         let seconds = run.elapsed(at: now)
         pomodoroBreakReady = run.kind == .pomodoro && seconds >= run.target
-        guard seconds > 0, !sessions.contains(where: { $0.id == run.id }) else { return (0, 0, run.kind == .rest) }
+        guard seconds > 0, !sessions.contains(where: { $0.id == run.id }) else { return (0, 0, 0, run.kind == .rest) }
         let beforeFocus = totalFocus
         sessions.append(run.record(endingAt: now))
         let afterFocus = totalFocus
         let water = min(1_000_000_000-garden.water,EconomyBalance.waterReward(before:beforeFocus,after:afterFocus,wateringRank:garden.rank(.watering)))
         garden.water += water
-        garden.coins += EconomyBalance.focusReward(before:beforeFocus,after:afterFocus)
-        return (seconds, water, run.kind == .rest)
+        let coins = min(AutoShopState.moneyLimit - garden.coins, EconomyBalance.focusReward(before: beforeFocus, after: afterFocus))
+        garden.coins += coins
+        return (seconds, water, coins, run.kind == .rest)
     }
 
     mutating func plant(_ crop: Crop, in id: UUID, at date: Date = Date()) -> Bool {

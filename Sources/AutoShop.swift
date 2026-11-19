@@ -67,7 +67,7 @@ extension AppData {
         let previous = state
         let baseline = state.lastAdvancedFocus ?? focus
         guard focus >= baseline else { return false }
-        let menu = Dictionary(uniqueKeysWithValues: garden.menu.map { ($0.id, $0) })
+        let menu = state.dishIDs.isEmpty ? [:] : Dictionary(uniqueKeysWithValues: garden.menu.map { ($0.id, $0) })
         state.dishIDs=state.dishIDs.reduce(into:[]) {ids,id in
             let canonical=menu[id]?.canonicalID ?? id
             if !ids.contains(canonical) {ids.append(canonical)}

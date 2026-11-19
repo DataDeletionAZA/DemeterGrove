@@ -162,6 +162,10 @@ private final class Stub:URLProtocol,@unchecked Sendable {
         Stub.prepare(["choices":[["message":["content":phraseJSON]]]])
         let chatGenerated=try await client.encouragement(profile:chat,feature:.habitEncouragement,subject:"喝水",tone:"平静",preferences:"")
         check(chatGenerated == phrases,"chat mock generation")
+        Stub.prepare(["choices":[["finish_reason":"length","message":["content":phraseJSON]]]])
+        await expect(.response) { _ = try await client.encouragement(profile:chat,feature:.habitEncouragement,subject:"喝水") }
+        Stub.prepare(["status":"in_progress","output":[["type":"message","content":[["type":"output_text","text":phraseJSON]]]]])
+        await expect(.response) { _ = try await client.encouragement(profile:profile,feature:.taskEncouragement,subject:"阅读") }
         for status in [401,429,500] {
             Stub.prepare(["error":["message":"private-response-mock-key"]],status:status)
             await expect(.http(status)){_ = try await client.models(profile:profile)}

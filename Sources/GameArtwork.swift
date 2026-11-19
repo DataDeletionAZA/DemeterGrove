@@ -154,13 +154,13 @@ struct HarvestEffect: View {
     var count = 2
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        TimelineView(.animation(minimumInterval:0.05)) { timeline in
+        TimelineView(.explicit(SceneBurst.frames(from: date, steps: 28))) { timeline in
             let age = timeline.date.timeIntervalSince(date)
-            if age >= 0 && age < 1.4 {
+            if timeline.date >= date && timeline.date < date.addingTimeInterval(SceneBurst.duration) {
                 VStack(spacing:2) {
                     PlantArt(crop:crop,stage:4,size:size)
                     Text("+\(count)").font(.system(size:12,weight:.semibold)).foregroundStyle(Palette.goldLight)
-                }.offset(y:reduceMotion ? 0 : -age*22).opacity(min(1,(1.4-age)*3))
+                }.offset(y:reduceMotion ? 0 : -age*22).opacity(min(1,(SceneBurst.duration-age)*3))
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
     }
@@ -178,35 +178,42 @@ struct SceneParticles: View {
     var burst: Date? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.1, paused: reduceMotion)) { timeline in
-            Canvas { context, size in
-                let time = timeline.date.timeIntervalSince1970
-                if steam {
-                    for i in 0..<7 {
-                        let p = (time * 0.4 + Double(i) / 7).truncatingRemainder(dividingBy: 1)
-                        let x = size.width * (0.5 + sin(p*6 + Double(i))*0.18)
-                        let y = size.height * (1-p)
-                        context.fill(Path(ellipseIn: CGRect(x:x,y:y,width:4+p*5,height:3+p*4)), with:.color(.white.opacity((1-p)*0.38)))
-                    }
-                } else if let burst {
-                    let age = timeline.date.timeIntervalSince(burst)
-                    if age >= 0 && age < 1.4 {
-                        for i in 0..<14 {
-                            let angle = Double(i)*Double.pi/7
-                            let x = size.width/2 + cos(angle)*age*size.width*0.35
-                            let y = size.height/2 + sin(angle)*age*size.height*0.3 - age*12
-                            context.fill(Path(CGRect(x:x,y:y,width:3,height:3)),with:.color(Palette.goldLight.opacity(1-age/1.4)))
-                        }
-                    }
-                } else {
-                    for i in 0..<7 {
-                        let x = size.width * (0.06 + Double(i)*0.145) + sin(time*0.5+Double(i))*5
-                        let y = size.height * (0.14 + Double((i*7)%11)/15) + cos(time*0.6+Double(i))*4
-                        context.fill(Path(CGRect(x:x,y:y,width:2,height:2)),with:.color(Palette.goldLight.opacity(0.3+sin(time+Double(i))*0.2)))
-                    }
-                }
+        Group {
+            if let burst {
+                TimelineView(.explicit(SceneBurst.frames(from: burst, steps: reduceMotion ? 1 : 14))) { particles(at: $0.date) }
+            } else {
+                TimelineView(.animation(minimumInterval: 0.1, paused: reduceMotion)) { particles(at: $0.date) }
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+    private func particles(at date: Date) -> some View {
+        Canvas { context, size in
+            let time = date.timeIntervalSince1970
+            if steam {
+                for i in 0..<7 {
+                    let p = (time * 0.4 + Double(i) / 7).truncatingRemainder(dividingBy: 1)
+                    let x = size.width * (0.5 + sin(p*6 + Double(i))*0.18)
+                    let y = size.height * (1-p)
+                    context.fill(Path(ellipseIn: CGRect(x:x,y:y,width:4+p*5,height:3+p*4)), with:.color(.white.opacity((1-p)*0.38)))
+                }
+            } else if let burst {
+                let age = date.timeIntervalSince(burst)
+                if date >= burst && date < burst.addingTimeInterval(SceneBurst.duration) {
+                    for i in 0..<14 {
+                        let angle = Double(i)*Double.pi/7
+                        let x = size.width/2 + cos(angle)*age*size.width*0.35
+                        let y = size.height/2 + sin(angle)*age*size.height*0.3 - age*12
+                        context.fill(Path(CGRect(x:x,y:y,width:3,height:3)),with:.color(Palette.goldLight.opacity(1-age/SceneBurst.duration)))
+                    }
+                }
+            } else {
+                for i in 0..<7 {
+                    let x = size.width * (0.06 + Double(i)*0.145) + sin(time*0.5+Double(i))*5
+                    let y = size.height * (0.14 + Double((i*7)%11)/15) + cos(time*0.6+Double(i))*4
+                    context.fill(Path(CGRect(x:x,y:y,width:2,height:2)),with:.color(Palette.goldLight.opacity(0.3+sin(time+Double(i))*0.2)))
+                }
+            }
+        }
     }
 }
 

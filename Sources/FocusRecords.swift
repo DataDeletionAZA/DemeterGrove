@@ -128,6 +128,14 @@ struct TaskOccurrenceReschedule: Codable, Equatable, Identifiable {
 }
 
 extension AppData {
+    mutating func restoreSavedTimer(at date: Date) {
+        timer?.pause(at: savedAt)
+        if savedAt > date {
+            timer?.shiftDates(by: date.timeIntervalSince(savedAt))
+            savedAt = date
+        }
+    }
+
     func focusSeconds(in interval: DateInterval) -> TimeInterval { sessions.reduce(0) { $0 + $1.focusSeconds(in: interval) } }
     func focusTaskOccurrence(for session: FocusSession, calendar: Calendar) -> TaskOccurrence? {
         guard let taskID = session.taskID, let task = tasks.first(where: { $0.id == taskID }) else { return nil }

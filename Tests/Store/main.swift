@@ -4,12 +4,102 @@ import UserNotifications
 @main
 enum HabitStoreChecks {
     @MainActor
+    private static func recoveryAndCheckpointChecks(_ store: GardenStore) throws {
+        let fallback = store.file.deletingLastPathComponent().appendingPathComponent("previous.json")
+        assert(!store.storageLocked && store.data.tasks.isEmpty)
+        var saved = AppData()
+        saved.tasks = [GardenTask(title: "备份里的任务")]
+        try SaveFile.write(saved, to: fallback)
+        do {
+            let recovered = GardenStore(preview: true)
+            defer { recovered.storageLocked = true }
+            assert(recovered.data.tasks.first?.id == saved.tasks[0].id && recovered.save())
+            let persisted = try SaveFile.read(store.file)
+            assert(persisted.tasks.first?.id == saved.tasks[0].id)
+        }
+        try FileManager.default.removeItem(at: store.file)
+        let unreadable = Data("incomplete".utf8)
+        try unreadable.write(to: fallback)
+        do {
+            let locked = GardenStore(preview: true)
+            assert(locked.storageLocked && !locked.save())
+            let original = try Data(contentsOf: fallback)
+            assert(original == unreadable && !FileManager.default.fileExists(atPath: store.file.path))
+        }
+        try FileManager.default.removeItem(at: fallback)
+
+        print("PASS: missing primary restores the startup backup or locks writes when recovery fails")
+        let quitTime = Date().addingTimeInterval(-60)
+        store.data.timer = TimerRun(kind: .stopwatch, target: 300, taskTitle: "退出保存", startedAt: quitTime, resumedAt: quitTime)
+        try FileManager.default.createDirectory(at: store.file, withIntermediateDirectories: false)
+        assert(!store.prepareToQuit() && store.data.timer?.resumedAt != nil)
+        try FileManager.default.removeItem(at: store.file)
+        assert(store.prepareToQuit())
+        let quitSnapshot = try SaveFile.read(store.file)
+        assert(quitSnapshot.timer?.resumedAt == nil && (quitSnapshot.timer?.accumulated ?? 0) >= 60)
+        store.data.timer = nil
+
+        print("PASS: failed quit keeps the active timer and successful quit saves its paused progress")
+        let checkpoint = Date().addingTimeInterval(120)
+        store.counter = KeyCounter { _ in }
+        store.tick(checkpoint)
+        assert(store.save())
+        let idle = try Data(contentsOf: store.file)
+        store.tick(checkpoint.addingTimeInterval(21))
+        let stillIdle = try Data(contentsOf: store.file)
+        assert(idle == stillIdle)
+        store.recordInput(.keyboard, at: checkpoint)
+        store.tick(checkpoint.addingTimeInterval(42))
+        let inputSnapshot = try SaveFile.read(store.file)
+        assert(inputSnapshot.keys.values.reduce(0, +) == 1)
+        store.counter = nil
+        assert(store.startTimer(kind: .stopwatch, minutes: 1, task: nil, at: checkpoint.addingTimeInterval(42)))
+        store.tick(checkpoint.addingTimeInterval(63))
+        let running = try SaveFile.read(store.file)
+        assert(running.savedAt == checkpoint.addingTimeInterval(63))
+        assert(store.pauseTimer(at: checkpoint.addingTimeInterval(64)))
+        let paused = try Data(contentsOf: store.file)
+        store.tick(checkpoint.addingTimeInterval(85))
+        let stillPaused = try Data(contentsOf: store.file)
+        assert(paused == stillPaused)
+
+        print("PASS: clean paused or idle checkpoints skip writes while running timers and pending input persist")
+        for room in [0, 1] {
+            store.data = AppData()
+            store.data.preferences.sound = false
+            store.data.garden.coins = AutoShopState.moneyLimit - room
+            assert(store.startTimer(kind: .stopwatch, minutes: 1, task: nil, at: quitTime))
+            assert(store.finishTimer(at: quitTime.addingTimeInterval(60)))
+            let fullWallet = try SaveFile.read(store.file)
+            assert(fullWallet.totalFocus == 60 && fullWallet.garden.coins == AutoShopState.moneyLimit)
+            assert(store.message.contains("获得 \(room) 铜") && fullWallet.timer == nil)
+        }
+
+        print("PASS: a full wallet preserves the session and reports the actual reward")
+        store.data.tasks = [GardenTask(title: "恢复前未写入的修改")]
+        var incoming = AppData()
+        incoming.savedAt = checkpoint.addingTimeInterval(7200)
+        incoming.timer = TimerRun(kind: .stopwatch, target: 600, taskTitle: "另一台电脑", startedAt: incoming.savedAt.addingTimeInterval(-30), resumedAt: incoming.savedAt.addingTimeInterval(-30))
+        try store.restoreBackup(incoming, at: checkpoint)
+        let backups = try FileManager.default.contentsOfDirectory(at: store.file.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+        let beforeRestore = try SaveFile.read(backups.first { $0.lastPathComponent.hasPrefix("before-restore-") }!)
+        let imported = try SaveFile.read(store.file)
+        assert(beforeRestore.tasks.first?.title == "恢复前未写入的修改" && imported.tasks.isEmpty)
+        assert(imported.savedAt == checkpoint && imported.timer?.pausedAt == checkpoint && imported.timer?.accumulated == 30)
+        store.data = AppData()
+        store.data.preferences.sound = false
+        store.message = ""
+        print("PASS: restoring backs up pending edits and rebases the imported timer")
+    }
+
+    @MainActor
     static func main() async throws {
         let reviewClock = ReviewClock()
         let store = GardenStore(preview: true, reviewClock: { reviewClock.date })
         store.data = AppData()
         store.data.preferences.sound = false
         defer { store.storageLocked = true; try? FileManager.default.removeItem(at: store.file.deletingLastPathComponent()) }
+        try recoveryAndCheckpointChecks(store)
         let habit = Habit(title: "阅读", reminderMinutes: 0, encouragement: "读一点")
         assert(store.upsert(habit) && store.saveStatus == "已保存")
         assert(store.submitHabitEvidence(habit.id, date: Date(), text: "读了三页", image: nil))

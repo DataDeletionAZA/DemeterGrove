@@ -76,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { store.setPet(true); return false }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !store.prepareToQuit() else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "小院未能保存最近的更改"
+        alert.informativeText = store.error
+        alert.addButton(withTitle: "返回小院")
+        alert.addButton(withTitle: "放弃未保存的更改并退出")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
     func applicationWillTerminate(_ notification: Notification) { store.shutdown() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,

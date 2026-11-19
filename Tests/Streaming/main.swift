@@ -52,6 +52,12 @@ private final class StreamProtocol:URLProtocol,@unchecked Sendable {
             let parsed=try AIClient.phrases(from:AIClient.completedOutput(from:parser.completed!,format:.responses),expectedCount:2)
             check(parsed.count==2,"complete response envelope preserves phrases")
         }
+        for ending in ["\r", "\n", "\r\n"] {
+            var parser = AITextStream(format: .responses)
+            let bytes = Data([0xEF, 0xBB, 0xBF]) + event(["type":"response.output_text.delta", "delta":text], ending) + event(completed(text), ending)
+            for byte in bytes { try parser.append(Data([byte])) }
+            check(parser.text == text && parser.completed != nil, "split line endings and leading UTF-8 marker")
+        }
         var multiline=AITextStream(format:.responses)
         try multiline.append(Data("event: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\r\ndata: \"delta\":\"one\"}\r\n\r\n".utf8))
         check(multiline.text=="one" && multiline.completed == nil,"CRLF and multiline event remains incomplete")

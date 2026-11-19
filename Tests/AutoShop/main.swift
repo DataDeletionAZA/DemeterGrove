@@ -195,6 +195,20 @@ invalid.receivables = -1
 assert(!invalid.isValid(in: decoded.garden, focus: 300))
 print("PASS: automatic shop timing, pauses/rest, old orders, priorities, unstock, frozen proceeds, large batches and conservation")
 
+var shelf = fixture(0)
+shelf.garden.recipes[soup.id] = soup
+for quality in stride(from: 90, through: 20, by: -10) {
+    var batch = soup
+    batch.recipeID = soup.id; batch.quality = quality
+    batch.id = Dish.batchID(recipeID: soup.id, quality: quality)
+    shelf.garden.recipes[batch.id] = batch
+    shelf.garden.dishes[batch.id] = 1
+}
+let visibleQualities = shelf.garden.menu.filter { shelf.garden.dishes[$0.id, default: 0] > 0 }.map(\.quality)
+assert(visibleQualities == [20, 30, 40, 50, 60, 70, 80, 90])
+assert(shelf.stockAllAvailable(at: now) == 1 && shelf.garden.order?.dish.quality == 20)
+assert(shelf.garden.dishes[Dish.batchID(recipeID: soup.id, quality: 90)] == 1)
+
 var batches=fixture(0)
 var lowBatch=soup,highBatch=soup
 lowBatch.recipeID=soup.id;lowBatch.quality=35;lowBatch.id=Dish.batchID(recipeID:soup.id,quality:35)

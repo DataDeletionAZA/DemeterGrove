@@ -80,30 +80,31 @@ final class GardenStore: ObservableObject {
         data = AppData()
         do {
             try manager.createDirectory(at: folder, withIntermediateDirectories: true)
-            if manager.fileExists(atPath: file.path) {
+            let backup = folder.appendingPathComponent("previous.json")
+            let hasPrimary = manager.fileExists(atPath: file.path)
+            if hasPrimary || manager.fileExists(atPath: backup.path) {
                 do {
                     data = try SaveFile.read(file)
+                    do { try SaveFile.write(data, to: backup) }
+                    catch { self.error = "无法刷新启动备份：\(error.localizedDescription)" }
                 } catch {
                     let originalError = error
                     do {
-                        let recovered = try SaveFile.read(folder.appendingPathComponent("previous.json"))
-                        try manager.copyItem(at: file, to: folder.appendingPathComponent("damaged-\(UUID().uuidString).json"))
+                        let recovered = try SaveFile.read(backup)
+                        if hasPrimary {
+                            try manager.copyItem(at: file, to: folder.appendingPathComponent("damaged-\(UUID().uuidString).json"))
+                        }
                         data = recovered
-                        message = "已从上次启动时的备份恢复。原存档已保留在存档文件夹。"
+                        message = hasPrimary ? "已从上次启动时的备份恢复。原存档已保留在存档文件夹。" : "主存档缺失，已从上次启动时的备份恢复。"
                     } catch {
                         self.error = "存档读取失败，已暂停写入。可以在设置中导入备份。\(originalError.localizedDescription)"
                         storageLocked = true
                     }
                 }
-                if !storageLocked {
-                    do { try SaveFile.write(data, to: folder.appendingPathComponent("previous.json")) }
-                    catch { self.error = "无法刷新启动备份：\(error.localizedDescription)" }
-                }
             }
             if data.timer != nil {
-                data.timer?.pause(at: data.savedAt)
-                if data.savedAt > now { data.timer?.shiftDates(by: now.timeIntervalSince(data.savedAt)) }
-                message = "上次的计时已暂停，保留至最近一次保存的进度。"
+                data.restoreSavedTimer(at: now)
+                message += (message.isEmpty ? "" : "\n") + "上次的计时已暂停，保留至最近一次保存的进度。"
             }
         } catch {
             self.error = "无法打开存档文件夹：\(error.localizedDescription)"
@@ -146,14 +147,20 @@ final class GardenStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
+    private func snapshot(at date: Date, pausingTimer: Bool) -> AppData {
+        var snapshot = data
+        snapshot.savedAt = date
+        if pausingTimer { snapshot.timer?.pause(at: date) }
+        return snapshot
+    }
+
     @discardableResult
-    func save() -> Bool {
+    func save(pausingTimer: Bool = false) -> Bool {
         guard !storageLocked else { saveStatus = "保存失败"; return false }
         saveWork?.cancel()
-        var snapshot = data
-        snapshot.savedAt = max(Date(), now)
         do {
-            try SaveFile.write(snapshot, to: file)
+            try SaveFile.write(snapshot(at: max(Date(), now), pausingTimer: pausingTimer), to: file)
+            saveWork = nil
             saveStatus = "已保存"
             if error.hasPrefix("保存失败") { error = "" }
             return true
@@ -175,7 +182,7 @@ final class GardenStore: ObservableObject {
             deliverGameReminders(at: date)
             var next = data
             if next.advanceFocusWorld(at: date) {
-                advancingWorld = true
+                advancingWorld = data.timer?.resumedAt != nil
                 data = next
                 advancingWorld = false
             }
@@ -184,8 +191,8 @@ final class GardenStore: ObservableObject {
         if !preview, data.preferences.notifications, date.timeIntervalSince(lastReminderRefresh) >= 6*3600 { refreshReminders() }
         if date.timeIntervalSince(lastCheckpoint) >= 20 {
             lastCheckpoint = date
-            if data.timer != nil || counter != nil { save() }
-            if data.preferences.typingEnabled, counter == nil, CGPreflightListenEventAccess() {
+            if data.timer?.resumedAt != nil || (saveWork != nil && (data.timer != nil || counter != nil)) { save() }
+            if !preview, data.preferences.typingEnabled, counter == nil, CGPreflightListenEventAccess() {
                 setTyping(true, requestPermission: false)
             }
         }
@@ -575,7 +582,7 @@ final class GardenStore: ObservableObject {
         now = date
         if run.kind != .rest, data.sessions.contains(where: { $0.id == run.id }) { pendingFocusReviewID = run.id }
         message = result.rest ? "休息结束，已记录休息时长。" : result.seconds == 0 ? "计时已结束，本次未累计有效时长。" :
-            "已记录 \(Int(result.seconds / 60)) 分 \(Int(result.seconds) % 60) 秒专注，获得 \(EconomyBalance.focusReward(before: previous.totalFocus, after: data.totalFocus)) 铜纳特、\(result.water) 滴露水。"
+            "已记录 \(Int(result.seconds / 60)) 分 \(Int(result.seconds) % 60) 秒专注，获得 \(result.coins) 铜纳特、\(result.water) 滴露水。"
         animatePet(PetMotion.jumping.rawValue, seconds: PetMotion.jumping.duration)
         if data.preferences.sound { NSSound(named: "Glass")?.play() }
         if run.kind == .pomodoro && canStartBreak { message += " 可以开始 \(data.preferences.breakMinutes) 分钟休息。" }
@@ -921,15 +928,13 @@ final class GardenStore: ObservableObject {
     }
 
     func exportData() {
-        save()
+        guard !storageLocked else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "暮色小院-\(todayKey).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        var snapshot = data
-        snapshot.savedAt = Date()
-        snapshot.timer?.pause(at: snapshot.savedAt)
-        do { try SaveFile.write(snapshot, to: url); message = "备份已导出。" }
+        updateClock(Date())
+        do { try SaveFile.write(snapshot(at: now, pausingTimer: true), to: url); message = "备份已导出。" }
         catch { self.error = "导出失败：\(error.localizedDescription)" }
     }
 
@@ -939,39 +944,59 @@ final class GardenStore: ObservableObject {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            var incoming = try SaveFile.read(url)
+            let incoming = try SaveFile.read(url)
             let alert = NSAlert()
             alert.messageText = "用这份备份恢复小院？"
             alert.informativeText = "当前存档会先保留为一份备份，然后替换成所选文件中的任务、日记与游戏进度。"
             alert.addButton(withTitle: "恢复备份")
             alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
-            if FileManager.default.fileExists(atPath: file.path) {
-                let backup = file.deletingLastPathComponent().appendingPathComponent("before-restore-\(UUID().uuidString).json")
-                try FileManager.default.copyItem(at: file, to: backup)
-            }
-            incoming.timer?.pause(at: incoming.savedAt)
-            incoming.preferences.typingEnabled = false
-            incoming.preferences.notifications = false
-            try SaveFile.write(incoming, to: file)
-            counter?.stop()
-            counter = nil
-            storageLocked = false
-            error = ""
-            data = incoming
-            setPet(incoming.preferences.petVisible)
-            refreshReminders()
-            message = "已恢复备份。按键计数和通知可在这里重新开启。"
+            try restoreBackup(incoming, at: Date())
         } catch { self.error = "无法恢复，当前存档保持原样。\(error.localizedDescription)" }
+    }
+
+    func restoreBackup(_ incoming: AppData, at date: Date) throws {
+        var incoming = incoming
+        incoming.restoreSavedTimer(at: date)
+        incoming.preferences.typingEnabled = false
+        incoming.preferences.notifications = false
+        let backup = file.deletingLastPathComponent().appendingPathComponent("before-restore-\(UUID().uuidString).json")
+        if !storageLocked && (saveWork != nil || data.timer?.resumedAt != nil) {
+            try SaveFile.write(snapshot(at: max(date, now), pausingTimer: true), to: backup)
+        } else if FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.copyItem(at: file, to: backup)
+        }
+        try SaveFile.write(incoming, to: file)
+        for id in Array(habitReviews.keys) { cancelHabitReview(id) }
+        focusReviewRequests.removeAll()
+        pendingFocusReviewID = nil
+        blockedFocusFinishID = nil
+        counter?.stop()
+        counter = nil
+        storageLocked = false
+        error = ""
+        data = incoming
+        now = date
+        observedDayBoundary = fixedDayBoundary
+        focusDraftMinutes = incoming.preferences.focusMinutes
+        inputStatus = "计数未开启"
+        notificationStatus = "尚未开启"
+        setPet(incoming.preferences.petVisible)
+        refreshReminders()
+        message = "已恢复备份。按键计数和通知可在这里重新开启。"
+    }
+
+    func prepareToQuit() -> Bool {
+        guard !storageLocked else { return true }
+        updateClock(Date())
+        return save(pausingTimer: true)
     }
 
     func shutdown() {
         dismissPetSpeech()
         for id in Array(habitReviews.keys) { cancelHabitReview(id) }
-        data.timer?.pause(at: Date())
-        save()
         counter?.stop()
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["focus-timer"])
+        if !preview { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["focus-timer"]) }
     }
 
     func seedPreview() {

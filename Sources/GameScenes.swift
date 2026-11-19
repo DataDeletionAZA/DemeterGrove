@@ -483,11 +483,14 @@ struct GameRoomView: View {
         hint=""
     }
     private var restockDishes: [Dish] {
-        let available = availableDishes
-        let inStock = Set(available.map(\.canonicalID))
-        let selected = Set(store.data.garden.autoShopState.dishIDs)
-        let awaitingStock = store.data.garden.recipeMenu.filter { selected.contains($0.id) && !inStock.contains($0.id) }
-        return (available + awaitingStock).sorted { ($0.name, $0.quality, $0.id) < ($1.name, $1.quality, $1.id) }
+        let garden = store.data.garden
+        let menu = garden.menu
+        let inStock = Set(menu.filter { garden.dishes[$0.id, default: 0] > 0 }.map(\.canonicalID))
+        let selected = Set(garden.autoShopState.dishIDs)
+        return menu.filter { dish in
+            garden.dishes[dish.id, default: 0] > 0 ||
+                (dish.recipeID == nil && selected.contains(dish.id) && !inStock.contains(dish.id))
+        }
     }
     private var stockTray:some View {
         let state = store.data.garden.autoShopState

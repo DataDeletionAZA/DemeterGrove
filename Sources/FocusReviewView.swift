@@ -38,7 +38,7 @@ struct FocusReviewButton: View {
             do {
                 let feedback = try await client.reviewFocus(profile: profile, record: snapshot.aiReviewRecord(boundary: store.dayBoundary), writing: writing)
                 guard !Task.isCancelled, id == requestID else { return }
-                guard session == snapshot, store.data.ai?.profile(for: .focusReview) == profile,
+                guard store.focusReviewRequests[sessionID] == id, session == snapshot, store.data.ai?.profile(for: .focusReview) == profile,
                       (store.data.ai?.writing(for: .focusReview) ?? .standard) == writing else {
                     error = "记录或预设已变化，请重新评价。"; working = false; return
                 }

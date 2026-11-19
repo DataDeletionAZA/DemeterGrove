@@ -83,7 +83,7 @@ struct SettingsPage: View {
             Card(title: "存档与备份", icon: "externaldrive") {
                 Text(store.saveStatus).font(.callout).foregroundStyle(Palette.muted)
                 VStack(alignment: .leading, spacing: 10) {
-                    Button("导出备份") { store.exportData() }.buttonStyle(PixelButtonStyle(primary: true))
+                    Button("导出备份") { store.exportData() }.buttonStyle(PixelButtonStyle(primary: true)).disabled(store.storageLocked)
                     Button("恢复备份") { store.importData() }.buttonStyle(PixelButtonStyle())
                     Button("打开存档文件夹") { NSWorkspace.shared.open(store.file.deletingLastPathComponent()) }
                 }

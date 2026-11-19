@@ -1,6 +1,13 @@
 import Foundation
 import CoreGraphics
 
+enum SceneBurst {
+    static let duration: TimeInterval = 1.4
+    static func frames(from start: Date, steps: Int) -> [Date] {
+        (0...steps).map { start.addingTimeInterval(duration * Double($0) / Double(steps)) }
+    }
+}
+
 struct SceneSizing {
     static let sectionGap:CGFloat=12
     static let gap:CGFloat=12

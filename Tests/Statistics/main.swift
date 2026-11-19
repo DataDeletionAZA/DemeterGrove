@@ -87,6 +87,19 @@ let januarySummary = StatsSummary(data: crossing, period: StatsPeriod(date: date
 let februarySummary = StatsSummary(data: crossing, period: february)
 assert(januarySummary.seconds == 600 && januarySummary.sessions == 1 && januarySummary.restSeconds == 0)
 assert(februarySummary.seconds == 600 && februarySummary.sessions == 1 && februarySummary.restSeconds == 600 && februarySummary.restSessions == 1 && februarySummary.pausedSeconds == 300)
+let pauseOnly = StatsPeriod(date: date(2030, 2, 2), range: .month, calendar: calendar)
+var pausedAcrossMonth = AppData()
+let late = date(2030, 3, 1, 0)
+pausedAcrossMonth.sessions = [FocusSession(id: UUID(), title: "跨月暂停", kind: .stopwatch, date: late, seconds: 600,
+    beganAt: beforeMidnight, endedAt: late, segments: [FocusInterval(beganAt: beforeMidnight, endedAt: midnight)],
+    pauseIntervals: [FocusInterval(beganAt: midnight, endedAt: late)])]
+let pausing = StatsSummary(data: pausedAcrossMonth, period: pauseOnly)
+assert(pausing.sessions == 0 && pausing.seconds == 0 && pausing.pausedSeconds == pauseOnly.interval.duration)
+var shanghai = calendar
+shanghai.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+let march = shanghai.date(from: DateComponents(year: 2030, month: 3, day: 1))!
+let style = StatsPeriod(date: march, range: .year, calendar: shanghai).dateStyle.locale(Locale(identifier: "en_US"))
+assert(march.formatted(style.month(.wide)) == "March" && march.formatted(style.day()) == "1")
 let fullYear = StatsPeriod(date: date(2030, 2, 15), range: .year, calendar: calendar)
 let months = StatsMonth.months(data: crossing, year: fullYear)
 assert(months.count == 12 && months[0].summary.seconds == 600 && months[1].summary.seconds == 600)

@@ -22,6 +22,7 @@ struct StatsPeriod {
         let count = calendar.dateComponents([.day], from: start, to: end).day!
         return (0..<count).map { calendar.date(byAdding: .day, value: $0, to: start)! }
     }
+    var dateStyle: Date.FormatStyle { Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone) }
     func contains(_ date: Date) -> Bool { date >= interval.start && date < interval.end }
     func shifted(_ amount: Int) -> Date { calendar.date(byAdding: component, value: amount, to: date)! }
     var title: String {
@@ -60,25 +61,50 @@ struct StatsSummary {
     var actions: Int { keys + clicks }
     init(data: AppData, period: StatsPeriod) {
         let interval = period.interval
-        let entries = data.sessions.filter { $0.recordedSeconds(in: interval) > 0 }
-        days = period.days.map { day in
-            let key = CalendarDates.key(day, calendar: period.calendar)
-            let span = period.boundary.interval(forDay: day)
-            let start = span.start, end = span.end
-            let focused = entries.filter { $0.kind != .rest }.reduce(0) { $0 + $1.recordedSeconds(in: span) }
-            let rested = entries.filter { $0.kind == .rest }.reduce(0) { $0 + $1.recordedSeconds(in: span) }
-            let paused = data.sessions.flatMap { $0.pauseIntervals ?? [] }.reduce(0.0) { total, pause in
-                total + max(0, min(pause.endedAt, end).timeIntervalSince(max(pause.beganAt, start)))
-            }
-            return StatsDay(date: day, seconds: focused, restSeconds: rested, pausedSeconds: paused, keys: data.keys[key, default: 0], clicks: data.mouseClicks?[key] ?? 0)
+        let dates = period.days
+        let boundary = period.boundary
+        let starts = dates.map { boundary.start(of: $0) } + [interval.end]
+        let dayKeys = dates.map { CalendarDates.key($0, calendar: period.calendar) }
+        var totals = zip(dates, dayKeys).map { day, key in
+            StatsDay(date: day, seconds: 0, keys: data.keys[key, default: 0], clicks: data.mouseClicks?[key] ?? 0)
         }
-        let keys = Set(period.days.map { CalendarDates.key($0, calendar: period.calendar) })
+
+        func dayIndex(for instant: Date) -> Int {
+            var low = 0, high = dates.count
+            while low < high {
+                let mid = (low + high) / 2
+                if starts[mid + 1] <= instant { low = mid + 1 } else { high = mid }
+            }
+            return low
+        }
+        func add(_ segment: FocusInterval, to field: WritableKeyPath<StatsDay, Double>) {
+            let start = max(segment.beganAt, interval.start), end = min(segment.endedAt, interval.end)
+            guard start < end else { return }
+            var index = dayIndex(for: start)
+            while index < totals.count && starts[index] < end {
+                totals[index][keyPath: field] += min(end, starts[index + 1]).timeIntervalSince(max(start, starts[index]))
+                index += 1
+            }
+        }
+        sessions = 0
+        restSessions = 0
+        for entry in data.sessions {
+            for pause in entry.pauseIntervals ?? [] { add(pause, to: \.pausedSeconds) }
+            guard entry.recordedSeconds(in: interval) > 0 else { continue }
+            let field: WritableKeyPath<StatsDay, Double> = entry.kind == .rest ? \.restSeconds : \.seconds
+            if entry.kind == .rest { restSessions += 1 } else { sessions += 1 }
+            if let segments = entry.segments {
+                for segment in segments { add(segment, to: field) }
+            } else {
+                totals[dayIndex(for: entry.date)][keyPath: field] += entry.seconds
+            }
+        }
+        days = totals
+        let keys = Set(dayKeys)
         let diaries = data.diaries.filter { keys.contains($0.key) && !$0.value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        sessions = entries.filter { $0.kind != .rest }.count
-        restSessions = entries.filter { $0.kind == .rest }.count
         diaryDays = diaries.count
         characters = diaries.values.reduce(0) { $0 + $1.characters }
-        completedTasks = data.taskCompletionRecords.filter { period.contains($0.completedAt) }.count
+        completedTasks = data.taskCompletionRecords.filter { $0.completedAt >= interval.start && $0.completedAt < interval.end }.count
         habitDays = data.habitDays.intersection(keys).count
         habitCompletions = data.habits.reduce(0) { $0 + $1.days.intersection(keys).count }
     }
