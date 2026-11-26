@@ -44,6 +44,7 @@ struct SettingsPage: View {
             PetDialogueSettingsView(store: store)
             }
             if section == "通用" {
+            StartupSettingsView()
             Card(title: "操作计数", icon: "keyboard") {
                 Toggle("统计键盘与鼠标点击", isOn: Binding(get: { store.data.preferences.typingEnabled }, set: { store.setTyping($0) }))
                 Text(store.data.preferences.typingEnabled ? store.inputStatus : "计数未开启").font(.callout).foregroundStyle(Palette.sage)
